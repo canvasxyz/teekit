@@ -4,13 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "concurrently \"npm run serve:dev\" \"vite\"",
+    "build": "vite build && tsc -p tsconfig.node.json",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "tsx server/server.ts",
+    "serve:dev": "node dist/server/server/server.js",
+    "serve": "node dist/server/server/server.js",
     "typecheck": "tsc --noEmit --watch",
-    "start": "concurrently \"npm run server\" \"npm run dev\""
+    "start": "concurrently \"npm run serve\" \"vite\""
   },
   "dependencies": {
     "cors": "^2.8.5",

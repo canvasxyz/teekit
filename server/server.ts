@@ -1,14 +1,15 @@
 import express from "express"
 import cors from "cors"
+import { WebSocket } from "ws"
 
 import {
   Message,
   IncomingChatMessage,
   BacklogMessage,
   BroadcastMessage,
-} from "./types.ts"
+} from "./types.js"
 
-import { RA } from "../tunnel/server.ts"
+import { RA } from "../tunnel/server.js"
 
 const app = express()
 const { server, wss } = new RA(app)
@@ -22,7 +23,7 @@ const MAX_MESSAGES = 30
 const startTime = Date.now()
 
 // API Routes
-app.get("/uptime", (req, res) => {
+app.get("/uptime", (_req, res) => {
   const uptimeMs = Date.now() - startTime
   const uptimeSeconds = Math.floor(uptimeMs / 1000)
   const uptimeMinutes = Math.floor(uptimeSeconds / 60)
@@ -78,7 +79,7 @@ wss.on("connection", (ws: WebSocket) => {
           message: chatMessage,
         }
 
-        wss.clients.forEach((client: WebSocket) => {
+        wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify(broadcastMessage))
           }

@@ -10,8 +10,8 @@ import {
   TunnelWebSocketMessage,
   TunnelWebSocketClose,
   TunnelWebSocketEvent,
-} from "./types"
-import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server"
+} from "./types.js"
+import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server.js"
 
 export class RA {
   public server: http.Server
@@ -121,7 +121,7 @@ export class RA {
       })
 
       const req = httpMocks.createRequest({
-        method: tunnelReq.method,
+        method: tunnelReq.method as any,
         url: tunnelReq.url,
         path: urlObj.pathname,
         headers: tunnelReq.headers,
