@@ -60,3 +60,12 @@ export type TunnelClientKX = {
   type: "client_kx"
   sealedSymmetricKey: string
 }
+
+// Encrypted envelope carrying any tunneled payload after handshake.
+// The contents (ciphertext) are a JSON-encoded payload of the original
+// tunnel message types, encrypted with XSalsa20-Poly1305 via crypto_secretbox.
+export type TunnelEncrypted = {
+  type: "enc"
+  nonce: string // base64
+  ciphertext: string // base64
+}
