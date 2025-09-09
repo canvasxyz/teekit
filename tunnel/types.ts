@@ -60,3 +60,10 @@ export type TunnelClientKX = {
   type: "client_kx"
   sealedSymmetricKey: string
 }
+
+// Encrypted envelope used for all tunneled messages after handshake
+export type EncryptedEnvelope = {
+  type: "enc"
+  nonce: string
+  box: string
+}

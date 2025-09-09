@@ -11,8 +11,10 @@ import {
   TunnelWSMessage,
   TunnelWSClientClose,
   TunnelWSServerEvent,
+  EncryptedEnvelope,
 } from "./types.js"
 import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server.js"
+import { encryptPayload, decryptEnvelope } from "./utils/crypto.js"
 
 export class RA {
   public server: http.Server
@@ -105,28 +107,38 @@ export class RA {
               return true
             }
 
-            // If handshake not complete yet, ignore any other messages
+            // After handshake, all messages must be encrypted
             if (!ra.symmetricKeyBySocket.has(ws)) {
               console.warn("Dropping message before handshake completion")
               return true
             }
 
-            if (message.type === "http_request") {
+            if (message.type === "enc") {
+              const key = ra.symmetricKeyBySocket.get(ws)!
+              let inner: TunnelHTTPRequest | TunnelWSClientConnect | TunnelWSMessage | TunnelWSClientClose
+              try {
+                inner = decryptEnvelope(key, message as EncryptedEnvelope)
+              } catch (e) {
+                console.error("Failed to decrypt envelope:", e)
+                return true
+              }
+
+              if (inner.type === "http_request") {
               console.log(
                 "Tunnel request received:",
-                message.requestId,
-                message.url
+                (inner as TunnelHTTPRequest).requestId,
+                (inner as TunnelHTTPRequest).url
               )
               ra.handleTunnelHttpRequest(
                 ws,
-                message as TunnelHTTPRequest
+                inner as TunnelHTTPRequest
               ).catch((error: Error) => {
                 console.error("Error handling tunnel request:", error)
 
                 // Send 500 error response back to client
-                const errorResponse = {
+                const errorResponse: TunnelHTTPResponse = {
                   type: "http_response",
-                  requestId: message.requestId,
+                  requestId: (inner as TunnelHTTPRequest).requestId,
                   status: 500,
                   statusText: "Internal Server Error",
                   headers: {},
@@ -135,23 +147,31 @@ export class RA {
                 }
 
                 try {
-                  ws.send(JSON.stringify(errorResponse))
+                  const env = encryptPayload(key, errorResponse)
+                  ws.send(JSON.stringify(env))
                 } catch (sendError) {
                   console.error("Failed to send error response:", sendError)
                 }
               })
               return true
-            } else if (message.type === "ws_connect") {
+              } else if (inner.type === "ws_connect") {
               ra.handleTunnelWebSocketConnect(
                 ws,
-                message as TunnelWSClientConnect
+                inner as TunnelWSClientConnect
               )
               return true
-            } else if (message.type === "ws_message") {
-              ra.handleTunnelWebSocketMessage(message as TunnelWSMessage)
+              } else if (inner.type === "ws_message") {
+              ra.handleTunnelWebSocketMessage(inner as TunnelWSMessage)
               return true
-            } else if (message.type === "ws_close") {
-              ra.handleTunnelWebSocketClose(message as TunnelWSClientClose)
+              } else if (inner.type === "ws_close") {
+              ra.handleTunnelWebSocketClose(inner as TunnelWSClientClose)
+              return true
+              } else {
+                console.warn("Unknown inner message type", (inner as any)?.type)
+                return true
+              }
+            } else {
+              console.warn("Dropping unexpected plaintext message", message?.type)
               return true
             }
           } catch (error) {
@@ -212,7 +232,9 @@ export class RA {
           body: res._getData(),
         }
 
-        ws.send(JSON.stringify(response))
+        const key = this.symmetricKeyBySocket.get(ws)!
+        const env = encryptPayload(key, response)
+        ws.send(JSON.stringify(env))
       })
 
       // Handle errors generically. TODO: better error handling.
@@ -227,7 +249,9 @@ export class RA {
           error: error.message,
         }
 
-        ws.send(JSON.stringify(errorResponse))
+        const key = this.symmetricKeyBySocket.get(ws)!
+        const env = encryptPayload(key, errorResponse)
+        ws.send(JSON.stringify(env))
       })
 
       // Execute the request against the Express app
@@ -266,7 +290,9 @@ export class RA {
           connectionId: connectReq.connectionId,
           eventType: "open",
         }
-        tunnelWs.send(JSON.stringify(event))
+        const key = this.symmetricKeyBySocket.get(tunnelWs)!
+        const env = encryptPayload(key, event)
+        tunnelWs.send(JSON.stringify(env))
       })
 
       ws.on("message", (data: Buffer) => {
@@ -289,7 +315,9 @@ export class RA {
           data: messageData,
           dataType: dataType,
         }
-        tunnelWs.send(JSON.stringify(message))
+        const key = this.symmetricKeyBySocket.get(tunnelWs)!
+        const env = encryptPayload(key, message)
+        tunnelWs.send(JSON.stringify(env))
       })
 
       ws.on("close", (code: number, reason: Buffer) => {
@@ -301,7 +329,9 @@ export class RA {
           code,
           reason: reason.toString(),
         }
-        tunnelWs.send(JSON.stringify(event))
+        const key = this.symmetricKeyBySocket.get(tunnelWs)!
+        const env = encryptPayload(key, event)
+        tunnelWs.send(JSON.stringify(env))
         this.webSocketConnections.delete(connectReq.connectionId)
       })
 
@@ -316,7 +346,9 @@ export class RA {
           eventType: "error",
           error: error.message,
         }
-        tunnelWs.send(JSON.stringify(event))
+        const key = this.symmetricKeyBySocket.get(tunnelWs)!
+        const env = encryptPayload(key, event)
+        tunnelWs.send(JSON.stringify(env))
       })
     } catch (error) {
       console.error("Error creating WebSocket connection:", error)

@@ -9,6 +9,10 @@ import {
 import { generateRequestId } from "./utils/client.js"
 import { TunnelWebSocket } from "./TunnelWebSocket.js"
 import sodium from "libsodium-wrappers"
+import {
+  encryptPayload,
+  decryptEnvelope,
+} from "./utils/crypto.js"
 
 export class RA {
   public ws: WebSocket | null = null
@@ -70,10 +74,10 @@ export class RA {
 
       this.ws.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data)
-          if (message.type === "server_kx") {
+          const parsed = JSON.parse(event.data)
+          if (parsed.type === "server_kx") {
             try {
-              const serverKx = message as TunnelServerKX
+              const serverKx = parsed as TunnelServerKX
               const serverPub = sodium.from_base64(
                 serverKx.x25519PublicKey,
                 sodium.base64_variants.ORIGINAL
@@ -104,12 +108,23 @@ export class RA {
                   : new Error("Failed to process server_kx message")
               )
             }
-          } else if (message.type === "http_response") {
-            this.handleTunnelResponse(message as TunnelHTTPResponse)
-          } else if (message.type === "ws_event") {
-            this.handleWebSocketTunnelEvent(message as TunnelWSServerEvent)
-          } else if (message.type === "ws_message") {
-            this.handleWebSocketTunnelMessage(message as TunnelWSMessage)
+          } else if (parsed.type === "enc") {
+            if (!this.symmetricKey) {
+              console.error("Encrypted message received before key is set")
+              return
+            }
+            const inner = decryptEnvelope<
+              TunnelHTTPResponse | TunnelWSServerEvent | TunnelWSMessage
+            >(this.symmetricKey, parsed)
+            if (inner.type === "http_response") {
+              this.handleTunnelResponse(inner as TunnelHTTPResponse)
+            } else if (inner.type === "ws_event") {
+              this.handleWebSocketTunnelEvent(inner as TunnelWSServerEvent)
+            } else if (inner.type === "ws_message") {
+              this.handleWebSocketTunnelMessage(inner as TunnelWSMessage)
+            }
+          } else {
+            console.error("Dropping unexpected plaintext message", parsed?.type)
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error)
@@ -126,9 +141,20 @@ export class RA {
 
   public send(message: unknown): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const data =
-        typeof message === "string" ? message : JSON.stringify(message)
-      this.ws.send(data)
+      // Allow plaintext only for client-side key exchange
+      const maybeType = (message as any)?.type
+      if (maybeType === "client_kx") {
+        const data =
+          typeof message === "string" ? message : JSON.stringify(message)
+        this.ws.send(data)
+        return
+      }
+
+      if (!this.symmetricKey) {
+        throw new Error("Symmetric key not established")
+      }
+      const envelope = encryptPayload(this.symmetricKey, message)
+      this.ws.send(JSON.stringify(envelope))
     } else {
       throw new Error("WebSocket not connected")
     }
