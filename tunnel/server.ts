@@ -23,7 +23,7 @@ export class RA {
 
   private webSocketConnections = new Map<
     string,
-    { ws: WebSocket; tunnelWs: WebSocket }
+    { virtual: VirtualServerWebSocket; tunnelWs: WebSocket }
   >()
   private symmetricKeyBySocket = new Map<WebSocket, Uint8Array>()
 
@@ -56,6 +56,11 @@ export class RA {
 
       // Intercept messages before they reach application handlers
       const originalEmit = ws.emit.bind(ws)
+
+      // Skip interception for virtual in-process connections
+      if ((ws as any).__tunnelVirtual === true) {
+        return
+      }
 
       // Immediately announce server key-exchange public key to the client
       try {
@@ -282,90 +287,62 @@ export class RA {
     connectReq: TunnelWSClientConnect,
   ): Promise<void> {
     try {
-      console.log(`Creating WebSocket connection to ${connectReq.url}`)
+      // Validate that the requested URL targets this server (no proxying)
+      const address = this.server.address()
+      if (!address || typeof address === "string") {
+        throw new Error("Server is not listening yet")
+      }
+      const { port } = address
+      const url = new URL(connectReq.url)
+      const reqPort = Number(url.port || (url.protocol === "wss:" ? 443 : 80))
 
-      const ws = new WebSocket(connectReq.url, connectReq.protocols)
-
-      // Store the connection
-      this.webSocketConnections.set(connectReq.connectionId, { ws, tunnelWs })
-
-      ws.on("open", () => {
-        console.log(`WebSocket ${connectReq.connectionId} connected`)
-        const event: TunnelWSServerEvent = {
-          type: "ws_event",
-          connectionId: connectReq.connectionId,
-          eventType: "open",
-        }
-        try {
-          this.sendEncrypted(tunnelWs, event)
-        } catch (e) {
-          console.error("Failed to send encrypted ws_event(open):", e)
-        }
-      })
-
-      ws.on("message", (data: Buffer) => {
-        let messageData: string
-        let dataType: "string" | "arraybuffer"
-
-        // Check if data is text or binary
-        if (this.isTextData(data)) {
-          messageData = data.toString()
-          dataType = "string"
-        } else {
-          // Convert binary data to base64
-          messageData = data.toString("base64")
-          dataType = "arraybuffer"
-        }
-
-        const message: TunnelWSMessage = {
-          type: "ws_message",
-          connectionId: connectReq.connectionId,
-          data: messageData,
-          dataType: dataType,
-        }
-        try {
-          this.sendEncrypted(tunnelWs, message)
-        } catch (e) {
-          console.error("Failed to send encrypted ws_message:", e)
-        }
-      })
-
-      ws.on("close", (code: number, reason: Buffer) => {
-        console.log(`WebSocket ${connectReq.connectionId} closed`)
-        const event: TunnelWSServerEvent = {
-          type: "ws_event",
-          connectionId: connectReq.connectionId,
-          eventType: "close",
-          code,
-          reason: reason.toString(),
-        }
-        try {
-          this.sendEncrypted(tunnelWs, event)
-        } catch (e) {
-          console.error("Failed to send encrypted ws_event(close):", e)
-        }
-        this.webSocketConnections.delete(connectReq.connectionId)
-      })
-
-      ws.on("error", (error: Error) => {
-        console.log(
-          `WebSocket ${connectReq.connectionId} error:`,
-          error.message,
-        )
+      if (reqPort !== port) {
+        const errorMessage = `WebSocket target port ${reqPort} does not match server port ${port}`
         const event: TunnelWSServerEvent = {
           type: "ws_event",
           connectionId: connectReq.connectionId,
           eventType: "error",
-          error: error.message,
+          error: errorMessage,
         }
         try {
           this.sendEncrypted(tunnelWs, event)
-        } catch (e) {
-          console.error("Failed to send encrypted ws_event(error):", e)
-        }
-      })
+        } catch {}
+        throw new Error(errorMessage)
+      }
+
+      console.log(
+        `Establishing virtual WebSocket for connection ${connectReq.connectionId} -> ${url.href}`,
+      )
+
+      // Create an in-process virtual WebSocket representing the application connection
+      const virtual = new VirtualServerWebSocket(
+        this,
+        connectReq.connectionId,
+        tunnelWs,
+      )
+
+      // Track connection
+      this.webSocketConnections.set(connectReq.connectionId, { virtual, tunnelWs })
+
+      // Add to server client set for broadcast loops
+      ;(this.wss.clients as Set<any>).add(virtual as any)
+
+      // Emit connection only to application handlers; our own interceptor will skip virtuals
+      this.wss.emit("connection", virtual as any)
+
+      // Notify client that connection is open
+      const event: TunnelWSServerEvent = {
+        type: "ws_event",
+        connectionId: connectReq.connectionId,
+        eventType: "open",
+      }
+      try {
+        this.sendEncrypted(tunnelWs, event)
+      } catch (e) {
+        console.error("Failed to send encrypted ws_event(open):", e)
+      }
     } catch (error) {
-      console.error("Error creating WebSocket connection:", error)
+      console.error("Error handling virtual WebSocket connection:", error)
       const event: TunnelWSServerEvent = {
         type: "ws_event",
         connectionId: connectReq.connectionId,
@@ -384,17 +361,20 @@ export class RA {
     const connection = this.webSocketConnections.get(messageReq.connectionId)
     if (connection) {
       try {
-        let dataToSend: string | Buffer
+        let dataToDeliver: string | Buffer
         if (messageReq.dataType === "arraybuffer") {
-          // Convert base64 back to binary data
-          dataToSend = Buffer.from(messageReq.data, "base64")
+          dataToDeliver = Buffer.from(messageReq.data, "base64")
         } else {
-          dataToSend = messageReq.data
+          dataToDeliver = messageReq.data
         }
-        connection.ws.send(dataToSend)
+        console.log(
+          `Delivering client message to app for ${messageReq.connectionId} (${messageReq.dataType}, ${typeof dataToDeliver})`,
+        )
+        // Deliver message from client to application
+        connection.virtual.deliverFromClient(dataToDeliver)
       } catch (error) {
         console.error(
-          `Error sending message to WebSocket ${messageReq.connectionId}:`,
+          `Error delivering message to virtual WebSocket ${messageReq.connectionId}:`,
           error,
         )
       }
@@ -405,10 +385,10 @@ export class RA {
     const connection = this.webSocketConnections.get(closeReq.connectionId)
     if (connection) {
       try {
-        connection.ws.close(closeReq.code, closeReq.reason)
+        connection.virtual.close(closeReq.code, closeReq.reason)
       } catch (error) {
         console.error(
-          `Error closing WebSocket ${closeReq.connectionId}:`,
+          `Error closing virtual WebSocket ${closeReq.connectionId}:`,
           error,
         )
       }
@@ -464,8 +444,157 @@ export class RA {
     return JSON.parse(text)
   }
 
-  private sendEncrypted(ws: WebSocket, payload: unknown): void {
+  public sendEncrypted(ws: WebSocket, payload: unknown): void {
     const env = this.encryptForSocket(ws, payload)
     ws.send(JSON.stringify(env))
+  }
+}
+
+/**
+ * Virtual in-process WebSocket that represents an application-level connection
+ * terminated at the server without creating an outbound proxy socket.
+ */
+class VirtualServerWebSocket {
+  public readonly CONNECTING = 0
+  public readonly OPEN = 1
+  public readonly CLOSING = 2
+  public readonly CLOSED = 3
+
+  public readyState: number = this.OPEN
+  public protocol: string = ""
+  public extensions: string = ""
+  public binaryType: string = "nodebuffer"
+
+  // Marker for RA interceptor to skip
+  public __tunnelVirtual: boolean = true
+
+  private handlers: Map<string, Set<(...args: any[]) => void>> = new Map()
+
+  constructor(
+    private ra: RA,
+    private connectionId: string,
+    private tunnelWs: WebSocket,
+  ) {}
+
+  public on(event: string, listener: (...args: any[]) => void): this {
+    if (!this.handlers.has(event)) this.handlers.set(event, new Set())
+    this.handlers.get(event)!.add(listener)
+    return this
+  }
+
+  public off(event: string, listener: (...args: any[]) => void): this {
+    this.handlers.get(event)?.delete(listener)
+    return this
+  }
+
+  private emit(event: string, ...args: any[]): void {
+    const listeners = this.handlers.get(event)
+    if (!listeners) return
+    for (const fn of listeners) {
+      try {
+        fn(...args)
+      } catch (e) {
+        // Swallow handler errors to avoid breaking others
+        console.error(e)
+      }
+    }
+  }
+
+  // Application sends data to client
+  public send(data: string | Buffer): void {
+    if (this.readyState !== this.OPEN) {
+      throw new Error("WebSocket is not open")
+    }
+
+    let messageData: string
+    let dataType: "string" | "arraybuffer"
+    if (typeof data === "string") {
+      messageData = data
+      dataType = "string"
+    } else if (Buffer.isBuffer(data)) {
+      if (this.isTextData(data)) {
+        messageData = data.toString()
+        dataType = "string"
+      } else {
+        messageData = data.toString("base64")
+        dataType = "arraybuffer"
+      }
+    } else {
+      // Coerce other types to string
+      messageData = String(data)
+      dataType = "string"
+    }
+
+    try {
+      console.log(
+        `VirtualServerWebSocket send -> client (${dataType}), len=${messageData.length}`,
+      )
+    } catch {}
+
+    const message: TunnelWSMessage = {
+      type: "ws_message",
+      connectionId: this.connectionId,
+      data: messageData,
+      dataType: dataType,
+    }
+    try {
+      this.ra.sendEncrypted(this.tunnelWs, message)
+    } catch (e) {
+      console.error("Failed to send encrypted ws_message:", e)
+    }
+  }
+
+  // Server closes connection
+  public close(code?: number, reason?: string): void {
+    if (this.readyState === this.CLOSING || this.readyState === this.CLOSED) {
+      return
+    }
+    this.readyState = this.CLOSING
+
+    // Notify application handlers
+    const reasonBuf = Buffer.from(reason || "")
+    this.emit("close", code ?? 1000, reasonBuf)
+
+    // Remove from broadcast set
+    ;(this.ra.wss.clients as Set<any>).delete(this as any)
+
+    this.readyState = this.CLOSED
+
+    // Inform client
+    const event: TunnelWSServerEvent = {
+      type: "ws_event",
+      connectionId: this.connectionId,
+      eventType: "close",
+      code,
+      reason,
+    }
+    try {
+      this.ra.sendEncrypted(this.tunnelWs, event)
+    } catch (e) {
+      console.error("Failed to send encrypted ws_event(close):", e)
+    }
+  }
+
+  public terminate(): void {
+    this.close(1006, "terminated")
+  }
+
+  // Deliver message from client to application handlers
+  public deliverFromClient(data: string | Buffer): void {
+    if (typeof data === "string") {
+      this.emit("message", Buffer.from(data))
+    } else {
+      this.emit("message", data)
+    }
+  }
+
+  private isTextData(data: Buffer): boolean {
+    for (let i = 0; i < Math.min(data.length, 1024); i++) {
+      const byte = data[i]
+      if (byte === 0 || (byte > 127 && byte < 160)) {
+        return false
+      }
+    }
+    return true
   }
 }

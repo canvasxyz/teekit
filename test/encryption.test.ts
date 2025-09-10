@@ -1,7 +1,7 @@
 import test from "ava"
 import express, { Request, Response } from "express"
 import type { AddressInfo } from "node:net"
-import { WebSocketServer, WebSocket } from "ws"
+import { WebSocket } from "ws"
 import sodium from "libsodium-wrappers"
 
 import { RA as TunnelServer } from "../tunnel/server.ts"
@@ -52,13 +52,10 @@ async function stopTunnel(
 }
 
 test.serial("Wire messages are encrypted after handshake", async (t) => {
-  const { tunnelServer, tunnelClient } = await startTunnelApp()
+  const { tunnelServer, tunnelClient, origin } = await startTunnelApp()
 
-  // Start a real echo WebSocket server to generate ws events/messages
-  const echoWss = new WebSocketServer({ port: 0, host: "127.0.0.1" })
-  await new Promise<void>((resolve) => echoWss.on("listening", resolve))
-  const echoPort = (echoWss.address() as AddressInfo).port
-  echoWss.on("connection", (ws) => {
+  // Attach echo behavior to server's built-in WebSocket server
+  tunnelServer.wss.on("connection", (ws) => {
     ws.on("message", (data) => ws.send(data))
   })
 
@@ -85,7 +82,7 @@ test.serial("Wire messages are encrypted after handshake", async (t) => {
     await response.text()
 
     const TunnelWS = tunnelClient.WebSocket
-    const ws = new TunnelWS(`ws://127.0.0.1:${echoPort}`)
+    const ws = new TunnelWS(origin.replace(/^http/, "ws"))
     await new Promise<void>((resolve) =>
       ws.addEventListener("open", () => resolve()),
     )
@@ -104,7 +101,6 @@ test.serial("Wire messages are encrypted after handshake", async (t) => {
     t.true(types.length > 0)
     t.true(types.every((tpe) => tpe === "enc"))
   } finally {
-    await new Promise<void>((resolve) => echoWss.close(() => resolve()))
     await stopTunnel(tunnelServer, tunnelClient)
   }
 })

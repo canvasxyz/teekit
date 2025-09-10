@@ -169,6 +169,11 @@ export class TunnelWebSocket extends EventTarget {
 
         const openEvent = new Event("open")
         this.dispatchEvent(openEvent)
+        try {
+          console.log(
+            `TunnelWebSocket(${this.connectionId}) dispatched open event`
+          )
+        } catch {}
         if (this.onopen) {
           this.onopen.call(this as any, openEvent)
         }
@@ -208,7 +213,22 @@ export class TunnelWebSocket extends EventTarget {
       data: messageData,
     })
 
+    try {
+      const preview =
+        typeof messageData === "string"
+          ? messageData
+          : `[${(messageData as ArrayBuffer).byteLength} bytes]`
+      console.log(
+        `TunnelWebSocket(${this.connectionId}) dispatching message event: ${preview}`,
+      )
+    } catch {}
+
     this.dispatchEvent(messageEvent)
+    try {
+      console.log(
+        `TunnelWebSocket(${this.connectionId}) dispatchEvent complete for message`,
+      )
+    } catch {}
     if (this.onmessage) {
       this.onmessage.call(this as any, messageEvent)
     }

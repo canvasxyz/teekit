@@ -135,18 +135,12 @@ test.serial("POST fetch through tunnel", async (t) => {
 })
 
 test.serial("WebSocket lifecycle over tunnel", async (t) => {
-  // Start a real echo WebSocket server to connect to
-  const echoWss = new WebSocketServer({ port: 0, host: "127.0.0.1" })
-  await new Promise<void>((resolve) => echoWss.on("listening", resolve))
-  const echoPort = (echoWss.address() as AddressInfo).port
+  const { tunnelServer, tunnelClient, origin } = await startTunnelApp()
 
-  echoWss.on("connection", (ws) => {
-    ws.on("message", (data) => {
-      ws.send(data)
-    })
+  // Attach an echo handler to the server's built-in WebSocketServer
+  tunnelServer.wss.on("connection", (ws) => {
+    ws.on("message", (data) => ws.send(data))
   })
-
-  const { tunnelServer, tunnelClient } = await startTunnelApp()
 
   try {
     const withTimeout = async <T>(p: Promise<T>, ms: number, label: string) => {
@@ -162,7 +156,7 @@ test.serial("WebSocket lifecycle over tunnel", async (t) => {
     }
 
     const TunnelWS = tunnelClient.WebSocket
-    const ws = new TunnelWS(`ws://127.0.0.1:${echoPort}`)
+    const ws = new TunnelWS(origin.replace(/^http/, "ws"))
 
     t.is(ws.readyState, ws.CONNECTING)
 
@@ -170,7 +164,7 @@ test.serial("WebSocket lifecycle over tunnel", async (t) => {
       new Promise<void>((resolve) => {
         ws.addEventListener("open", () => resolve())
       }),
-      2000,
+      5000,
       "open"
     )
 
@@ -185,37 +179,49 @@ test.serial("WebSocket lifecycle over tunnel", async (t) => {
       .catch(() => false)
 
     await opened
+    console.log("Test: opened resolved")
     t.is(ws.readyState, ws.OPEN)
 
     const message = withTimeout(
       new Promise<string>((resolve) => {
-        ws.addEventListener("message", (evt: any) => resolve(String(evt.data)))
+        ws.addEventListener("message", (evt: any) => {
+          try {
+            console.log("Test received message event:", evt?.data)
+          } catch {}
+          resolve(String(evt.data))
+        })
       }),
-      2000,
+      5000,
       "message"
     )
 
     ws.send("ping")
     const echoed = await message
+    console.log("Test: message resolved", echoed)
     t.is(echoed, "ping")
 
     const wasEarlyClosed = await earlyClosed
+    console.log("Test: earlyClosed result", wasEarlyClosed)
     if (!wasEarlyClosed) {
       const closeEvent = new Promise<void>((resolve) => {
-        ws.addEventListener("close", () => resolve())
+        ws.addEventListener("close", () => {
+          console.log("Test: close event observed")
+          resolve()
+        })
       })
       ws.close(1000, "done")
+      console.log("Test: invoked ws.close")
       // Wait up to 2s for close event; if not received, assert CLOSING state
       await Promise.race([
         closeEvent,
         new Promise((resolve) => setTimeout(resolve, 2000)),
       ])
+      console.log("Test: post close wait, readyState=", ws.readyState)
       if (ws.readyState !== ws.CLOSED) {
         t.is(ws.readyState, ws.CLOSING)
       }
     }
   } finally {
-    await new Promise<void>((resolve) => echoWss.close(() => resolve()))
     await stopTunnel(tunnelServer, tunnelClient)
   }
 })

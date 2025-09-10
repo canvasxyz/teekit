@@ -56,6 +56,9 @@ wss.on("connection", (ws: WebSocket) => {
 
   ws.on("message", (data: Buffer) => {
     try {
+      console.log("App received message:", data.toString())
+    } catch {}
+    try {
       const message: IncomingChatMessage = JSON.parse(data.toString())
 
       if (message.type === "chat") {

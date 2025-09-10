@@ -114,8 +114,20 @@ export class RA {
             if (decrypted.type === "http_response") {
               this.handleTunnelResponse(decrypted as TunnelHTTPResponse)
             } else if (decrypted.type === "ws_event") {
+              try {
+                const ev = decrypted as TunnelWSServerEvent
+                console.log(
+                  `Tunnel ws_event: ${ev.eventType} (${ev.connectionId})`,
+                )
+              } catch {}
               this.handleWebSocketTunnelEvent(decrypted as TunnelWSServerEvent)
             } else if (decrypted.type === "ws_message") {
+              try {
+                const msg = decrypted as TunnelWSMessage
+                console.log(
+                  `Tunnel ws_message (${msg.connectionId}) type=${msg.dataType} len=${msg.data.length}`,
+                )
+              } catch {}
               this.handleWebSocketTunnelMessage(decrypted as TunnelWSMessage)
             }
           }
