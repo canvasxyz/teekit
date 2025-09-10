@@ -17,14 +17,14 @@ import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server.js"
 
 export class RA {
   public server: http.Server
-  public wss: WebSocketServer
+  public wss: any
   private controlWss: WebSocketServer
   public x25519PublicKey: Uint8Array
   private x25519PrivateKey: Uint8Array
 
   private webSocketConnections = new Map<
     string,
-    { virtualWs: VirtualWebSocket; tunnelWs: WebSocket }
+    { mockWs: MockWebSocket; tunnelWs: WebSocket }
   >()
   private symmetricKeyBySocket = new Map<WebSocket, Uint8Array>()
 
@@ -37,8 +37,8 @@ export class RA {
     this.x25519PublicKey = publicKey
     this.x25519PrivateKey = privateKey
     this.server = http.createServer(app)
-    // App WebSocketServer exposed to callers (manual upgrade routing)
-    this.wss = new WebSocketServer({ noServer: true })
+    // Expose a mock WebSocketServer to application code
+    this.wss = new MockWebSocketServer()
     // Control channel WebSocketServer used internally by the tunnel
     this.controlWss = new WebSocketServer({ noServer: true })
 
@@ -52,9 +52,8 @@ export class RA {
           this.controlWss.emit("connection", ws, req)
         })
       } else {
-        this.wss.handleUpgrade(req as any, socket as any, head as any, (ws) => {
-          this.wss.emit("connection", ws, req)
-        })
+        // Application WebSockets are handled via the mock server; no upgrade here
+        socket.destroy()
       }
     })
   }
@@ -328,73 +327,66 @@ export class RA {
         return
       }
 
-      // Create a virtual socket that terminates at the app's WebSocketServer
-      const virtual = new VirtualWebSocket((payload) => {
-        // Send app->client data through the tunnel
-        let messageData: string
-        let dataType: "string" | "arraybuffer"
-        if (typeof payload === "string") {
-          messageData = payload
-          dataType = "string"
-        } else if (Buffer.isBuffer(payload)) {
-          // Decide text/binary based on heuristic
-          if (this.isTextData(payload)) {
-            messageData = payload.toString()
+      // Create a mock socket and expose it to application via mock server
+      const mock = new MockWebSocket(
+        // onSend: application -> client
+        (payload) => {
+          let messageData: string
+          let dataType: "string" | "arraybuffer"
+          if (typeof payload === "string") {
+            messageData = payload
             dataType = "string"
+          } else if (Buffer.isBuffer(payload)) {
+            if (this.isTextData(payload)) {
+              messageData = payload.toString()
+              dataType = "string"
+            } else {
+              messageData = payload.toString("base64")
+              dataType = "arraybuffer"
+            }
           } else {
-            messageData = payload.toString("base64")
-            dataType = "arraybuffer"
+            messageData = String(payload)
+            dataType = "string"
           }
-        } else {
-          // Fallback to string
-          messageData = String(payload)
-          dataType = "string"
-        }
-
-        const message: TunnelWSMessage = {
-          type: "ws_message",
-          connectionId: connectReq.connectionId,
-          data: messageData,
-          dataType,
-        }
-        try {
-          this.sendEncrypted(tunnelWs, message)
-        } catch (e) {
-          console.error("Failed to send encrypted ws_message:", e)
-        }
-      }, (code?: number, reason?: string) => {
-        // Notify client about server-side close
-        const event: TunnelWSServerEvent = {
-          type: "ws_event",
-          connectionId: connectReq.connectionId,
-          eventType: "close",
-          code,
-          reason,
-        }
-        try {
-          this.sendEncrypted(tunnelWs, event)
-        } catch (e) {
-          console.error("Failed to send encrypted ws_event(close):", e)
-        }
-      })
+          const message: TunnelWSMessage = {
+            type: "ws_message",
+            connectionId: connectReq.connectionId,
+            data: messageData,
+            dataType,
+          }
+          try {
+            this.sendEncrypted(tunnelWs, message)
+          } catch (e) {
+            console.error("Failed to send encrypted ws_message:", e)
+          }
+        },
+        // onClose: application -> client
+        (code?: number, reason?: string) => {
+          const event: TunnelWSServerEvent = {
+            type: "ws_event",
+            connectionId: connectReq.connectionId,
+            eventType: "close",
+            code,
+            reason,
+          }
+          try {
+            this.sendEncrypted(tunnelWs, event)
+          } catch (e) {
+            console.error("Failed to send encrypted ws_event(close):", e)
+          }
+        },
+      )
 
       // Track mapping
       this.webSocketConnections.set(connectReq.connectionId, {
-        virtualWs: virtual,
+        mockWs: mock,
         tunnelWs,
       })
 
-      // Add to app's client set so broadcasts will include it
+      // Register with mock server and notify application
       try {
-        ;(this.wss.clients as any).add(virtual)
+        this.wss.addClient(mock)
       } catch {}
-
-      // Emit connection to application handlers
-      try {
-        this.wss.emit("connection", virtual)
-      } catch (e) {
-        console.error("Failed to emit virtual connection:", e)
-      }
 
       // Signal open to client
       const openEvt: TunnelWSServerEvent = {
@@ -429,12 +421,11 @@ export class RA {
       try {
         let dataToSend: string | Buffer
         if (messageReq.dataType === "arraybuffer") {
-          // Convert base64 back to binary data
           dataToSend = Buffer.from(messageReq.data, "base64")
         } else {
           dataToSend = messageReq.data
         }
-        connection.virtualWs.emitMessage(dataToSend)
+        connection.mockWs.emitMessage(dataToSend)
       } catch (error) {
         console.error(
           `Error sending message to WebSocket ${messageReq.connectionId}:`,
@@ -448,7 +439,7 @@ export class RA {
     const connection = this.webSocketConnections.get(closeReq.connectionId)
     if (connection) {
       try {
-        connection.virtualWs.emitClose(closeReq.code, closeReq.reason)
+        connection.mockWs.emitClose(closeReq.code, closeReq.reason)
       } catch (error) {
         console.error(
           `Error closing WebSocket ${closeReq.connectionId}:`,
@@ -456,7 +447,7 @@ export class RA {
         )
       }
       try {
-        ;(this.wss.clients as any).delete(connection.virtualWs)
+        this.wss.deleteClient(connection.mockWs)
       } catch {}
       this.webSocketConnections.delete(closeReq.connectionId)
     }
@@ -516,8 +507,8 @@ export class RA {
   }
 }
 
-// Minimal virtual WebSocket that plugs into ws-based apps
-class VirtualWebSocket extends EventEmitter {
+// Mock WebSocket presented to application code
+class MockWebSocket extends EventEmitter {
   public readonly CONNECTING = 0
   public readonly OPEN = 1
   public readonly CLOSING = 2
@@ -555,7 +546,7 @@ class VirtualWebSocket extends EventEmitter {
   // Methods used by RA to inject events from client
   emitMessage(data: string | Buffer): void {
     if (this.readyState !== this.OPEN) return
-    const payload = typeof data === "string" ? data : String(data)
+    const payload = typeof data === "string" ? data : Buffer.from(data)
     this.emit("message", payload as any)
   }
 
@@ -567,5 +558,32 @@ class VirtualWebSocket extends EventEmitter {
 
   public emit(eventName: string | symbol, ...args: any[]): boolean {
     return super.emit(eventName as any, ...args)
+  }
+}
+
+// Mock WebSocketServer exposed to application code
+class MockWebSocketServer extends EventEmitter {
+  public clients: Set<MockWebSocket> = new Set()
+
+  addClient(ws: MockWebSocket): void {
+    this.clients.add(ws)
+    this.emit("connection", ws)
+  }
+
+  deleteClient(ws: MockWebSocket): void {
+    this.clients.delete(ws)
+  }
+
+  close(cb?: () => void): void {
+    try {
+      for (const ws of Array.from(this.clients)) {
+        try {
+          ws.close(1000, "server closing")
+        } catch {}
+      }
+      this.clients.clear()
+    } finally {
+      if (cb) cb()
+    }
   }
 }
