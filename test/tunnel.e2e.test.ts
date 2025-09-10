@@ -137,8 +137,8 @@ test.serial("POST fetch through tunnel", async (t) => {
 test.serial("WebSocket lifecycle over tunnel", async (t) => {
   const { tunnelServer, tunnelClient, origin } = await startTunnelApp()
 
-  // Attach an echo handler to the server's built-in WebSocketServer
-  tunnelServer.wss.on("connection", (ws) => {
+  // Attach an echo handler to the app-level WebSocket server mock
+  tunnelServer.appWss.on("connection", (ws) => {
     ws.on("message", (data) => ws.send(data))
   })
 

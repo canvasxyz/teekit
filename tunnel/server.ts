@@ -18,12 +18,13 @@ import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server.js"
 export class RA {
   public server: http.Server
   public wss: WebSocketServer
+  public appWss: AppWebSocketServerMock
   public x25519PublicKey: Uint8Array
   private x25519PrivateKey: Uint8Array
 
   private webSocketConnections = new Map<
     string,
-    { virtual: VirtualServerWebSocket; tunnelWs: WebSocket }
+    { appWs: AppWebSocketMock; tunnelWs: WebSocket }
   >()
   private symmetricKeyBySocket = new Map<WebSocket, Uint8Array>()
 
@@ -37,6 +38,7 @@ export class RA {
     this.x25519PrivateKey = privateKey
     this.server = http.createServer(app)
     this.wss = new WebSocketServer({ server: this.server })
+    this.appWss = new AppWebSocketServerMock()
 
     this.setupWebSocketHandler()
   }
@@ -54,14 +56,6 @@ export class RA {
     this.wss.on("connection", (ws: WebSocket) => {
       console.log("Setting up tunnel handler")
 
-      // Intercept messages before they reach application handlers
-      const originalEmit = ws.emit.bind(ws)
-
-      // Skip interception for virtual in-process connections
-      if ((ws as any).__tunnelVirtual === true) {
-        return
-      }
-
       // Immediately announce server key-exchange public key to the client
       try {
         const serverKxMessage = {
@@ -78,79 +72,69 @@ export class RA {
         this.symmetricKeyBySocket.delete(ws)
       })
 
-      ws.emit = function (event: string, ...args: any[]): boolean {
-        if (event === "message") {
-          const data = args[0] as Buffer
-          try {
-            let message = JSON.parse(data.toString())
-            const ra = (this as any).ra as RA
+      ws.on("message", (data: Buffer) => {
+        try {
+          let message = JSON.parse(data.toString())
 
-            // Handle client key exchange
-            if (message.type === "client_kx") {
-              try {
-                // Only accept a single symmetric key per WebSocket
-                if (!ra.symmetricKeyBySocket.has(ws)) {
-                  const sealed = sodium.from_base64(
-                    message.sealedSymmetricKey,
-                    sodium.base64_variants.ORIGINAL,
-                  )
-                  const opened = sodium.crypto_box_seal_open(
-                    sealed,
-                    ra.x25519PublicKey,
-                    ra.x25519PrivateKey,
-                  )
-                  ra.symmetricKeyBySocket.set(ws, opened)
-                } else {
-                  console.warn(
-                    "client_kx received after key already set; ignoring",
-                  )
-                }
-              } catch (e) {
-                console.error("Failed to process client_kx:", e)
-              }
-              return true
-            }
-
-            // If handshake not complete yet, ignore any other messages
-            if (!ra.symmetricKeyBySocket.has(ws)) {
-              console.warn("Dropping message before handshake completion")
-              return true
-            }
-
-            // Require encryption post-handshake
-            if (message.type !== "enc") {
-              console.warn("Dropping non-encrypted message post-handshake")
-              return true
-            }
-
-            // Decrypt envelope messages post-handshake
-            if (message.type === "enc") {
-              try {
-                message = ra.decryptEnvelopeForSocket(
-                  ws,
-                  message as TunnelEncrypted,
+          // Handle client key exchange
+          if (message.type === "client_kx") {
+            try {
+              if (!this.symmetricKeyBySocket.has(ws)) {
+                const sealed = sodium.from_base64(
+                  message.sealedSymmetricKey,
+                  sodium.base64_variants.ORIGINAL,
                 )
-              } catch (e) {
-                console.error("Failed to decrypt envelope:", e)
-                return true
+                const opened = sodium.crypto_box_seal_open(
+                  sealed,
+                  this.x25519PublicKey,
+                  this.x25519PrivateKey,
+                )
+                this.symmetricKeyBySocket.set(ws, opened)
+              } else {
+                console.warn(
+                  "client_kx received after key already set; ignoring",
+                )
               }
+            } catch (e) {
+              console.error("Failed to process client_kx:", e)
             }
+            return
+          }
 
-            if (message.type === "http_request") {
-              console.log(
-                "Tunnel request received:",
-                message.requestId,
-                message.url,
-              )
-              ra.handleTunnelHttpRequest(
-                ws,
-                message as TunnelHTTPRequest,
-              ).catch((error: Error) => {
+          // If handshake not complete yet, ignore any other messages
+          if (!this.symmetricKeyBySocket.has(ws)) {
+            console.warn("Dropping message before handshake completion")
+            return
+          }
+
+          // Require encryption post-handshake
+          if (message.type !== "enc") {
+            console.warn("Dropping non-encrypted message post-handshake")
+            return
+          }
+
+          // Decrypt envelope messages post-handshake
+          try {
+            message = this.decryptEnvelopeForSocket(
+              ws,
+              message as TunnelEncrypted,
+            )
+          } catch (e) {
+            console.error("Failed to decrypt envelope:", e)
+            return
+          }
+
+          if (message.type === "http_request") {
+            console.log(
+              "Tunnel request received:",
+              message.requestId,
+              message.url,
+            )
+            this.handleTunnelHttpRequest(ws, message as TunnelHTTPRequest).catch(
+              (error: Error) => {
                 console.error("Error handling tunnel request:", error)
-
-                // Send 500 error response back to client
                 try {
-                  ra.sendEncrypted(ws, {
+                  this.sendEncrypted(ws, {
                     type: "http_response",
                     requestId: message.requestId,
                     status: 500,
@@ -162,35 +146,19 @@ export class RA {
                 } catch (sendError) {
                   console.error("Failed to send error response:", sendError)
                 }
-              })
-              return true
-            } else if (message.type === "ws_connect") {
-              ra.handleTunnelWebSocketConnect(
-                ws,
-                message as TunnelWSClientConnect,
-              )
-              return true
-            } else if (message.type === "ws_message") {
-              ra.handleTunnelWebSocketMessage(message as TunnelWSMessage)
-              return true
-            } else if (message.type === "ws_close") {
-              ra.handleTunnelWebSocketClose(message as TunnelWSClientClose)
-              return true
-            }
-          } catch (error) {
-            console.error(error)
+              },
+            )
+          } else if (message.type === "ws_connect") {
+            this.handleTunnelWebSocketConnect(ws, message as TunnelWSClientConnect)
+          } else if (message.type === "ws_message") {
+            this.handleTunnelWebSocketMessage(message as TunnelWSMessage)
+          } else if (message.type === "ws_close") {
+            this.handleTunnelWebSocketClose(message as TunnelWSClientClose)
           }
+        } catch (error) {
+          console.error(error)
         }
-
-        // Discard non-tunnel messages other than close
-        if (event === "close") {
-          return originalEmit(event, ...args)
-        } else {
-          console.error(event, ...args)
-          return true
-        }
-      }
-      ;(ws as any).ra = this
+      })
     })
   }
   // Handle tunnel requests by synthesizing `fetch` events and passing to Express
@@ -311,24 +279,22 @@ export class RA {
       }
 
       console.log(
-        `Establishing virtual WebSocket for connection ${connectReq.connectionId} -> ${url.href}`,
+        `Establishing app WebSocket mock for connection ${connectReq.connectionId} -> ${url.href}`,
       )
 
-      // Create an in-process virtual WebSocket representing the application connection
-      const virtual = new VirtualServerWebSocket(
+      // Create an app-level WebSocket mock and expose via appWss
+      const appWs = new AppWebSocketMock(
         this,
         connectReq.connectionId,
         tunnelWs,
       )
 
       // Track connection
-      this.webSocketConnections.set(connectReq.connectionId, { virtual, tunnelWs })
+      this.webSocketConnections.set(connectReq.connectionId, { appWs, tunnelWs })
 
-      // Add to server client set for broadcast loops
-      ;(this.wss.clients as Set<any>).add(virtual as any)
-
-      // Emit connection only to application handlers; our own interceptor will skip virtuals
-      this.wss.emit("connection", virtual as any)
+      // Add to app client set and emit to application handlers
+      this.appWss._addClient(appWs)
+      this.appWss._emitConnection(appWs)
 
       // Notify client that connection is open
       const event: TunnelWSServerEvent = {
@@ -371,7 +337,7 @@ export class RA {
           `Delivering client message to app for ${messageReq.connectionId} (${messageReq.dataType}, ${typeof dataToDeliver})`,
         )
         // Deliver message from client to application
-        connection.virtual.deliverFromClient(dataToDeliver)
+        connection.appWs._deliverFromClient(dataToDeliver)
       } catch (error) {
         console.error(
           `Error delivering message to virtual WebSocket ${messageReq.connectionId}:`,
@@ -385,7 +351,7 @@ export class RA {
     const connection = this.webSocketConnections.get(closeReq.connectionId)
     if (connection) {
       try {
-        connection.virtual.close(closeReq.code, closeReq.reason)
+        connection.appWs._closedByClient(closeReq.code, closeReq.reason)
       } catch (error) {
         console.error(
           `Error closing virtual WebSocket ${closeReq.connectionId}:`,
@@ -454,7 +420,7 @@ export class RA {
  * Virtual in-process WebSocket that represents an application-level connection
  * terminated at the server without creating an outbound proxy socket.
  */
-class VirtualServerWebSocket {
+class AppWebSocketMock {
   public readonly CONNECTING = 0
   public readonly OPEN = 1
   public readonly CLOSING = 2
@@ -464,9 +430,6 @@ class VirtualServerWebSocket {
   public protocol: string = ""
   public extensions: string = ""
   public binaryType: string = "nodebuffer"
-
-  // Marker for RA interceptor to skip
-  public __tunnelVirtual: boolean = true
 
   private handlers: Map<string, Set<(...args: any[]) => void>> = new Map()
 
@@ -556,7 +519,7 @@ class VirtualServerWebSocket {
     this.emit("close", code ?? 1000, reasonBuf)
 
     // Remove from broadcast set
-    ;(this.ra.wss.clients as Set<any>).delete(this as any)
+    this.ra.appWss._removeClient(this)
 
     this.readyState = this.CLOSED
 
@@ -580,12 +543,21 @@ class VirtualServerWebSocket {
   }
 
   // Deliver message from client to application handlers
-  public deliverFromClient(data: string | Buffer): void {
+  public _deliverFromClient(data: string | Buffer): void {
     if (typeof data === "string") {
       this.emit("message", Buffer.from(data))
     } else {
       this.emit("message", data)
     }
+  }
+
+  public _closedByClient(code?: number, reason?: string): void {
+    if (this.readyState === this.CLOSED) return
+    this.readyState = this.CLOSING
+    const reasonBuf = Buffer.from(reason || "")
+    this.emit("close", code ?? 1000, reasonBuf)
+    this.readyState = this.CLOSED
+    this.ra.appWss._removeClient(this)
   }
 
   private isTextData(data: Buffer): boolean {
@@ -596,5 +568,52 @@ class VirtualServerWebSocket {
       }
     }
     return true
+  }
+}
+
+class AppWebSocketServerMock {
+  public clients: Set<AppWebSocketMock> = new Set()
+  private handlers: Map<string, Set<(...args: any[]) => void>> = new Map()
+
+  public on(event: "connection", listener: (ws: AppWebSocketMock) => void): this
+  public on(event: string, listener: (...args: any[]) => void): this
+  public on(event: string, listener: (...args: any[]) => void): this {
+    if (!this.handlers.has(event)) this.handlers.set(event, new Set())
+    this.handlers.get(event)!.add(listener)
+    return this
+  }
+
+  public off(event: string, listener: (...args: any[]) => void): this {
+    this.handlers.get(event)?.delete(listener)
+    return this
+  }
+
+  public close(cb?: () => void): void {
+    for (const client of [...this.clients]) {
+      try {
+        client.terminate()
+      } catch {}
+    }
+    if (cb) cb()
+  }
+
+  _addClient(ws: AppWebSocketMock): void {
+    this.clients.add(ws)
+  }
+
+  _removeClient(ws: AppWebSocketMock): void {
+    this.clients.delete(ws)
+  }
+
+  _emitConnection(ws: AppWebSocketMock): void {
+    const listeners = this.handlers.get("connection")
+    if (!listeners) return
+    for (const fn of listeners) {
+      try {
+        ;(fn as (ws: AppWebSocketMock) => void)(ws)
+      } catch (e) {
+        console.error(e)
+      }
+    }
   }
 }

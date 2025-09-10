@@ -12,7 +12,7 @@ import {
 import { RA } from "../tunnel/server.ts"
 
 const app = express()
-const { server, wss } = await RA.initialize(app)
+const { server, appWss } = await RA.initialize(app)
 
 app.use(cors())
 app.use(express.json())
@@ -42,7 +42,7 @@ app.get("/uptime", (req, res) => {
   })
 })
 
-wss.on("connection", (ws: WebSocket) => {
+appWss.on("connection", (ws: any) => {
   console.log("Client connected")
 
   // Send message backlog to new client
@@ -84,8 +84,8 @@ wss.on("connection", (ws: WebSocket) => {
           message: chatMessage,
         }
 
-        wss.clients.forEach((client: WebSocket) => {
-          if (client.readyState === WebSocket.OPEN) {
+        appWss.clients.forEach((client: any) => {
+          if (client.readyState === client.OPEN) {
             client.send(JSON.stringify(broadcastMessage))
           }
         })

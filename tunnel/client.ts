@@ -69,9 +69,30 @@ export class RA {
         reject(new Error("WebSocket connection failed"))
       }
 
-      this.ws.onmessage = (event) => {
+      this.ws.onmessage = async (event) => {
         try {
-          const message = JSON.parse(event.data)
+          const raw = (event as any).data
+          let text: string
+          if (typeof raw === "string") {
+            text = raw
+          } else if (raw && typeof raw.text === "function") {
+            // Blob-like
+            text = await raw.text()
+          } else if (raw && typeof raw === "object" && typeof (raw as any).byteLength === "number") {
+            // Buffer/Uint8Array/ArrayBuffer
+            const buf = Buffer.isBuffer(raw)
+              ? raw
+              : Buffer.from(
+                  raw.buffer ? raw.buffer : (raw as ArrayBuffer),
+                  raw.byteOffset ?? 0,
+                  raw.byteLength ?? undefined,
+                )
+            text = buf.toString()
+          } else {
+            text = String(raw)
+          }
+
+          const message = JSON.parse(text)
           if (message.type === "server_kx") {
             try {
               const serverKx = message as TunnelServerKX

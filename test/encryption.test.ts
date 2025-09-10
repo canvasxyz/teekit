@@ -54,8 +54,8 @@ async function stopTunnel(
 test.serial("Wire messages are encrypted after handshake", async (t) => {
   const { tunnelServer, tunnelClient, origin } = await startTunnelApp()
 
-  // Attach echo behavior to server's built-in WebSocket server
-  tunnelServer.wss.on("connection", (ws) => {
+  // Attach echo behavior to app-level WebSocket server
+  tunnelServer.appWss.on("connection", (ws) => {
     ws.on("message", (data) => ws.send(data))
   })
 
