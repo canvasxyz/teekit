@@ -49,8 +49,11 @@ export class RA {
     }
 
     this.connectionPromise = new Promise((resolve, reject) => {
-      const wsUrl = this.origin.replace(/^http/, "ws")
-      this.ws = new WebSocket(wsUrl)
+      const controlUrl = new URL(this.origin)
+      controlUrl.protocol = controlUrl.protocol.replace(/^http/, "ws")
+      // Use dedicated control channel path
+      controlUrl.pathname = "/__ra__"
+      this.ws = new WebSocket(controlUrl.toString())
 
       this.ws.onopen = () => {
         // Wait for server_kx to complete handshake before resolving
@@ -150,6 +153,12 @@ export class RA {
     } else {
       throw new Error("WebSocket not connected")
     }
+  }
+
+  public getOriginPort(): number {
+    const u = new URL(this.origin)
+    if (u.port) return Number(u.port)
+    return u.protocol === "https:" ? 443 : 80
   }
 
   private encryptPayload(payload: unknown): TunnelEncrypted {

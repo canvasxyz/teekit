@@ -134,19 +134,15 @@ test.serial("POST fetch through tunnel", async (t) => {
   }
 })
 
-test.serial("WebSocket lifecycle over tunnel", async (t) => {
-  // Start a real echo WebSocket server to connect to
-  const echoWss = new WebSocketServer({ port: 0, host: "127.0.0.1" })
-  await new Promise<void>((resolve) => echoWss.on("listening", resolve))
-  const echoPort = (echoWss.address() as AddressInfo).port
+test.serial("WebSocket lifecycle over tunnel (terminates at server wss)", async (t) => {
+  const { tunnelServer, tunnelClient, origin } = await startTunnelApp()
 
-  echoWss.on("connection", (ws) => {
+  // Attach an echo handler to the server's built-in WebSocketServer
+  tunnelServer.wss.on("connection", (ws) => {
     ws.on("message", (data) => {
       ws.send(data)
     })
   })
-
-  const { tunnelServer, tunnelClient } = await startTunnelApp()
 
   try {
     const withTimeout = async <T>(p: Promise<T>, ms: number, label: string) => {
@@ -162,7 +158,7 @@ test.serial("WebSocket lifecycle over tunnel", async (t) => {
     }
 
     const TunnelWS = tunnelClient.WebSocket
-    const ws = new TunnelWS(`ws://127.0.0.1:${echoPort}`)
+    const ws = new TunnelWS(origin.replace(/^http/, "ws"))
 
     t.is(ws.readyState, ws.CONNECTING)
 
@@ -215,7 +211,6 @@ test.serial("WebSocket lifecycle over tunnel", async (t) => {
       }
     }
   } finally {
-    await new Promise<void>((resolve) => echoWss.close(() => resolve()))
     await stopTunnel(tunnelServer, tunnelClient)
   }
 })

@@ -52,13 +52,10 @@ async function stopTunnel(
 }
 
 test.serial("Wire messages are encrypted after handshake", async (t) => {
-  const { tunnelServer, tunnelClient } = await startTunnelApp()
+  const { tunnelServer, tunnelClient, origin } = await startTunnelApp()
 
-  // Start a real echo WebSocket server to generate ws events/messages
-  const echoWss = new WebSocketServer({ port: 0, host: "127.0.0.1" })
-  await new Promise<void>((resolve) => echoWss.on("listening", resolve))
-  const echoPort = (echoWss.address() as AddressInfo).port
-  echoWss.on("connection", (ws) => {
+  // Attach echo handler on server app wss
+  tunnelServer.wss.on("connection", (ws) => {
     ws.on("message", (data) => ws.send(data))
   })
 
@@ -85,7 +82,7 @@ test.serial("Wire messages are encrypted after handshake", async (t) => {
     await response.text()
 
     const TunnelWS = tunnelClient.WebSocket
-    const ws = new TunnelWS(`ws://127.0.0.1:${echoPort}`)
+    const ws = new TunnelWS(origin.replace(/^http/, "ws"))
     await new Promise<void>((resolve) =>
       ws.addEventListener("open", () => resolve()),
     )
@@ -104,7 +101,6 @@ test.serial("Wire messages are encrypted after handshake", async (t) => {
     t.true(types.length > 0)
     t.true(types.every((tpe) => tpe === "enc"))
   } finally {
-    await new Promise<void>((resolve) => echoWss.close(() => resolve()))
     await stopTunnel(tunnelServer, tunnelClient)
   }
 })
@@ -123,7 +119,7 @@ test.serial(
       tunnelServer.server.listen(0, "127.0.0.1", () => resolve())
     })
     const address = tunnelServer.server.address() as AddressInfo
-    const wsUrl = `ws://127.0.0.1:${address.port}`
+    const wsUrl = `ws://127.0.0.1:${address.port}/__ra__`
 
     const ws = new WebSocket(wsUrl)
     try {

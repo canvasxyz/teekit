@@ -46,6 +46,20 @@ export class TunnelWebSocket extends EventTarget {
     try {
       await this.ra.ensureConnection()
 
+      // Enforce that client WS targets the same server port as RA origin
+      const originPort = this.ra.getOriginPort()
+      const target = new URL(this.url)
+      const targetPort = target.port
+        ? Number(target.port)
+        : target.protocol === "wss:" || target.protocol === "https:"
+          ? 443
+          : 80
+      if (originPort !== targetPort) {
+        throw new Error(
+          `Port mismatch: RA origin port ${originPort} != target port ${targetPort}`
+        )
+      }
+
       const protocolArray = protocols
         ? Array.isArray(protocols)
           ? protocols
@@ -250,11 +264,11 @@ export class TunnelWebSocket extends EventTarget {
     for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i])
     }
-    return btoa(binary)
+    return (globalThis as any).btoa(binary)
   }
 
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const binary = atob(base64)
+    const binary = (globalThis as any).atob(base64)
     const bytes = new Uint8Array(binary.length)
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i)
