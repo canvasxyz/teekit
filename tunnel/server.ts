@@ -15,8 +15,8 @@ import {
 } from "./types.js"
 import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server.js"
 import {
-  ServerRAMockWebSocket,
-  ServerRAMockWebSocketServer,
+  NewServerRAMockWebSocket,
+  NewServerRAMockWebSocketServer,
 } from "./ServerRAWebSocket.js"
 
 export class RA {
@@ -29,7 +29,7 @@ export class RA {
 
   private webSocketConnections = new Map<
     string,
-    { mockWs: ServerRAMockWebSocket; controlWs: WebSocket }
+    { mockWs: NewServerRAMockWebSocket; controlWs: WebSocket }
   >()
   private symmetricKeyBySocket = new Map<WebSocket, Uint8Array>()
 
@@ -44,7 +44,7 @@ export class RA {
     this.server = http.createServer(app)
 
     // Expose a mock WebSocketServer to application code
-    this.wss = new ServerRAMockWebSocketServer()
+    this.wss = new NewServerRAMockWebSocketServer()
 
     // Route upgrades to the control channel WebSocketServer
     this.controlWss = new WebSocketServer({ noServer: true })
@@ -356,7 +356,7 @@ export class RA {
       }
 
       // Create a mock socket and expose it to application via mock server
-      const mock = new ServerRAMockWebSocket(
+      const mock = new NewServerRAMockWebSocket(
         // onSend: application -> client
         (payload) => {
           let messageData: string
