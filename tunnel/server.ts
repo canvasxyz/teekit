@@ -15,8 +15,8 @@ import {
 } from "./types.js"
 import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server.js"
 import {
-  ServerRAMockWebSocket,
-  ServerRAMockWebSocketServer,
+  NewServerRAMockWebSocket,
+  NewServerRAMockWebSocketServer,
 } from "./ServerRAWebSocket.js"
 
 export class RA {
@@ -29,7 +29,7 @@ export class RA {
 
   private webSocketConnections = new Map<
     string,
-    { mockWs: ServerRAMockWebSocket; controlWs: WebSocket }
+    { mockWs: NewServerRAMockWebSocket; controlWs: WebSocket }
   >()
   private symmetricKeyBySocket = new Map<WebSocket, Uint8Array>()
 
@@ -43,8 +43,8 @@ export class RA {
     this.x25519PrivateKey = privateKey
     this.server = http.createServer(app)
 
-    // Expose a mock WebSocketServer to application code
-    this.wss = new ServerRAMockWebSocketServer()
+    // Expose a mock WebSocketServer to application code (mock-socket based)
+    this.wss = new NewServerRAMockWebSocketServer()
 
     // Route upgrades to the control channel WebSocketServer
     this.controlWss = new WebSocketServer({ noServer: true })
@@ -101,10 +101,10 @@ export class RA {
           ] of this.webSocketConnections.entries()) {
             if (conn.controlWs === controlWs) {
               try {
-                conn.mockWs.emitClose(1006, "tunnel closed")
+                conn.mockWs.closeApplicationView(1006, "tunnel closed")
               } catch {}
               try {
-                this.wss.deleteClient(conn.mockWs)
+                // Client set is managed automatically by the mock server on close
               } catch {}
               try {
                 this.symmetricKeyBySocket.delete(conn.controlWs)
@@ -355,8 +355,9 @@ export class RA {
         return
       }
 
-      // Create a mock socket and expose it to application via mock server
-      const mock = new ServerRAMockWebSocket(
+      // Create a mock client socket connected to the in-memory server
+      const mock = new NewServerRAMockWebSocket(
+        this.wss.url,
         // onSend: application -> client
         (payload) => {
           let messageData: string
@@ -398,7 +399,10 @@ export class RA {
             reason,
           }
           try {
-            this.sendEncrypted(controlWs, event)
+            // Only attempt encrypted send if handshake complete
+            if (this.symmetricKeyBySocket.has(controlWs)) {
+              this.sendEncrypted(controlWs, event)
+            }
           } catch (e) {
             console.error("Failed to send encrypted ws_event(close):", e)
           }
@@ -410,11 +414,6 @@ export class RA {
         mockWs: mock,
         controlWs: controlWs,
       })
-
-      // Register with mock server and notify application
-      try {
-        this.wss.addClient(mock)
-      } catch {}
 
       // Signal open to client
       const openEvt: TunnelWSServerEvent = {
@@ -453,7 +452,7 @@ export class RA {
         } else {
           dataToSend = messageReq.data
         }
-        connection.mockWs.emitMessage(dataToSend)
+        connection.mockWs.deliverToApplication(dataToSend)
       } catch (error) {
         console.error(
           `Error sending message to WebSocket ${messageReq.connectionId}:`,
@@ -467,16 +466,13 @@ export class RA {
     const connection = this.webSocketConnections.get(closeReq.connectionId)
     if (connection) {
       try {
-        connection.mockWs.emitClose(closeReq.code, closeReq.reason)
+        connection.mockWs.closeApplicationView(closeReq.code, closeReq.reason)
       } catch (error) {
         console.error(
           `Error closing WebSocket ${closeReq.connectionId}:`,
           error,
         )
       }
-      try {
-        this.wss.deleteClient(connection.mockWs)
-      } catch {}
       this.webSocketConnections.delete(closeReq.connectionId)
     }
   }
