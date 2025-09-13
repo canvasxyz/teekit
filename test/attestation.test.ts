@@ -1,7 +1,13 @@
 import test from "ava"
 import fs from "node:fs"
 
-import { parseTdxQuoteBase64, hex, verifyTdxV4Signature } from "../qvl"
+import {
+  parseTdxQuote,
+  parseTdxQuoteBase64,
+  hex,
+  reverseHexBytes,
+  verifyTdxV4Signature,
+} from "../qvl"
 
 test.skip("Parse an SGX attestation", async (t) => {
   // TODO
