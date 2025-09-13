@@ -1,11 +1,6 @@
 import { createPublicKey, createVerify } from "node:crypto"
 
-import {
-  TdxQuoteHeader,
-  TdxQuoteBody_1_0,
-  parseTdxQuote,
-  parseTdxQuoteBase64,
-} from "./structs.js"
+import { TdxQuoteHeader, TdxQuoteBody_1_0, parseTdxQuote } from "./structs.js"
 
 /** Convert a raw 64-byte ECDSA signature (r||s) into ASN.1 DER format */
 function encodeEcdsaSignatureToDer(rawSignature: Buffer): Buffer {
@@ -91,4 +86,3 @@ export function verifyTdxV4Signature(quoteInput: string | Buffer): boolean {
   verifier.end()
   return verifier.verify(publicKey, derSig)
 }
-

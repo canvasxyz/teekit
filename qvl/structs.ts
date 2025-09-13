@@ -70,10 +70,16 @@ export function parseTdxSignature(sig_data: Buffer) {
   const Tail = new Struct("Tail")
     .UInt16LE("cert_data_type")
     .UInt32LE("cert_data_len")
+    .Buffer("cert_data")
     .compile()
-  const tail = new Tail(sig_data.slice(offset, offset + Tail.baseSize))
-  offset += Tail.baseSize
-  const cert_data = sig_data.slice(offset, offset + tail.cert_data_len)
+
+  let tail
+  try {
+    const { cert_data_len } = new Tail(
+      sig_data.slice(offset, offset + Tail.baseSize),
+    )
+    tail = new Tail(sig_data.slice(offset, offset + cert_data_len))
+  } catch {}
 
   return {
     ecdsa_signature: fixed.signature,
@@ -82,9 +88,9 @@ export function parseTdxSignature(sig_data: Buffer) {
     qe_report_signature: fixed.qe_report_signature,
     qe_auth_data_len: fixed.qe_auth_data_len,
     qe_auth_data: qe_auth_data,
-    cert_data_type: tail.cert_data_type,
-    cert_data_len: tail.cert_data_len,
-    cert_data_prefix: cert_data.slice(0, 32),
+    cert_data_type: tail ? tail.cert_data_type : null,
+    cert_data_len: tail ? tail.cert_data_len : null,
+    cert_data_prefix: tail ? tail.cert_data.slice(0, 32) : null,
   }
 }
 

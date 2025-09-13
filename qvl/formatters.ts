@@ -50,6 +50,8 @@ export const formatTdxSignature = (signature: TdxSignature) => {
     qe_auth_data: hex(signature.qe_auth_data),
     cert_data_type: signature.cert_data_type,
     cert_data_len: signature.cert_data_len,
-    cert_data_prefix: hex(signature.cert_data_prefix),
+    cert_data_prefix: signature.cert_data_prefix
+      ? hex(signature.cert_data_prefix)
+      : null,
   }
 }
