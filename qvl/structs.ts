@@ -78,6 +78,7 @@ export function parseTdxSignature(sig_data: Buffer) {
   return {
     ecdsa_signature: fixed.signature,
     attestation_public_key: fixed.attestation_public_key,
+    qe_report: fixed.qe_report,
     qe_report_present: fixed.qe_report.length === 384,
     qe_report_signature: fixed.qe_report_signature,
     qe_auth_data_len: fixed.qe_auth_data_len,
@@ -85,6 +86,7 @@ export function parseTdxSignature(sig_data: Buffer) {
     cert_data_type: tail.cert_data_type,
     cert_data_len: tail.cert_data_len,
     cert_data_prefix: cert_data.slice(0, 32),
+    cert_data,
   }
 }
 

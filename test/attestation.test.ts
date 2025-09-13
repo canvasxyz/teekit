@@ -1,7 +1,11 @@
 import test from "ava"
 import fs from "node:fs"
 
-import { parseTdxQuoteBase64, hex } from "../qvl"
+import {
+  parseTdxQuoteBase64,
+  hex,
+  verifyTdxV4QuoteSignature,
+} from "../qvl"
 
 test.skip("Parse an SGX attestation", async (t) => {
   // TODO
@@ -40,8 +44,12 @@ test.skip("Verify an SGX attestation", async (t) => {
   // TODO
 })
 
-test.skip("Verify a V4 TDX attestation from Google Cloud", async (t) => {
-  // TODO
+test.serial("Verify a V4 TDX attestation from Google Cloud", async (t) => {
+  const data = JSON.parse(
+    fs.readFileSync("test/sample/tdx-v4-gcp.json", "utf-8"),
+  )
+  const quote: string = data.tdx.quote
+  t.true(verifyTdxV4QuoteSignature(quote))
 })
 
 test.skip("Verify a V5 TDX 1.0 attestation", async (t) => {
