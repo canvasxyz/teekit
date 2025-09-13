@@ -106,7 +106,52 @@ export const TdxQuoteV5 = new Struct("TdxQuoteV5")
 
 export function parseTdxQuote(quote_data: Buffer) {
   const header = new TdxQuoteHeader(quote_data)
-  const { body, sig_data } = new TdxQuoteV4(quote_data) // header.version === 4 ? new TdxQuoteV4(quote) : new TdxQuoteV5(quote)
+
+  const headerSize = (TdxQuoteHeader as any).baseSize as number
+  const bodyV10Size = (TdxQuoteBody_1_0 as any).baseSize as number
+  const bodyV15Size = (TdxQuoteBody_1_5 as any).baseSize as number
+
+  function tryPickBodyAndSig(bodySize: number) {
+    const sigLenOffset = headerSize + bodySize
+    if (sigLenOffset + 4 > quote_data.length) return undefined
+    const sigLen = quote_data.readUInt32LE(sigLenOffset)
+    const sigStart = sigLenOffset + 4
+    const sigEnd = sigStart + sigLen
+    if (sigEnd > quote_data.length) return undefined
+    return { sigLen, sigStart, sigEnd }
+  }
+
+  let chosenBodySize = bodyV10Size
+  let bodyVariant: "v1_0" | "v1_5" = "v1_0"
+  let sigPlacement = tryPickBodyAndSig(bodyV10Size)
+
+  if (header.version === 5) {
+    // Prefer 1.5 layout when it matches the total length
+    const v15 = tryPickBodyAndSig(bodyV15Size)
+    if (v15 && (!sigPlacement || v15.sigEnd === quote_data.length)) {
+      bodyVariant = "v1_5"
+      chosenBodySize = bodyV15Size
+      sigPlacement = v15
+    }
+  }
+
+  if (!sigPlacement) {
+    // Fallback: attempt to parse as V4 layout
+    sigPlacement = tryPickBodyAndSig(bodyV10Size)
+    chosenBodySize = bodyV10Size
+    bodyVariant = header.version === 5 ? "v1_0" : "v1_0"
+  }
+
+  const bodySlice = quote_data.slice(
+    headerSize,
+    headerSize + chosenBodySize,
+  )
+  const body =
+    bodyVariant === "v1_5"
+      ? new TdxQuoteBody_1_5(bodySlice)
+      : new TdxQuoteBody_1_0(bodySlice)
+
+  const sig_data = quote_data.slice(sigPlacement!.sigStart, sigPlacement!.sigEnd)
   const signature = parseTdxSignature(sig_data)
 
   return { header, body, signature }
