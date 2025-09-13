@@ -97,18 +97,69 @@ export const TdxQuoteV4 = new Struct("TdxQuoteV4")
   .Buffer("sig_data")
   .compile()
 
-export const TdxQuoteV5 = new Struct("TdxQuoteV5")
+// Note: V5 body can be TDX 1.0 (same layout as V4) or TDX 1.5 (extra 64 bytes)
+export const TdxQuoteV5_TDX10 = new Struct("TdxQuoteV5_TDX10")
   .Struct("header", TdxQuoteHeader)
   .Struct("body", TdxQuoteBody_1_0)
   .UInt32LE("sig_data_len")
   .Buffer("sig_data")
   .compile()
 
+export const TdxQuoteV5_TDX15 = new Struct("TdxQuoteV5_TDX15")
+  .Struct("header", TdxQuoteHeader)
+  .Struct("body", TdxQuoteBody_1_5)
+  .UInt32LE("sig_data_len")
+  .Buffer("sig_data")
+  .compile()
+
 export function parseTdxQuote(quote_data: Buffer) {
   const header = new TdxQuoteHeader(quote_data)
-  const { body, sig_data } = new TdxQuoteV4(quote_data) // header.version === 4 ? new TdxQuoteV4(quote) : new TdxQuoteV5(quote)
-  const signature = parseTdxSignature(sig_data)
+  if (header.version === 4) {
+    const { body, sig_data } = new TdxQuoteV4(quote_data)
+    const signature = parseTdxSignature(sig_data)
+    return { header, body, signature }
+  }
 
+  // v5: detect body variant using sig_data_len position sanity
+  const off10 = TdxQuoteHeader.baseSize + TdxQuoteBody_1_0.baseSize
+  const off15 = TdxQuoteHeader.baseSize + TdxQuoteBody_1_5.baseSize
+  const readU32 = (off: number) =>
+    off + 4 <= quote_data.length ? quote_data.readUInt32LE(off) : 0
+  const v10Len = readU32(off10)
+  const v15Len = readU32(off15)
+  const rem10 = Math.max(0, quote_data.length - (off10 + 4))
+  const rem15 = Math.max(0, quote_data.length - (off15 + 4))
+  const v10Valid = v10Len > 0 && v10Len <= rem10
+  const v15Valid = v15Len > 0 && v15Len <= rem15
+
+  if (v15Valid && !v10Valid) {
+    const { body, sig_data } = new TdxQuoteV5_TDX15(quote_data)
+    const signature = parseTdxSignature(sig_data)
+    return { header, body, signature }
+  }
+  if (v10Valid && !v15Valid) {
+    const { body, sig_data } = new TdxQuoteV5_TDX10(quote_data)
+    const signature = parseTdxSignature(sig_data)
+    return { header, body, signature }
+  }
+  if (v15Valid && v10Valid) {
+    // pick the closer match to remainder
+    const d10 = Math.abs(rem10 - v10Len)
+    const d15 = Math.abs(rem15 - v15Len)
+    if (d15 <= d10) {
+      const { body, sig_data } = new TdxQuoteV5_TDX15(quote_data)
+      const signature = parseTdxSignature(sig_data)
+      return { header, body, signature }
+    } else {
+      const { body, sig_data } = new TdxQuoteV5_TDX10(quote_data)
+      const signature = parseTdxSignature(sig_data)
+      return { header, body, signature }
+    }
+  }
+
+  // Fallback: prefer 1.5 for v5
+  const { body, sig_data } = new TdxQuoteV5_TDX15(quote_data)
+  const signature = parseTdxSignature(sig_data)
   return { header, body, signature }
 }
 
