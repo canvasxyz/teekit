@@ -32,8 +32,17 @@ test.skip("Parse a V5 TDX 1.0 attestation", async (t) => {
   // TODO
 })
 
-test.skip("Parse a V5 TDX 1.5 attestation", async (t) => {
-  // TODO
+test.serial("Parse a V5 TDX 1.5 attestation", async (t) => {
+  const data = JSON.parse(
+    fs.readFileSync("test/sample/tdx-v5-15-synth.json", "utf-8"),
+  )
+  const quote: string = data.tdx.quote
+  const { header, body } = parseTdxQuoteBase64(quote)
+
+  t.is(header.version, 5)
+  t.true("tee_tcb_svn_2" in body)
+  t.true("mrservictd" in body)
+  t.is(body.report_data.length, 64)
 })
 
 test.skip("Verify an SGX attestation", async (t) => {

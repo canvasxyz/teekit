@@ -64,16 +64,25 @@ export function parseTdxSignature(sig_data: Buffer) {
   const fixed = new EcdsaSigFixed(sig_data)
   let offset = EcdsaSigFixed.baseSize
 
-  const qe_auth_data = sig_data.slice(offset, offset + fixed.qe_auth_data_len)
-  offset += fixed.qe_auth_data_len
+  const maxAuthLen = Math.max(0, Math.min(fixed.qe_auth_data_len, Math.max(0, sig_data.length - offset)))
+  const qe_auth_data = sig_data.slice(offset, offset + maxAuthLen)
+  offset += maxAuthLen
 
   const Tail = new Struct("Tail")
     .UInt16LE("cert_data_type")
     .UInt32LE("cert_data_len")
     .compile()
-  const tail = new Tail(sig_data.slice(offset, offset + Tail.baseSize))
-  offset += Tail.baseSize
-  const cert_data = sig_data.slice(offset, offset + tail.cert_data_len)
+  let cert_data_type = 0
+  let cert_data_len = 0
+  let cert_data = Buffer.alloc(0)
+  if (sig_data.length >= offset + Tail.baseSize) {
+    const tail = new Tail(sig_data.slice(offset, offset + Tail.baseSize))
+    cert_data_type = tail.cert_data_type
+    cert_data_len = tail.cert_data_len
+    offset += Tail.baseSize
+    const maxCertLen = Math.max(0, Math.min(cert_data_len, Math.max(0, sig_data.length - offset)))
+    cert_data = sig_data.slice(offset, offset + maxCertLen)
+  }
 
   return {
     ecdsa_signature: fixed.signature,
@@ -82,8 +91,8 @@ export function parseTdxSignature(sig_data: Buffer) {
     qe_report_signature: fixed.qe_report_signature,
     qe_auth_data_len: fixed.qe_auth_data_len,
     qe_auth_data: qe_auth_data,
-    cert_data_type: tail.cert_data_type,
-    cert_data_len: tail.cert_data_len,
+    cert_data_type: cert_data_type,
+    cert_data_len: cert_data_len,
     cert_data_prefix: cert_data.slice(0, 32),
   }
 }
@@ -106,7 +115,45 @@ export const TdxQuoteV5 = new Struct("TdxQuoteV5")
 
 export function parseTdxQuote(quote_data: Buffer) {
   const header = new TdxQuoteHeader(quote_data)
-  const { body, sig_data } = new TdxQuoteV4(quote_data) // header.version === 4 ? new TdxQuoteV4(quote) : new TdxQuoteV5(quote)
+
+  // Heuristic to distinguish v5 body 1.0 vs 1.5 by checking whether the
+  // sig_data_len located after a 1.5-sized body points to the end of buffer
+  const HEADER_SIZE = 48
+  const BODY_V1_5_SIZE = 648
+
+  let body: any
+  let sig_data: Buffer
+
+  if (header.version === 4) {
+    const parsed = new TdxQuoteV4(quote_data)
+    body = parsed.body
+    sig_data = parsed.sig_data
+  } else if (header.version === 5) {
+    const sigOffsetIfV15 = HEADER_SIZE + BODY_V1_5_SIZE
+    let isV15 = false
+    if (quote_data.length >= sigOffsetIfV15 + 4) {
+      const sigLen = quote_data.readUInt32LE(sigOffsetIfV15)
+      isV15 = sigOffsetIfV15 + 4 + sigLen === quote_data.length
+    }
+
+    if (isV15) {
+      // Manually parse to avoid misaligned struct definitions
+      const bodyBuf = quote_data.slice(HEADER_SIZE, HEADER_SIZE + BODY_V1_5_SIZE)
+      body = new TdxQuoteBody_1_5(bodyBuf)
+      const sigLen = quote_data.readUInt32LE(sigOffsetIfV15)
+      sig_data = quote_data.slice(sigOffsetIfV15 + 4, sigOffsetIfV15 + 4 + sigLen)
+    } else {
+      const parsed = new TdxQuoteV5(quote_data)
+      body = parsed.body
+      sig_data = parsed.sig_data
+    }
+  } else {
+    // Fallback: try v4 layout for unknown versions
+    const parsed = new TdxQuoteV4(quote_data)
+    body = parsed.body
+    sig_data = parsed.sig_data
+  }
+
   const signature = parseTdxSignature(sig_data)
 
   return { header, body, signature }
