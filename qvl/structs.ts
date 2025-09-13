@@ -104,12 +104,37 @@ export const TdxQuoteV5 = new Struct("TdxQuoteV5")
   .Buffer("sig_data")
   .compile()
 
+// V5 with TDX 1.5 body layout (additional 64 bytes appended to report body)
+export const TdxQuoteV5_1_5 = new Struct("TdxQuoteV5_1_5")
+  .Struct("header", TdxQuoteHeader)
+  .Struct("body", TdxQuoteBody_1_5)
+  .UInt32LE("sig_data_len")
+  .Buffer("sig_data")
+  .compile()
+
 export function parseTdxQuote(quote_data: Buffer) {
   const header = new TdxQuoteHeader(quote_data)
-  const { body, sig_data } = new TdxQuoteV4(quote_data) // header.version === 4 ? new TdxQuoteV4(quote) : new TdxQuoteV5(quote)
-  const signature = parseTdxSignature(sig_data)
 
-  return { header, body, signature }
+  if (header.version === 4) {
+    const parsed = new TdxQuoteV4(quote_data)
+    const signature = parseTdxSignature(parsed.sig_data)
+    return { header, body: parsed.body, signature }
+  }
+
+  if (header.version === 5) {
+    // Default to TDX 1.0 body layout for v5; fields are a prefix for 1.5
+    try {
+      const parsed = new TdxQuoteV5(quote_data)
+      const signature = parseTdxSignature(parsed.sig_data)
+      return { header, body: parsed.body, signature }
+    } catch (_e) {
+      const parsed15 = new TdxQuoteV5_1_5(quote_data)
+      const signature = parseTdxSignature(parsed15.sig_data)
+      return { header, body: parsed15.body, signature }
+    }
+  }
+
+  throw new Error(`Unsupported or unknown TDX quote version: ${header.version}`)
 }
 
 export function parseTdxQuoteBase64(quote: string) {
