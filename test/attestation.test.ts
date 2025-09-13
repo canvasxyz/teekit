@@ -1,7 +1,7 @@
 import test from "ava"
 import fs from "node:fs"
 
-import { parseTdxQuoteBase64, hex } from "../qvl"
+import { parseTdxQuoteBase64, hex, verifyTdxV4Signature } from "../qvl"
 
 test.skip("Parse an SGX attestation", async (t) => {
   // TODO
@@ -26,6 +26,7 @@ test.serial("Parse a V4 TDX attestation from Google Cloud", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.true(verifyTdxV4Signature(quote))
 })
 
 test.skip("Parse a V5 TDX 1.0 attestation", async (t) => {
