@@ -89,3 +89,74 @@ export function loadRootCerts(certsDirectory: string): X509Certificate[] {
   }
   return results
 }
+
+/**
+ * Some providers (e.g. GCP) embed the PCK leaf certificate inside a CMS/PKCS#7
+ * base64 blob placed before the PEM certificates in cert_data. This attempts to
+ * decode that base64 prefix and extract any X.509 certificates from the decoded
+ * bytes by scanning for DER-encoded certificate sequences.
+ */
+export function extractDerCertificatesFromBase64Prefix(
+  certData: Buffer,
+): X509Certificate[] {
+  const text = certData.toString("utf8")
+  const firstPem = text.indexOf("-----BEGIN CERTIFICATE-----")
+  const prefix = firstPem >= 0 ? text.slice(0, firstPem) : text
+
+  // Remove non-base64 characters (including newlines and headers)
+  const cleaned = prefix.replace(/[^A-Za-z0-9+/=]+/g, "")
+  if (cleaned.length < 64) return []
+
+  let decoded: Buffer
+  try {
+    decoded = Buffer.from(cleaned, "base64")
+  } catch {
+    return []
+  }
+  if (decoded.length < 8) return []
+
+  const found: X509Certificate[] = []
+  for (let i = 0; i < decoded.length - 2; i++) {
+    if (decoded[i] !== 0x30) continue
+    try {
+      const cert = new X509Certificate(decoded.subarray(i))
+      found.push(cert)
+    } catch {}
+  }
+  return found
+}
+
+/**
+ * GCP-specific: Reconstruct a leaf certificate when cert_data begins with a
+ * base64 body followed by an END CERTIFICATE line before any BEGIN header.
+ * Returns any reconstructed leaf, followed by any standard PEMs present.
+ */
+export function extractCertificatesPossiblyWithLeadingBase64(
+  certData: Buffer,
+): X509Certificate[] {
+  const results: X509Certificate[] = []
+  const text = certData.toString("utf8")
+  const endMarker = "-----END CERTIFICATE-----"
+  const beginMarker = "-----BEGIN CERTIFICATE-----"
+  const firstEnd = text.indexOf(endMarker)
+  const firstBegin = text.indexOf(beginMarker)
+  if (firstEnd !== -1 && (firstBegin === -1 || firstEnd < firstBegin)) {
+    const base64Body = text.slice(0, firstEnd).replace(/[^A-Za-z0-9+/=]+/g, "")
+    try {
+      const pem = `-----BEGIN CERTIFICATE-----\n${base64Body}\n-----END CERTIFICATE-----\n`
+      try {
+        results.push(new X509Certificate(pem))
+      } catch {
+        // Try DER parse as fallback
+        const der = Buffer.from(base64Body, "base64")
+        results.push(new X509Certificate(der))
+      }
+    } catch {}
+  }
+  for (const pem of extractPemCertificates(certData)) {
+    try {
+      results.push(new X509Certificate(pem))
+    } catch {}
+  }
+  return results
+}

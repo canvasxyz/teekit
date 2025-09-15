@@ -1,10 +1,4 @@
-import {
-  createHash,
-  createPublicKey,
-  createVerify,
-  verify as cryptoVerify,
-  X509Certificate,
-} from "node:crypto"
+import { createPublicKey, createVerify, X509Certificate } from "node:crypto"
 
 import { getTdxV4SignedRegion, parseTdxQuote } from "./structs.js"
 import {
@@ -13,6 +7,7 @@ import {
   extractPemCertificates,
   loadRootCerts,
   toBase64Url,
+  extractCertificatesPossiblyWithLeadingBase64,
 } from "./utils.js"
 
 /**
@@ -110,12 +105,25 @@ export function verifyQeReportSignature(quote: string | Buffer): boolean {
   if (header.version !== 4) throw new Error("Unsupported quote version")
   if (!signature.cert_data) throw new Error("Missing cert_data in quote")
 
-  const { chain } = verifyProvisioningCertificationChain(signature.cert_data, {
-    verifyAtTimeMs: 0,
-  })
-  if (chain.length === 0) return false
+  // Try to determine the true PCK leaf certificate public key.
+  // Some providers (e.g., GCP) place the leaf inside a base64 CMS prefix, while
+  // the PEMs in cert_data contain only the Platform CA and the Root CA.
+  const combined = extractCertificatesPossiblyWithLeadingBase64(
+    signature.cert_data,
+  )
 
-  const key = chain[0].publicKey
+  // Identify leaf: not the issuer of any other provided certificate
+  let leaf: X509Certificate | undefined
+  for (const c of combined) {
+    const isParent = combined.some((o: X509Certificate) => o.issuer === c.subject)
+    if (!isParent) {
+      leaf = c
+      break
+    }
+  }
+  // Fallback to first PEM if nothing was identified
+  const key = (leaf ?? combined[0])?.publicKey
+  if (!key) return false
 
   // Strategy A: Verify with DER-encoded ECDSA signature (common case)
   try {
