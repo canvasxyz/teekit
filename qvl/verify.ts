@@ -98,8 +98,12 @@ export function verifyProvisioningCertificationChain(
 }
 
 /**
- * Verify that the cert chain has signed the quoting enclave report,
- * by checking qe_report_signature against the PCK leaf certificate public key.
+ * Verify that the PCK certificate has signed the quoting enclave report,
+ * by checking qe_report_signature against the PCK certificate public key.
+ * 
+ * Note: In some quotes (e.g., from Google Cloud), the PCK certificate in 
+ * qe_auth_data may be truncated, making verification impossible. This is
+ * a known limitation of certain Intel SGX quote formats.
  */
 export function verifyQeReportSignature(quote: string | Buffer): boolean {
   const quoteBytes = Buffer.isBuffer(quote)
@@ -108,31 +112,60 @@ export function verifyQeReportSignature(quote: string | Buffer): boolean {
 
   const { header, signature } = parseTdxQuote(quoteBytes)
   if (header.version !== 4) throw new Error("Unsupported quote version")
-  if (!signature.cert_data) throw new Error("Missing cert_data in quote")
+  
+  // Try to extract PCK certificate from qe_auth_data
+  let pckCert: X509Certificate | null = null
+  
+  // Look for PEM certificate in qe_auth_data
+  const beginPattern = Buffer.from("-----BEGIN CERTIFICATE-----")
+  const beginIdx = signature.qe_auth_data.indexOf(beginPattern)
+  
+  if (beginIdx >= 0) {
+    // Try to find the end marker
+    const endPattern = Buffer.from("-----END CERTIFICATE-----")
+    const endIdx = signature.qe_auth_data.indexOf(endPattern, beginIdx)
+    
+    if (endIdx > beginIdx) {
+      // Extract complete certificate
+      const pemCert = signature.qe_auth_data.subarray(beginIdx, endIdx + endPattern.length).toString("utf8")
+      try {
+        pckCert = new X509Certificate(pemCert)
+      } catch {}
+    } else {
+      // Certificate is truncated - this is a known issue with some quotes
+      // In production, you would need to fetch the PCK certificate from
+      // Intel's PCK Certificate Service or a caching service
+      
+      // For now, we cannot verify the QE report signature without the complete PCK
+      // This is a limitation of the quote format, not a security issue
+      return false
+    }
+  }
+  
+  if (!pckCert) {
+    // No PCK certificate found in qe_auth_data
+    // This might be a different quote format or the PCK is provided externally
+    return false
+  }
 
-  const { chain } = verifyProvisioningCertificationChain(signature.cert_data, {
-    verifyAtTimeMs: 0,
-  })
-  if (chain.length === 0) return false
-
-  const key = chain[0].publicKey
+  const key = pckCert.publicKey
 
   // Strategy A: Verify with DER-encoded ECDSA signature (common case)
   try {
     const derSig = encodeEcdsaSignatureToDer(signature.qe_report_signature)
-    const verifierA = createVerify("sha256")
-    verifierA.update(signature.qe_report)
-    verifierA.end()
-    if (verifierA.verify(key, derSig)) return true
+    const verifier = createVerify("sha256")
+    verifier.update(signature.qe_report)
+    verifier.end()
+    if (verifier.verify(key, derSig)) return true
   } catch {}
 
   // Strategy B: Verify using IEEE-P1363 raw (r||s) signature encoding
   try {
-    const verifierB = createVerify("sha256")
-    verifierB.update(signature.qe_report)
-    verifierB.end()
+    const verifier = createVerify("sha256")
+    verifier.update(signature.qe_report)
+    verifier.end()
     if (
-      verifierB.verify(
+      verifier.verify(
         { key, dsaEncoding: "ieee-p1363" as const },
         signature.qe_report_signature,
       )
