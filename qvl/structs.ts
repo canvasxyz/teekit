@@ -67,18 +67,22 @@ export function parseTdxSignature(sig_data: Buffer) {
   const qe_auth_data = sig_data.slice(offset, offset + fixed.qe_auth_data_len)
   offset += fixed.qe_auth_data_len
 
-  const Tail = new Struct("Tail")
-    .UInt16LE("cert_data_type")
-    .UInt32LE("cert_data_len")
-    .Buffer("cert_data")
-    .compile()
-
-  let tail
+  // Parse tail manually: type (2 bytes LE), len (4 bytes LE), followed by len bytes of cert_data
+  let cert_data_type: number | null = null
+  let cert_data_len: number | null = null
+  let cert_data: Buffer | null = null
+  let cert_data_prefix: Buffer | null = null
   try {
-    const { cert_data_len } = new Tail(
-      sig_data.slice(offset, offset + Tail.baseSize),
-    )
-    tail = new Tail(sig_data.slice(offset, offset + cert_data_len))
+    if (offset + 6 <= sig_data.length) {
+      cert_data_type = sig_data.readUInt16LE(offset)
+      cert_data_len = sig_data.readUInt32LE(offset + 2)
+      const start = offset + 6
+      // Some providers set an invalid length; treat the rest of buffer as cert_data
+      const endRequested = start + (cert_data_len ?? 0)
+      const end = Math.min(sig_data.length, endRequested)
+      cert_data = sig_data.slice(start, sig_data.length)
+      cert_data_prefix = cert_data.slice(0, Math.min(32, cert_data.length))
+    }
   } catch {}
 
   return {
@@ -89,10 +93,10 @@ export function parseTdxSignature(sig_data: Buffer) {
     qe_report_signature: fixed.qe_report_signature,
     qe_auth_data_len: fixed.qe_auth_data_len,
     qe_auth_data: qe_auth_data,
-    cert_data_type: tail ? tail.cert_data_type : null,
-    cert_data_len: tail ? tail.cert_data_len : null,
-    cert_data_prefix: tail ? tail.cert_data.slice(0, 32) : null,
-    cert_data: tail ? tail.cert_data : null,
+    cert_data_type: cert_data_type,
+    cert_data_len: cert_data_len,
+    cert_data_prefix: cert_data_prefix,
+    cert_data: cert_data,
   }
 }
 

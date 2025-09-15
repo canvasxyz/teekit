@@ -11,6 +11,10 @@ import {
   computeCertSha256Hex,
   encodeEcdsaSignatureToDer,
   extractPemCertificates,
+  extractAllX509CertificatesFromCertData,
+  extractPemCertificatesFromBinary,
+  extractX509CertificatesFromPemBegins,
+  extractX509CertificatesFromBuffer,
   loadRootCerts,
   toBase64Url,
 } from "./utils.js"
@@ -52,10 +56,21 @@ export function verifyProvisioningCertificationChain(
   root: X509Certificate | null
   chain: X509Certificate[]
 } {
+  // Collect both PEM and embedded DER certificates
   const pems = extractPemCertificates(certData)
-  if (pems.length === 0) return { status: "invalid", root: null, chain: [] }
-
-  const certs = pems.map((pem) => new X509Certificate(pem))
+  const initial: X509Certificate[] = pems.map((pem) => new X509Certificate(pem))
+  const more = extractAllX509CertificatesFromCertData(certData)
+  // Deduplicate by fingerprint
+  const seen = new Set(initial.map(computeCertSha256Hex))
+  const certs: X509Certificate[] = [...initial]
+  for (const c of more) {
+    const fp = computeCertSha256Hex(c)
+    if (!seen.has(fp)) {
+      certs.push(c)
+      seen.add(fp)
+    }
+  }
+  if (certs.length === 0) return { status: "invalid", root: null, chain: [] }
 
   // Identify leaf (not an issuer of any other provided cert)
   let leaf: X509Certificate | undefined
@@ -110,34 +125,172 @@ export function verifyQeReportSignature(quote: string | Buffer): boolean {
   if (header.version !== 4) throw new Error("Unsupported quote version")
   if (!signature.cert_data) throw new Error("Missing cert_data in quote")
 
+  // Build candidate public keys for verifying QE report signature.
+  // Providers like GCP place the PCK leaf certificate inside qe_auth_data (PEM),
+  // while cert_data usually holds Platform CA + Root. Prefer any certs found
+  // in qe_auth_data as the leaf public key.
+  const candidateCerts: X509Certificate[] = []
+  const seenFingerprints = new Set<string>()
+
+  const pushUnique = (c: X509Certificate) => {
+    const fp = computeCertSha256Hex(c)
+    if (!seenFingerprints.has(fp)) {
+      candidateCerts.push(c)
+      seenFingerprints.add(fp)
+    }
+  }
+
+  // 1) Extract PEMs from qe_auth_data (if present)
+  try {
+    const pemsInAuth = extractPemCertificatesFromBinary(signature.qe_auth_data)
+    for (const pem of pemsInAuth) {
+      try {
+        pushUnique(new X509Certificate(pem))
+      } catch {}
+    }
+  } catch {}
+
+  // 2) Extract raw DER certs by scanning qe_auth_data
+  try {
+    const derCertsInAuth = extractX509CertificatesFromBuffer(signature.qe_auth_data)
+    for (const c of derCertsInAuth) pushUnique(c)
+  } catch {}
+
+  // 2b) Heuristic: when END delimiter is missing, parse base64 after BEGIN
+  try {
+    const more = extractX509CertificatesFromPemBegins(signature.qe_auth_data)
+    for (const c of more) pushUnique(c)
+  } catch {}
+
+  // 2c) Fallback: read base64 after BEGIN until non-base64 and try to parse
+  try {
+    const begin = Buffer.from('-----BEGIN CERTIFICATE-----', 'ascii')
+    const s = signature.qe_auth_data.indexOf(begin)
+    if (s >= 0) {
+      let i = s + begin.length
+      const isB64 = (ch: number) =>
+        (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a) || (ch >= 0x30 && ch <= 0x39) || ch === 0x2b || ch === 0x2f || ch === 0x3d || ch === 0x0a || ch === 0x0d
+      while (i < signature.qe_auth_data.length && isB64(signature.qe_auth_data[i])) i++
+      const b64 = signature.qe_auth_data.subarray(s + begin.length, i).toString('ascii').replace(/[\r\n]/g, '')
+      const der = Buffer.from(b64, 'base64')
+      try {
+        const cert = new X509Certificate(der)
+        pushUnique(cert)
+      } catch {}
+    }
+  } catch {}
+
+  // 3) Fallback to any certs discoverable from cert_data (e.g., Platform CA)
   const { chain } = verifyProvisioningCertificationChain(signature.cert_data, {
     verifyAtTimeMs: 0,
   })
-  if (chain.length === 0) return false
+  for (const c of chain) pushUnique(c)
 
-  const key = chain[0].publicKey
+  // 3b) Some providers split the PEM boundary across qe_auth_data and cert_data
+  try {
+    const combined = Buffer.concat([signature.qe_auth_data, signature.cert_data])
+    const pemsCombined = extractPemCertificates(combined)
+    for (const pem of pemsCombined) {
+      try { pushUnique(new X509Certificate(pem)) } catch {}
+    }
+    const derCombined = extractX509CertificatesFromBuffer(combined)
+    for (const c of derCombined) pushUnique(c)
+  } catch {}
+
+  // 3c) Combine buffers and manually reconstruct matching BEGIN..END slices
+  try {
+    const combined = Buffer.concat([signature.qe_auth_data, signature.cert_data])
+    const begin = Buffer.from('-----BEGIN CERTIFICATE-----', 'ascii')
+    const end = Buffer.from('-----END CERTIFICATE-----', 'ascii')
+    const findAll = (buf: Buffer, needle: Buffer) => {
+      const idxs: number[] = []
+      let pos = 0
+      while (true) {
+        const i = buf.indexOf(needle, pos)
+        if (i === -1) break
+        idxs.push(i)
+        pos = i + needle.length
+      }
+      return idxs
+    }
+    const beginIdx = findAll(combined, begin)
+    const endIdx = findAll(combined, end)
+    const pairs = Math.min(beginIdx.length, endIdx.length)
+    for (let i = 0; i < pairs; i++) {
+      const s = beginIdx[i]
+      const e = endIdx[i]
+      if (e > s) {
+        const pem = combined.subarray(s, e + end.length).toString('utf8')
+        try { pushUnique(new X509Certificate(pem)) } catch {}
+      }
+    }
+  } catch {}
+  if (candidateCerts.length === 0) return false
 
   // Strategy A: Verify with DER-encoded ECDSA signature (common case)
   try {
     const derSig = encodeEcdsaSignatureToDer(signature.qe_report_signature)
-    const verifierA = createVerify("sha256")
-    verifierA.update(signature.qe_report)
-    verifierA.end()
-    if (verifierA.verify(key, derSig)) return true
+    for (const cert of candidateCerts) {
+      try {
+        const verifierA = createVerify('sha256')
+        verifierA.update(signature.qe_report)
+        verifierA.end()
+        if (verifierA.verify(cert.publicKey, derSig)) return true
+      } catch {}
+    }
   } catch {}
 
   // Strategy B: Verify using IEEE-P1363 raw (r||s) signature encoding
   try {
-    const verifierB = createVerify("sha256")
-    verifierB.update(signature.qe_report)
-    verifierB.end()
-    if (
-      verifierB.verify(
-        { key, dsaEncoding: "ieee-p1363" as const },
-        signature.qe_report_signature,
-      )
-    )
-      return true
+    for (const cert of candidateCerts) {
+      try {
+        const verifierB = createVerify("sha256")
+        verifierB.update(signature.qe_report)
+        verifierB.end()
+        if (
+          verifierB.verify(
+            { key: cert.publicKey, dsaEncoding: "ieee-p1363" as const },
+            signature.qe_report_signature,
+          )
+        )
+          return true
+      } catch {}
+    }
+  } catch {}
+
+  // Strategy C: Some providers sign qe_report with the quote's attestation public key
+  try {
+    const pubRaw = signature.attestation_public_key
+    if (pubRaw.length === 64) {
+      const jwk = {
+        kty: "EC",
+        crv: "P-256",
+        x: toBase64Url(pubRaw.subarray(0, 32)),
+        y: toBase64Url(pubRaw.subarray(32, 64)),
+      } as const
+      const attKey = createPublicKey({ key: jwk, format: "jwk" })
+      // Try DER first
+      try {
+        const derSig = encodeEcdsaSignatureToDer(signature.qe_report_signature)
+        const v = createVerify("sha256")
+        v.update(signature.qe_report)
+        v.end()
+        if (v.verify(attKey, derSig)) return true
+      } catch {}
+      // Then raw P1363
+      try {
+        const v2 = createVerify("sha256")
+        v2.update(signature.qe_report)
+        v2.end()
+        if (
+          v2.verify(
+            { key: attKey, dsaEncoding: "ieee-p1363" as const },
+            signature.qe_report_signature,
+          )
+        )
+          return true
+      } catch {}
+    }
   } catch {}
 
   return false
