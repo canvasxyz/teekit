@@ -7,6 +7,7 @@ import {
 } from "node:crypto"
 
 import { getTdxV4SignedRegion, parseTdxQuote } from "./structs.js"
+import { parseQeAuthData } from "./qe_auth_data.js"
 import {
   computeCertSha256Hex,
   encodeEcdsaSignatureToDer,
@@ -108,9 +109,23 @@ export function verifyQeReportSignature(quote: string | Buffer): boolean {
 
   const { header, signature } = parseTdxQuote(quoteBytes)
   if (header.version !== 4) throw new Error("Unsupported quote version")
-  if (!signature.cert_data) throw new Error("Missing cert_data in quote")
+  
+  // Try to get certificates from cert_data first, then from qe_auth_data
+  let certData: Buffer | null = null
+  
+  if (signature.cert_data) {
+    certData = signature.cert_data
+  } else if (signature.qe_auth_data && signature.qe_auth_data.length > 44) {
+    // Try to extract certificates from qe_auth_data
+    const parsed = parseQeAuthData(signature.qe_auth_data)
+    if (parsed.certificateData && parsed.certificates.length > 0) {
+      certData = parsed.certificateData
+    }
+  }
+  
+  if (!certData) throw new Error("No certificates found in quote")
 
-  const { chain } = verifyProvisioningCertificationChain(signature.cert_data, {
+  const { chain } = verifyProvisioningCertificationChain(certData, {
     verifyAtTimeMs: 0,
   })
   if (chain.length === 0) return false
