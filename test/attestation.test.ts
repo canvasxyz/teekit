@@ -11,10 +11,10 @@ import {
   verifyProvisioningCertificationChain,
   isPinnedRootCertificate,
   verifyQeReportSignature,
+  verifyQeReportBinding,
   formatTDXHeader,
   formatTDXQuoteBodyV4,
   parseVTPMQuotingEnclaveAuthData,
-  // verifyQeReportBinding,
 } from "../qvl"
 
 test.serial("Parse a V4 TDX quote from Tappd, hex format", async (t) => {
@@ -207,8 +207,12 @@ test.serial("Parse a V4 TDX quote from Azure - vtpm", async (t) => {
   t.is(status, "valid")
   t.true(root && isPinnedRootCertificate(root, "test/certs"))
 
-  // t.true(verifyQeReportBinding(quote)))
-  t.true(verifyQeReportSignature(quote, extractPemCertificates(cert_data)))
+  t.true(verifyQeReportBinding(quote))
+  t.true(
+    verifyQeReportSignature(quote, extractPemCertificates(cert_data), {
+      verifyAtTimeMs: Date.parse("2025-09-01T00:01:00Z"),
+    }),
+  )
 
   console.log(chain[0].subject)
   console.log(chain[1].subject)
@@ -262,6 +266,54 @@ test.skip("Verify a V4 TDX quote from Google Cloud, including the full cert chai
   // )
   // t.is(status3, "expired")
 })
+
+test.serial(
+  "Parse a V4 TDX quote from Intel verifier examples (full chain and QE binding)",
+  async (t) => {
+    const baseDir = "test/sample/tdx"
+    const quotePath = `${baseDir}/quote.dat`
+    if (!fs.existsSync(quotePath)) {
+      t.log("Intel verifier sample not found, skipping")
+      t.pass()
+      return
+    }
+
+    const text = fs.readFileSync(quotePath, "utf-8").trim()
+    let quote: Buffer | string = text
+    try {
+      parseTdxQuoteBase64(text)
+      quote = text
+    } catch {
+      quote = fs.readFileSync(quotePath)
+    }
+
+    const { header, signature } = parseTdxQuote(
+      Buffer.isBuffer(quote) ? quote : Buffer.from(quote, "base64"),
+    )
+    t.is(header.version, 4)
+
+    const pems = signature.cert_data
+      ? extractPemCertificates(signature.cert_data)
+      : []
+    if (pems.length >= 2) {
+      const { status, root } = verifyProvisioningCertificationChain(pems, {
+        verifyAtTimeMs: Date.parse("2025-09-01T00:01:00Z"),
+      })
+      t.true(status === "valid" || status === "expired")
+      if (root) t.true(isPinnedRootCertificate(root, "test/certs"))
+      t.true(
+        verifyQeReportSignature(quote, pems, {
+          verifyAtTimeMs: Date.parse("2025-09-01T00:01:00Z"),
+        }),
+      )
+    } else {
+      t.log("No cert_data in quote; skipping chain validation for this sample")
+    }
+
+    t.true(verifyQeReportBinding(quote))
+    t.true(verifyTdxV4Signature(quote))
+  },
+)
 
 // test.skip("Parse a V5 TDX 1.0 attestation", async (t) => {
 //   // TODO

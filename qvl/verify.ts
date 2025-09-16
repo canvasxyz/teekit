@@ -1,4 +1,4 @@
-import { createPublicKey, createVerify, X509Certificate } from "node:crypto"
+import { createHash, createPublicKey, createVerify, X509Certificate } from "node:crypto"
 
 import { getTdxV4SignedRegion, parseTdxQuote } from "./structs.js"
 import {
@@ -96,6 +96,7 @@ export function verifyProvisioningCertificationChain(
 export function verifyQeReportSignature(
   quote: string | Buffer, // TODO: take just what we need to verify
   certs: string[],
+  opts?: { verifyAtTimeMs?: number },
 ): boolean {
   const quoteBytes = Buffer.isBuffer(quote)
     ? quote
@@ -104,9 +105,10 @@ export function verifyQeReportSignature(
   const { header, signature } = parseTdxQuote(quoteBytes)
   if (header.version !== 4) throw new Error("Unsupported quote version")
 
-  const { chain } = verifyProvisioningCertificationChain(certs, {
-    verifyAtTimeMs: 0,
+  const { status, chain } = verifyProvisioningCertificationChain(certs, {
+    verifyAtTimeMs: opts?.verifyAtTimeMs ?? 0,
   })
+  if (status === "invalid") return false
   if (chain.length === 0) return false
 
   const key = chain[0].publicKey
@@ -187,6 +189,54 @@ export function verifyQeReportSignature(
 //   const second = reportData.subarray(32, 64)
 //   return candidates.some((c) => c.equals(first) || c.equals(second))
 // }}
+
+/**
+ * Verify QE binding: qe_report.report_data[0..32) (or [32..64)) matches
+ * SHA256 over attestation public key with/without qe_auth_data.
+ */
+export function verifyQeReportBinding(quoteInput: string | Buffer): boolean {
+  const quoteBytes = Buffer.isBuffer(quoteInput)
+    ? quoteInput
+    : Buffer.from(quoteInput, "base64")
+
+  const { header, signature } = parseTdxQuote(quoteBytes)
+  if (header.version !== 4) throw new Error("Unsupported quote version")
+  if (!signature.qe_report_present) throw new Error("Missing QE report")
+
+  const pubRaw = signature.attestation_public_key
+  if (pubRaw.length !== 64) return false
+  const pubUncompressed = Buffer.concat([Buffer.from([0x04]), pubRaw])
+
+  const jwk = {
+    kty: "EC",
+    crv: "P-256",
+    x: pubRaw.subarray(0, 32).toString("base64url"),
+    y: pubRaw.subarray(32, 64).toString("base64url"),
+  } as const
+  let spki: Buffer | undefined
+  try {
+    spki = createPublicKey({ key: jwk, format: "jwk" }).export({
+      type: "spki",
+      format: "der",
+    }) as Buffer
+  } catch {}
+
+  const sha = (...parts: Buffer[]) =>
+    createHash("sha256").update(Buffer.concat(parts)).digest()
+
+  const candidates: Buffer[] = []
+  candidates.push(sha(pubRaw))
+  candidates.push(sha(pubUncompressed))
+  if (spki) candidates.push(sha(spki))
+  candidates.push(sha(pubRaw, signature.qe_auth_data))
+  candidates.push(sha(pubUncompressed, signature.qe_auth_data))
+  if (spki) candidates.push(sha(spki, signature.qe_auth_data))
+
+  const reportData = signature.qe_report.subarray(320, 384)
+  const first = reportData.subarray(0, 32)
+  const second = reportData.subarray(32, 64)
+  return candidates.some((c) => c.equals(first) || c.equals(second))
+}
 
 /**
  * Verify the ECDSA-P256 signature inside a TDX v4 quote against the embedded
