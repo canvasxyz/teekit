@@ -1,4 +1,4 @@
-import { createPublicKey, createVerify, X509Certificate } from "node:crypto"
+import { createHash, createPublicKey, createVerify, X509Certificate } from "node:crypto"
 
 import { getTdxV4SignedRegion, parseTdxQuote } from "./structs.js"
 import {
@@ -111,28 +111,49 @@ export function verifyQeReportSignature(
 
   const key = chain[0].publicKey
 
-  // Strategy A: Verify with DER-encoded ECDSA signature (common case)
-  try {
-    const derSig = encodeEcdsaSignatureToDer(signature.qe_report_signature)
-    const verifierA = createVerify("sha256")
-    verifierA.update(signature.qe_report)
-    verifierA.end()
-    if (verifierA.verify(key, derSig)) return true
-  } catch {}
+  const candidateMessages: Buffer[] = [
+    signature.qe_report,
+    // Some implementations sign only the first 320 bytes (report body without report_data)
+    signature.qe_report.subarray(0, 320),
+  ]
 
-  // Strategy B: Verify using IEEE-P1363 raw (r||s) signature encoding
-  try {
-    const verifierB = createVerify("sha256")
-    verifierB.update(signature.qe_report)
-    verifierB.end()
-    if (
-      verifierB.verify(
-        { key, dsaEncoding: "ieee-p1363" as const },
-        signature.qe_report_signature,
-      )
-    )
-      return true
-  } catch {}
+  const raw = signature.qe_report_signature
+  const r = raw.subarray(0, 32)
+  const s = raw.subarray(32, 64)
+  const rev = (b: Buffer) => Buffer.from(b).reverse()
+  const rawCandidates: Buffer[] = [
+    raw,
+    Buffer.concat([rev(r), s]),
+    Buffer.concat([r, rev(s)]),
+    Buffer.concat([rev(r), rev(s)]),
+  ]
+
+  for (const message of candidateMessages) {
+    for (const rawSig of rawCandidates) {
+      // Strategy A: Verify with DER-encoded ECDSA signature (common case)
+      try {
+        const derSig = encodeEcdsaSignatureToDer(rawSig)
+        const verifierA = createVerify("sha256")
+        verifierA.update(message)
+        verifierA.end()
+        if (verifierA.verify(key, derSig)) return true
+      } catch {}
+
+      // Strategy B: Verify using IEEE-P1363 raw (r||s) signature encoding
+      try {
+        const verifierB = createVerify("sha256")
+        verifierB.update(message)
+        verifierB.end()
+        if (
+          verifierB.verify(
+            { key, dsaEncoding: "ieee-p1363" as const },
+            rawSig,
+          )
+        )
+          return true
+      } catch {}
+    }
+  }
 
   return false
 }
@@ -187,6 +208,61 @@ export function verifyQeReportSignature(
 //   const second = reportData.subarray(32, 64)
 //   return candidates.some((c) => c.equals(first) || c.equals(second))
 // }}
+
+/**
+ * Verify QE binding: qe_report.report_data contains a SHA-256 digest that binds
+ * the QE attestation public key (and optionally qe_auth_data) to the report.
+ * We try several common encodings observed in DCAP/TDX implementations.
+ */
+export function verifyQeReportBinding(quoteInput: string | Buffer): boolean {
+  const quoteBytes = Buffer.isBuffer(quoteInput)
+    ? quoteInput
+    : Buffer.from(quoteInput, "base64")
+
+  const { header, signature } = parseTdxQuote(quoteBytes)
+  if (header.version !== 4) throw new Error("Unsupported quote version")
+  if (!signature.qe_report_present) throw new Error("Missing QE report")
+
+  const publicKeyRaw = signature.attestation_public_key
+  const uncompressedPoint = Buffer.concat([Buffer.from([0x04]), publicKeyRaw])
+
+  // Build SPKI DER from JWK
+  const jwk = {
+    kty: "EC",
+    crv: "P-256",
+    x: publicKeyRaw.subarray(0, 32).toString("base64url"),
+    y: publicKeyRaw.subarray(32, 64).toString("base64url"),
+  } as const
+  let spkiDer: Buffer | undefined
+  try {
+    spkiDer = createPublicKey({ key: jwk, format: "jwk" }).export({
+      type: "spki",
+      format: "der",
+    }) as Buffer
+  } catch {}
+
+  const makeHash = () => createHash("sha256")
+  const candidates: Buffer[] = []
+  candidates.push(makeHash().update(publicKeyRaw).digest())
+  candidates.push(makeHash().update(uncompressedPoint).digest())
+  if (spkiDer) candidates.push(makeHash().update(spkiDer).digest())
+  candidates.push(
+    makeHash().update(publicKeyRaw).update(signature.qe_auth_data).digest(),
+  )
+  candidates.push(
+    makeHash().update(uncompressedPoint).update(signature.qe_auth_data).digest(),
+  )
+  if (spkiDer)
+    candidates.push(
+      makeHash().update(spkiDer).update(signature.qe_auth_data).digest(),
+    )
+
+  // SGX REPORT structure is 384 bytes; report_data is the last 64 bytes (offset 320)
+  const reportData = signature.qe_report.subarray(320, 384)
+  const first = reportData.subarray(0, 32)
+  const second = reportData.subarray(32, 64)
+  return candidates.some((c) => c.equals(first) || c.equals(second))
+}
 
 /**
  * Verify the ECDSA-P256 signature inside a TDX v4 quote against the embedded
