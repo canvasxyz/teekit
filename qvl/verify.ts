@@ -5,7 +5,11 @@ import {
   X509Certificate,
 } from "node:crypto"
 
-import { getTdxV4SignedRegion, parseTdxQuote } from "./structs.js"
+import {
+  getTdxV4SignedRegion,
+  parseTdxQuote,
+  parseVTPMQuotingEnclaveAuthData,
+} from "./structs.js"
 import {
   computeCertSha256Hex,
   encodeEcdsaSignatureToDer,
@@ -103,9 +107,20 @@ export function verifyQeReportSignature(
   if (header.version !== 4) throw new Error("Unsupported quote version")
 
   // Prefer explicitly provided certs; otherwise try to extract from cert_data in the quote
+  // and finally from vTPM QE auth data if present.
   let certs: string[] = Array.isArray(certsInput) ? certsInput : []
   if (certs.length === 0 && signature.cert_data) {
     certs = extractPemCertificates(signature.cert_data)
+  }
+  if (certs.length === 0 && signature.qe_auth_data?.length) {
+    try {
+      const { cert_data, cert_data_len } = parseVTPMQuotingEnclaveAuthData(
+        signature.qe_auth_data,
+      )
+      if (cert_data_len && cert_data && cert_data.length >= cert_data_len) {
+        certs = extractPemCertificates(cert_data)
+      }
+    } catch {}
   }
   if (certs.length === 0) return false
 
@@ -132,64 +147,111 @@ export function verifyQeReportSignature(
       .filter(Boolean) as Array<ReturnType<X509Certificate["publicKey"]>>),
   ]
 
-  // Try common hash algorithms with both DER and IEEE-P1363 encodings
-  const hashAlgorithms: Array<"sha256" | "sha384" | "sha512"> = [
-    "sha256",
-    "sha384",
-    "sha512",
-  ]
+  // Per Intel DCAP, QE report signature is ECDSA over SHA-256(QE report body)
+  const algo: "sha256" = "sha256"
+  const message = signature.qe_report
+  const prehashed = createHash("sha256").update(message).digest()
 
-  for (const algo of hashAlgorithms) {
-    for (const key of candidateKeys) {
-      // Strategy A: DER signature
-      try {
-        const derSig = encodeEcdsaSignatureToDer(signature.qe_report_signature)
-        const verifierA = createVerify(algo)
-        verifierA.update(signature.qe_report)
-        verifierA.end()
-        if (verifierA.verify(key, derSig)) return true
-      } catch {}
+  for (const key of candidateKeys) {
+    // Strategy A: DER signature with SHA-256(message)
+    try {
+      const derSig = encodeEcdsaSignatureToDer(signature.qe_report_signature)
+      const verifierA = createVerify(algo)
+      verifierA.update(message)
+      verifierA.end()
+      if (verifierA.verify(key, derSig)) return true
+    } catch {}
 
-      // Strategy B: IEEE-P1363 raw (r||s)
-      try {
-        const verifierB = createVerify(algo)
-        verifierB.update(signature.qe_report)
-        verifierB.end()
-        if (
-          verifierB.verify(
-            { key, dsaEncoding: "ieee-p1363" as const },
+    // Strategy B: IEEE-P1363 raw (r||s) with SHA-256(message)
+    try {
+      const verifierB = createVerify(algo)
+      verifierB.update(message)
+      verifierB.end()
+      if (
+        verifierB.verify(
+          { key, dsaEncoding: "ieee-p1363" as const },
+          signature.qe_report_signature,
+        )
+      )
+        return true
+    } catch {}
+
+    // Strategy C: Reverse halves (Intel structures often store r and s little-endian)
+    try {
+      const raw = signature.qe_report_signature
+      if (raw.length === 64) {
+        const rLE = Buffer.from(raw.subarray(0, 32))
+        const sLE = Buffer.from(raw.subarray(32, 64))
+        rLE.reverse()
+        sLE.reverse()
+        const reversed = Buffer.concat([rLE, sLE])
+
+        // Verify IEEE-P1363 with reversed halves
+        const verifierC = createVerify(algo)
+        verifierC.update(message)
+        verifierC.end()
+        if (verifierC.verify({ key, dsaEncoding: "ieee-p1363" }, reversed))
+          return true
+
+        // Verify DER with reversed halves
+        const derReversed = encodeEcdsaSignatureToDer(reversed)
+        const verifierD = createVerify(algo)
+        verifierD.update(message)
+        verifierD.end()
+        if (verifierD.verify(key, derReversed)) return true
+      }
+    } catch {}
+
+    // Strategy D: Pre-hashed verification (some ecosystems sign SHA-256(report) directly)
+    try {
+      const derSig = encodeEcdsaSignatureToDer(signature.qe_report_signature)
+      // @ts-ignore - Node supports passing null to indicate pre-hashed input in some cases
+      if ((createVerify as any)(null)) {
+        try {
+          const ok = (require("node:crypto").verify as any)(
+            null,
+            prehashed,
+            key,
+            derSig,
+          )
+          if (ok) return true
+        } catch {}
+        try {
+          const ok = (require("node:crypto").verify as any)(
+            null,
+            prehashed,
+            { key, dsaEncoding: "ieee-p1363" },
             signature.qe_report_signature,
           )
-        )
-          return true
-      } catch {}
-
-      // Strategy C: Handle potential little-endian r||s encodings by reversing each half
-      try {
-        const raw = signature.qe_report_signature
-        if (raw.length === 64) {
-          const rLE = Buffer.from(raw.subarray(0, 32))
-          const sLE = Buffer.from(raw.subarray(32, 64))
-          rLE.reverse()
-          sLE.reverse()
-          const reversed = Buffer.concat([rLE, sLE])
-
-          // Verify IEEE-P1363 with reversed halves
-          const verifierC = createVerify(algo)
-          verifierC.update(signature.qe_report)
-          verifierC.end()
-          if (verifierC.verify({ key, dsaEncoding: "ieee-p1363" }, reversed))
-            return true
-
-          // Verify DER with reversed halves
-          const derReversed = encodeEcdsaSignatureToDer(reversed)
-          const verifierD = createVerify(algo)
-          verifierD.update(signature.qe_report)
-          verifierD.end()
-          if (verifierD.verify(key, derReversed)) return true
-        }
-      } catch {}
-    }
+          if (ok) return true
+        } catch {}
+        try {
+          const raw = signature.qe_report_signature
+          if (raw.length === 64) {
+            const rLE = Buffer.from(raw.subarray(0, 32))
+            const sLE = Buffer.from(raw.subarray(32, 64))
+            rLE.reverse()
+            sLE.reverse()
+            const reversed = Buffer.concat([rLE, sLE])
+            const derReversed = encodeEcdsaSignatureToDer(reversed)
+            const ok1 = (require("node:crypto").verify as any)(
+              null,
+              prehashed,
+              key,
+              derReversed,
+            )
+            if (ok1) return true
+            const ok2 = (require("node:crypto").verify as any)(
+              null,
+              prehashed,
+              { key, dsaEncoding: "ieee-p1363" },
+              reversed,
+            )
+            if (ok2) return true
+          }
+        } catch {}
+      }
+    } catch {}
   }
 
   return false
