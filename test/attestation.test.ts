@@ -14,7 +14,7 @@ import {
   formatTDXHeader,
   formatTDXQuoteBodyV4,
   parseVTPMQuotingEnclaveAuthData,
-  // verifyQeReportBinding,
+  verifyQeReportBinding,
 } from "../qvl"
 import { X509Certificate } from "node:crypto"
 
@@ -327,7 +327,30 @@ test.serial("Parse a V4 TDX quote from Intel verifier examples", async (t) => {
       console.log(`  TCB Levels Count: ${tcbInfo.tcbInfo.tcbLevels.length}`)
     }
   }
+
+  // Validate full chain: pinned root -> PCK -> QE report signature -> QE binding
+  const allPckCerts = [
+    ...pckCerts,
+    ...pckSignChainCerts,
+    ...trustedRootCerts,
+  ]
+  t.true(allPckCerts.length >= 2)
+
+  const { status, root, chain } = verifyProvisioningCertificationChain(
+    allPckCerts,
+    { verifyAtTimeMs: Date.now() },
+  )
+  t.is(status, "valid")
+  t.truthy(root)
+  t.true(root != null && isPinnedRootCertificate(root, "test/certs"))
+
+  // Verify the QE report was signed by the PCK leaf
+  t.true(verifyQeReportSignature(quote, allPckCerts))
+
+  // Verify QE binding connects attestation public key with qe_auth_data
+  t.true(verifyQeReportBinding(quote))
 })
+
 
 test.skip("Verify a V4 TDX quote from Google Cloud, including the full cert chain", async (t) => {
   const data = JSON.parse(
