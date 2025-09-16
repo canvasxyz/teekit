@@ -1,91 +1,59 @@
 # TDX Verification
 
-This assumes you have a Google Cloud account.
+This assumes you have a Microsoft Azure account.
 
-## Install gcloud SDK
-
-Instructions: https://cloud.google.com/sdk/docs/install-sdk
-
-Check Python version (see instructions):
+## Install Azure CLI
 
 ```
-% python3 -V
-Python 3.13.1
+brew update && brew install azure-cli
 ```
 
-Download and install `gcloud`:
+## Login to Azure CLI
 
 ```
-wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-arm.tar.gz
-tar -vxzf google-cloud-cli-darwin-arm.tar.gz
-./google-cloud-sdk/install.sh  # Select yes when prompted to update $PATH
-source ~/.zshrc                # Or .bashrc, etc.
+az login
 ```
 
-Sign in interactively with your GCP account, and select or create a project.
-
-(If you get signed out, run `gcloud auth login`. By default, sessions
-will expire after 24 hours.)
+## Create a resource group
 
 ```
-gcloud init
+az group create --name tdx-group --location eastus2
 ```
 
-Configure the default zone to `us-central1-a`.
+You should receive a success response in JSON.
 
-If you have to select a new name or change any other configuration
-settings, run the `gcloud init` command again.
-
----
-
-## Creating a TDX VM
-
-We are going to create a VM with these configuration options:
-
-- Machine type: c3-standard-4
-- Zone: us-central1-a
-- Confidential compute type: TDX
-- Maintenance policy: TERMINATE
-- Image family: ubuntu-2204-lts
-- Image project: ubuntu-os-cloud
+## Create a VM
 
 ```
-gcloud compute instances create gcp-tdx-vm \
-      --machine-type=c3-standard-4 \
-      --zone=us-central1-a \
-      --confidential-compute-type=TDX \
-      --maintenance-policy=TERMINATE \
-      --image-family=ubuntu-2204-lts \
-      --image-project=ubuntu-os-cloud
+az vm create \
+    --name tdx-vm \
+    --resource-group tdx-group \
+    --location eastus2 \
+    --security-type ConfidentialVM \
+    --os-disk-security-encryption-type DiskWithVMGuestState \
+    --image Canonical:0001-com-ubuntu-confidential-vm-jammy:22_04-lts-cvm:22.04.202507300 \
+    --size Standard_DC2es_v5 \
+    --generate-ssh-keys
 ```
 
-This should give you output like:
+This uses a default confidential VM image provided by Canonical.
+To look for other images, you can use `az vm image list` (it's slow).
 
 ```
-Created [https://www.googleapis.com/compute/v1/projects/tdx-1-468104/zones/us-central1-a/instances/gcp-tdx-vm].
-NAME        ZONE           MACHINE_TYPE   PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP    STATUS
-gcp-tdx-vm  us-central1-a  c3-standard-4               10.128.0.2   35.222.15.208  RUNNING
+az vm image list --offer com-ubuntu-confidential-vm  --all
 ```
 
-If you want to remove the VM when you're done (this takes about 30-60 seconds):
-
-```
-gcloud compute instances delete gcp-tdx-vm
-```
+If you have any issues, *stop and delete* the VM from the Azure Portal,
+and as you are doing so, select any connected resources like public IPs
+to be deleted as well. Deleting from the command line will leave orphaned network interfaces, public IPs, etc.: `az vm delete --name tdx-vm --resource-group tdx-group -y`
 
 ## Connecting to the VM
 
 To connect to the VM:
 
 ```
-gcloud compute ssh gcp-tdx-vm
+ssh azureuser@[publicIpAddress] -i ~/.ssh/azureuser.pem
 ```
-
-This will provision an SSH key, add it to the project metadata, and
-restart the machine allowing SSH.
-
-This does not affect the TDX measurement, since the SSH key is
-provided by a Google metadata service over private networking.
 
 Check that TDX is working:
 
@@ -96,7 +64,6 @@ sudo dmesg | grep -i tdx
 This should print `Memory Encryption Features active: Intel TDX`:
 
 ```
-$ sudo dmesg | grep -i tdx
 [    0.000000] tdx: Guest detected
 [    1.404759] process: using TDX aware idle routine
 [    1.404759] Memory Encryption Features active: Intel TDX
@@ -105,29 +72,53 @@ $ sudo dmesg | grep -i tdx
 ## Installing the Attestation Client
 
 ```
-sudo apt install golang-go
+sudo add-apt-repository ppa:longsleep/golang-backports
+sudo apt update
+sudo apt install -y golang-go
+touch config.json
+cat <<EOF> config.json
+{
+   "trustauthority_api_url": "https://api.trustauthority.intel.com",
+   "trustauthority_api_key": "djE6OWU0YTAyOTktZTcxMC00NDZjLTg3ZjAtMzU4Njc5YTU1YmNkOnN5UzEyTGRwTlkxU3N0d2c3Z0JmOTkwSnJJdElpSktCMkZ6alBnRHI="
+}
+EOF
+curl -sL https://raw.githubusercontent.com/intel/trustauthority-client-for-go/main/release/install-tdx-cli-azure.sh | sudo bash -
+sudo trustauthority-cli quote --aztdx
+# sudo trustauthority-cli token -c config.json
+```
+
+
+```
+sudo apt update
+sudo apt install -y golang-go
 ```
 
 Check that Go is installed:
 
 ```
-$ go version
+go version
+```
+
+```
 go version go1.18.1 linux/amd64
 ```
 
 Install the attestation client:
 
 ```
-curl -sL https://raw.githubusercontent.com/intel/trustauthority-client-for-go/main/release/install-tdx-cli.sh | sudo bash -
+curl -sL https://raw.githubusercontent.com/intel/trustauthority-client-for-go/main/release/install-tdx-cli-azure.sh | sudo bash -
 ```
 
 Check that the attestation client is installed:
 
 ```
-$ trustauthority-cli version
-Intel® Trust Authority CLI
-Version: v1.10.0-eb394ed
-Build Date: 2025-06-23
+trustauthority-cli version
+```
+
+```
+Intel® Trust Authority CLI for TDX
+Version: v1.6.1-3be04c6
+Build Date: 2024-10-17
 ```
 
 Now we must configure the attestation client.
@@ -152,32 +143,5 @@ EOF
 
 ## Obtaining an Attestation
 
-```
-$ sudo trustauthority-cli evidence --tdx -c config.json
-[DEBUG] GET https://api.trustauthority.intel.com/appraisal/v2/nonce
-{
-  "tdx": {
-     "runtime_data": null,
-     "quote": "BA...",
-     "event_log": "W3...",
-     "verifier_nonce": {
-        "val": "cV...Q==",
-        "iat": "M...EM=",
-        "signature": "vc...L"
-        }
-     }
-}
-```
-
-```
-$ sudo trustauthority-cli token -c config.json
-Trace Id: PkSuTGpKoAMEIPQ=
-Request Id: 2d91b0a5-f26d-4348-83a6-c8a4cead1ca7
-eyJhb...
-```
-
-## Verifying an Attestation
-
-```
-sudo trustauthority-cli evidence --tdx -c config.json > attestation.json
-```
+TODO: instructions for using the client based on
+https://docs.rs/az-tdx-vtpm/latest/az_tdx_vtpm/index.html
