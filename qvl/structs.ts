@@ -75,11 +75,20 @@ export function parseTdxSignature(sig_data: Buffer) {
 
   let tail
   try {
-    const { cert_data_len } = new Tail(
-      sig_data.slice(offset, offset + Tail.baseSize),
-    )
-    tail = new Tail(sig_data.slice(offset, offset + cert_data_len))
+    const headerView = new Tail(sig_data.slice(offset, offset + Tail.baseSize))
+    const certDataTotalLen = (Tail.baseSize as number) + headerView.cert_data_len
+    tail = new Tail(sig_data.slice(offset, offset + certDataTotalLen))
   } catch {}
+
+  // Fallback: some providers (e.g., Azure vTPM) embed PEMs in qe_auth_data
+  // If Tail is absent but qe_auth_data contains PEM, surface it via cert_data
+  let fallbackCertData: Buffer | null = null
+  if (!tail && fixed.qe_auth_data_len > 0) {
+    const txt = qe_auth_data.toString("utf8")
+    if (txt.includes("-----BEGIN CERTIFICATE-----") && txt.includes("-----END CERTIFICATE-----")) {
+      fallbackCertData = qe_auth_data
+    }
+  }
 
   return {
     ecdsa_signature: fixed.signature,
@@ -90,9 +99,13 @@ export function parseTdxSignature(sig_data: Buffer) {
     qe_auth_data_len: fixed.qe_auth_data_len,
     qe_auth_data: qe_auth_data,
     cert_data_type: tail ? tail.cert_data_type : null,
-    cert_data_len: tail ? tail.cert_data_len : null,
-    cert_data_prefix: tail ? tail.cert_data.slice(0, 32) : null,
-    cert_data: tail ? tail.cert_data : null,
+    cert_data_len: tail ? tail.cert_data_len : fallbackCertData ? fixed.qe_auth_data_len : null,
+    cert_data_prefix: tail
+      ? tail.cert_data.slice(0, 32)
+      : fallbackCertData
+        ? fallbackCertData.slice(0, 32)
+        : null,
+    cert_data: tail ? tail.cert_data : fallbackCertData,
   }
 }
 

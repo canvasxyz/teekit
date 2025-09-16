@@ -34,7 +34,6 @@ test.serial("Parse a V4 TDX quote from Tappd, hex format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.true(verifyTdxV4Signature(quote))
-  t.is(signature.cert_data, null) // Quote is missing cert data
 })
 
 test.serial("Parse a V4 TDX quote from Edgeless, bin format", async (t) => {
@@ -54,7 +53,19 @@ test.serial("Parse a V4 TDX quote from Edgeless, bin format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.true(verifyTdxV4Signature(quote))
-  t.is(signature.cert_data, null) // Quote is missing cert data
+})
+
+test.serial("Parse a V4 TDX quote from Azure vTPM, bin format, extract certs", async (t) => {
+  const quote = fs.readFileSync("test/sample/tdx-v4-azure-vtpm.bin")
+
+  const { header, body, signature } = parseTdxQuote(quote)
+
+  t.is(header.version, 4)
+  t.is(header.tee_type, 129)
+  t.true(verifyTdxV4Signature(quote))
+  t.truthy(signature.cert_data)
+  const pems = extractPemCertificates(signature.cert_data!)
+  t.is(pems.length, 3)
 })
 
 test.serial("Parse a V4 TDX quote from Phala, bin format", async (t) => {
@@ -74,7 +85,6 @@ test.serial("Parse a V4 TDX quote from Phala, bin format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.true(verifyTdxV4Signature(quote))
-  t.is(signature.cert_data, null) // Quote is missing cert data
 })
 
 test.serial("Parse a V4 TDX quote from Phala, hex format", async (t) => {
@@ -95,7 +105,6 @@ test.serial("Parse a V4 TDX quote from Phala, hex format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.true(verifyTdxV4Signature(quote))
-  t.is(signature.cert_data, null) // Quote is missing cert data
 })
 
 test.serial("Parse a V4 TDX quote from MoeMahhouk", async (t) => {
@@ -118,7 +127,6 @@ test.serial("Parse a V4 TDX quote from MoeMahhouk", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.true(verifyTdxV4Signature(quote))
-  t.is(signature.cert_data, null) // Quote is missing cert data
 
   t.deepEqual(
     reverseHexBytes(hex(body.mr_seam)),
