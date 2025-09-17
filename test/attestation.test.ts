@@ -11,6 +11,7 @@ import {
   verifyTdxCertChain,
   verifyTdxCertChainBase64,
   loadRootCerts,
+  loadCrls,
 } from "../qvl"
 import { X509Certificate } from "node:crypto"
 
@@ -37,6 +38,8 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
       quote,
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
+      undefined,
+      [],
     ),
   )
 })
@@ -63,6 +66,8 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
       quote,
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
+      undefined,
+      [],
     ),
   )
 })
@@ -89,6 +94,8 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
       quote,
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
+      undefined,
+      [],
     ),
   )
 })
@@ -116,6 +123,8 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
       quote,
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
+      undefined,
+      [],
     ),
   )
 })
@@ -170,6 +179,8 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
       quote,
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
+      undefined,
+      [],
     ),
   )
 })
@@ -196,6 +207,8 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
       quote,
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
+      undefined,
+      [],
     ),
   )
 })
@@ -226,7 +239,16 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
     ),
     ...extractPemCertificates(fs.readFileSync("test/sample/tdx/pckCert.pem")),
   ]
-  t.true(verifyTdxCertChain(quote, root, Date.parse("2025-09-01"), certdata))
+  const crls = loadCrls("test/sample/tdx")
+  t.true(
+    verifyTdxCertChain(
+      quote,
+      root,
+      Date.parse("2025-09-01"),
+      certdata,
+      crls,
+    ),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from GCP", async (t) => {
@@ -254,6 +276,8 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
       quote,
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
+      undefined,
+      [],
     ),
   )
 })

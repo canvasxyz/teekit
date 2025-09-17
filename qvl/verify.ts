@@ -10,6 +10,8 @@ import {
   computeCertSha256Hex,
   encodeEcdsaSignatureToDer,
   extractPemCertificates,
+  normalizeSerialHex,
+  parseCrlRevokedSerials,
   toBase64Url,
 } from "./utils.js"
 
@@ -24,16 +26,17 @@ export function verifyTdxCertChain(
   pinnedRootCerts: X509Certificate[],
   date?: number,
   extraCerts?: string[],
+  crls?: Buffer[],
 ) {
   const { signature, header } = parseTdxQuote(quote)
   const certs = extractPemCertificates(signature.cert_data)
-  let { status, root } = verifyPCKChain(certs, date || +new Date())
+  let { status, root } = verifyPCKChain(certs, date || +new Date(), crls)
 
   if (!root && certs.length === 0) {
     if (!extraCerts) {
       throw new Error("verifyTdxCertChain: missing certdata")
     }
-    const fallback = verifyPCKChain(extraCerts, date || +new Date())
+    const fallback = verifyPCKChain(extraCerts, date || +new Date(), crls)
     status = fallback.status
     root = fallback.root
   }
@@ -83,12 +86,14 @@ export function verifyTdxCertChainBase64(
   pinnedRootCerts: X509Certificate[],
   date?: number,
   extraCerts?: string[],
+  crls?: Buffer[],
 ) {
   return verifyTdxCertChain(
     Buffer.from(quote, "base64"),
     pinnedRootCerts,
     date,
     extraCerts,
+    crls,
   )
 }
 
@@ -101,6 +106,7 @@ export function verifyTdxCertChainBase64(
 export function verifyPCKChain(
   certData: string[],
   verifyAtTimeMs: number | null,
+  crls?: Buffer[],
 ): {
   status: "valid" | "invalid" | "expired"
   root: X509Certificate | null
@@ -147,6 +153,22 @@ export function verifyPCKChain(
       !(notBefore <= verifyAtTimeMs && verifyAtTimeMs <= notAfter)
     ) {
       return { status: "expired", root: chain[chain.length - 1] ?? null, chain }
+    }
+  }
+
+  // CRL revocation checking (best-effort): if CRLs provided, flag revoked leaves
+  if (crls && crls.length > 0) {
+    const revokedSets = crls.map((buf) => parseCrlRevokedSerials(buf))
+    const isSerialRevoked = (serialHex: string) =>
+      revokedSets.some((s) => s.has(serialHex))
+
+    // Check leaf and intermediates; Intel CRLs list serials of revoked certs
+    for (const cert of chain) {
+      // X509Certificate.serialNumber is hex with possibly colons; normalize
+      const serialHex = normalizeSerialHex(cert.serialNumber)
+      if (serialHex && isSerialRevoked(serialHex)) {
+        return { status: "invalid", root: null, chain: [] }
+      }
     }
   }
 
