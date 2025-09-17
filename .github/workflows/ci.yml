@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  qvl-tests:
+    name: QVL tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run qvl.test.ts
+        run: npx ava test/qvl.test.ts
+
+  tunnel-tests:
+    name: Tunnel tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tunnel tests
+        run: npx ava test/tunnel.import.test.ts test/tunnel.e2e.test.ts
+
