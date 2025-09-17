@@ -89,3 +89,126 @@ export function loadRootCerts(certsDirectory: string): X509Certificate[] {
   }
   return results
 }
+
+/** Normalize a certificate serial number to uppercase hex without delimiters or leading zeros */
+export function normalizeSerialHex(input: string): string {
+  const hexOnly = input.replace(/[^a-fA-F0-9]/g, "").toUpperCase()
+  // Drop leading zeros but keep at least one digit
+  return hexOnly.replace(/^0+(?=[0-9A-F])/g, "")
+}
+
+/**
+ * Parse a DER-encoded X.509 CRL and return a list of revoked certificate serials (uppercase hex)
+ *
+ * This is a minimal DER parser that walks the CRL structure and extracts the
+ * userCertificate fields from revokedCertificates. It does not validate CRL
+ * signatures or extensions; it is only used to check serial membership.
+ */
+export function parseCrlRevokedSerials(der: Buffer): string[] {
+  const revokedSerials: string[] = []
+
+  const readTLV = (buf: Buffer, offset: number) => {
+    if (offset >= buf.length) throw new Error("DER: out of bounds")
+    const tag = buf[offset]
+    let cursor = offset + 1
+    if (cursor >= buf.length) throw new Error("DER: truncated length")
+    let lenByte = buf[cursor++]
+    let length = 0
+    if (lenByte & 0x80) {
+      const numBytes = lenByte & 0x7f
+      if (numBytes === 0 || cursor + numBytes > buf.length)
+        throw new Error("DER: invalid length")
+      for (let i = 0; i < numBytes; i++) {
+        length = (length << 8) | buf[cursor++]
+      }
+    } else {
+      length = lenByte
+    }
+    const valueOffset = cursor
+    const nextOffset = valueOffset + length
+    if (nextOffset > buf.length) throw new Error("DER: value out of bounds")
+    return { tag, length, valueOffset, nextOffset }
+  }
+
+  const TAG_SEQUENCE = 0x30
+  const TAG_INTEGER = 0x02
+  const TAG_UTCTIME = 0x17
+  const TAG_GENERALIZEDTIME = 0x18
+
+  try {
+    // CertificateList (SEQUENCE)
+    const outer = readTLV(der, 0)
+    if (outer.tag !== TAG_SEQUENCE) return []
+
+    // tbsCertList (SEQUENCE)
+    const tbs = readTLV(der, outer.valueOffset)
+    if (tbs.tag !== TAG_SEQUENCE) return []
+
+    let p = tbs.valueOffset
+    // Optional version (INTEGER)
+    const maybeVersion = readTLV(der, p)
+    if (maybeVersion.tag === TAG_INTEGER) {
+      p = maybeVersion.nextOffset
+    }
+
+    // signature (SEQUENCE)
+    const sigAlg = readTLV(der, p)
+    if (sigAlg.tag !== TAG_SEQUENCE) return []
+    p = sigAlg.nextOffset
+
+    // issuer (SEQUENCE)
+    const issuer = readTLV(der, p)
+    if (issuer.tag !== TAG_SEQUENCE) return []
+    p = issuer.nextOffset
+
+    // thisUpdate (UTCTime or GeneralizedTime)
+    const thisUpdate = readTLV(der, p)
+    if (
+      thisUpdate.tag !== TAG_UTCTIME &&
+      thisUpdate.tag !== TAG_GENERALIZEDTIME
+    )
+      return []
+    p = thisUpdate.nextOffset
+
+    // nextUpdate (optional)
+    if (p < tbs.nextOffset) {
+      const maybeNext = readTLV(der, p)
+      if (
+        maybeNext.tag === TAG_UTCTIME ||
+        maybeNext.tag === TAG_GENERALIZEDTIME
+      ) {
+        p = maybeNext.nextOffset
+      }
+    }
+
+    // revokedCertificates (optional SEQUENCE)
+    if (p < tbs.nextOffset) {
+      const maybeRevoked = readTLV(der, p)
+      if (maybeRevoked.tag === TAG_SEQUENCE) {
+        let q = maybeRevoked.valueOffset
+        while (q < maybeRevoked.nextOffset) {
+          const entry = readTLV(der, q)
+          if (entry.tag !== TAG_SEQUENCE) break
+          let r = entry.valueOffset
+          const serialTLV = readTLV(der, r)
+          if (serialTLV.tag === TAG_INTEGER) {
+            const serialHex = Buffer.from(
+              der.subarray(serialTLV.valueOffset, serialTLV.nextOffset),
+            )
+              .toString("hex")
+              .toUpperCase()
+              .replace(/^0+(?=[0-9A-F])/g, "")
+            revokedSerials.push(serialHex)
+            // Skip revocationDate and optional extensions without parsing
+          }
+          q = entry.nextOffset
+        }
+      }
+    }
+  } catch {
+    return []
+  }
+
+  return revokedSerials
+}
+
