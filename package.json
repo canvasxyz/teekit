@@ -14,6 +14,9 @@
     "test": "ava"
   },
   "dependencies": {
+    "@peculiar/asn1-schema": "^2.5.0",
+    "@peculiar/asn1-x509": "^2.5.0",
+    "@peculiar/x509": "^1.14.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",

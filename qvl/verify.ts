@@ -12,6 +12,15 @@ import {
   extractPemCertificates,
   toBase64Url,
 } from "./utils.js"
+import { AsnParser } from "@peculiar/asn1-schema"
+import {
+  Certificate as AsnCertificate,
+  Extension as AsnExtension,
+  BasicConstraints,
+  id_ce_basicConstraints,
+  KeyUsage,
+  id_ce_keyUsage,
+} from "@peculiar/asn1-x509"
 
 /**
  * Verify a complete certificate chain for a TDX enclave, including the
@@ -175,7 +184,153 @@ export function verifyPCKChain(
     }
   }
 
+  // Practical minimum X.509 path extension checks for PCK chain
+  if (!validatePckPathExtensions(chain)) {
+    return { status: "invalid", root: null, chain: [] }
+  }
+
   return { status: "valid", root: chain[chain.length - 1] ?? null, chain }
+}
+
+/**
+ * Validate minimum X.509 extension requirements along the PCK chain:
+ * - All issuer/CA certificates (non-leaf) must have BasicConstraints critical with cA=true
+ * - For CA certs, KeyUsage must be present and include keyCertSign
+ * - Leaf must NOT be a CA (BasicConstraints.cA must be false if present)
+ * - Enforce BasicConstraints.pathLenConstraint for CAs
+ */
+function validatePckPathExtensions(chain: X509Certificate[]): boolean {
+  type ParsedExts = {
+    hasBasicConstraints: boolean
+    bcCritical: boolean
+    isCa: boolean
+    pathLenConstraint: number | undefined
+    hasKeyUsage: boolean
+    keyUsages: Set<
+      | "digitalSignature"
+      | "nonRepudiation"
+      | "keyEncipherment"
+      | "dataEncipherment"
+      | "keyAgreement"
+      | "keyCertSign"
+      | "crlSign"
+      | "encipherOnly"
+      | "decipherOnly"
+    >
+  }
+
+  const parsed: ParsedExts[] = chain.map((c) => parseExtensions(c))
+
+  // classify CA vs leaf by BasicConstraints.cA
+  const isCa: boolean[] = parsed.map((p) => p.isCa)
+
+  // Leaf checks (index 0)
+  const leaf = parsed[0]
+  // Leaf must not be CA
+  if (leaf.isCa) return false
+  // If KeyUsage is present, it must allow digitalSignature
+  if (leaf.hasKeyUsage && !leaf.keyUsages.has("digitalSignature")) return false
+
+  // For each non-leaf certificate (issuers): must be CA with critical BasicConstraints
+  for (let i = 1; i < parsed.length; i++) {
+    const p = parsed[i]
+    if (!p.hasBasicConstraints || !p.bcCritical || !p.isCa) return false
+    // For CAs, KeyUsage must be present and include keyCertSign
+    if (!p.hasKeyUsage || !p.keyUsages.has("keyCertSign")) return false
+  }
+
+  // Enforce pathLenConstraint for CA certs
+  for (let i = 1; i < parsed.length; i++) {
+    const p = parsed[i]
+    if (!p.isCa) continue
+    if (typeof p.pathLenConstraint === "number") {
+      // Count number of CA certs that follow this cert towards the leaf
+      let followingCaCount = 0
+      for (let j = 0; j < i; j++) {
+        if (isCa[j]) followingCaCount++
+      }
+      if (followingCaCount > p.pathLenConstraint) return false
+    }
+  }
+
+  return true
+}
+
+function parseExtensions(cert: X509Certificate): {
+  hasBasicConstraints: boolean
+  bcCritical: boolean
+  isCa: boolean
+  pathLenConstraint: number | undefined
+  hasKeyUsage: boolean
+  keyUsages: Set<
+    | "digitalSignature"
+    | "nonRepudiation"
+    | "keyEncipherment"
+    | "dataEncipherment"
+    | "keyAgreement"
+    | "keyCertSign"
+    | "crlSign"
+    | "encipherOnly"
+    | "decipherOnly"
+  >
+} {
+  let hasBasicConstraints = false
+  let bcCritical = false
+  let isCa = false
+  let pathLenConstraint: number | undefined
+
+  let hasKeyUsage = false
+  const keyUsages = new Set<
+    | "digitalSignature"
+    | "nonRepudiation"
+    | "keyEncipherment"
+    | "dataEncipherment"
+    | "keyAgreement"
+    | "keyCertSign"
+    | "crlSign"
+    | "encipherOnly"
+    | "decipherOnly"
+  >()
+
+  try {
+    const asnCert = AsnParser.parse(cert.raw, AsnCertificate)
+    const extensions: AsnExtension[] = asnCert.tbsCertificate.extensions
+      ? Array.from(asnCert.tbsCertificate.extensions)
+      : []
+
+    const bcExt = extensions.find((e) => e.extnID === id_ce_basicConstraints)
+    if (bcExt) {
+      hasBasicConstraints = true
+      bcCritical = bcExt.critical === true
+      try {
+        const bc = AsnParser.parse(bcExt.extnValue, BasicConstraints)
+        isCa = bc.cA === true
+        if (typeof bc.pathLenConstraint === "number") {
+          pathLenConstraint = bc.pathLenConstraint
+        }
+      } catch {}
+    }
+
+    const kuExt = extensions.find((e) => e.extnID === id_ce_keyUsage)
+    if (kuExt) {
+      hasKeyUsage = true
+      try {
+        const ku = AsnParser.parse(kuExt.extnValue, KeyUsage)
+        for (const name of ku.toJSON()) keyUsages.add(name)
+      } catch {}
+    }
+  } catch {
+    // If ASN.1 parsing fails, treat as missing required extensions
+  }
+
+  return {
+    hasBasicConstraints,
+    bcCritical,
+    isCa,
+    pathLenConstraint,
+    hasKeyUsage,
+    keyUsages,
+  }
 }
 
 /**
