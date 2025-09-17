@@ -10,7 +10,8 @@
   "include": [
     "tunnel/**/*",
     "qvl/**/*",
-    "server/**/*"
+    "server/**/*",
+    "test/certs/**/*"
   ],
   "exclude": [
     "node_modules",
