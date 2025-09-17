@@ -1,5 +1,6 @@
+/// <reference types="node" />
 import test from "ava"
-import fs from "node:fs"
+import fs from "fs"
 
 import {
   parseTdxQuote,
@@ -12,8 +13,9 @@ import {
   verifyTdxCertChain,
   verifyTdxCertChainBase64,
   loadRootCerts,
-} from "../qvl"
-import { X509Certificate } from "node:crypto"
+  describeTdxChainOfTrust,
+} from "../qvl/index.js"
+import { X509Certificate } from "crypto"
 
 test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
   const quoteHex = fs.readFileSync("test/sample/tdx-v4-tappd.hex", "utf-8")
@@ -39,6 +41,22 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
     ),
+  )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // Print a concise chain-of-trust summary for visibility in CI logs
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (Tappd):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
   )
 })
 
@@ -66,6 +84,21 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
       Date.parse("2025-09-01"),
     ),
   )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (Edgeless):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
@@ -91,6 +124,21 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
     ),
+  )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (Phala bin):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
   )
 })
 
@@ -118,6 +166,21 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
     ),
+  )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (Phala hex):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
   )
 })
 
@@ -147,6 +210,21 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
       Date.parse("2025-09-01"),
     ),
   )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (MoeMahhouk):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Azure", async (t) => {
@@ -173,6 +251,21 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
       Date.parse("2025-09-01"),
     ),
   )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (Azure):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
@@ -198,6 +291,21 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
     ),
+  )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (Trustee):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
   )
 })
 
@@ -229,6 +337,22 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
     ...extractPemCertificates(fs.readFileSync("test/sample/tdx/pckCert.pem")),
   ]
   t.true(verifyTdxCertChain(quote, root, Date.parse("2025-09-01"), certdata))
+  const steps = describeTdxChainOfTrust(
+    quote,
+    root,
+    Date.parse("2025-09-01"),
+    certdata,
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (Intel sample):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from GCP", async (t) => {
@@ -257,6 +381,21 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
       loadRootCerts("test/certs"),
       Date.parse("2025-09-01"),
     ),
+  )
+  const steps = describeTdxChainOfTrust(
+    quote,
+    loadRootCerts("test/certs"),
+    Date.parse("2025-09-01"),
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    "TDX chain-of-trust (GCP):\n" +
+      steps
+        .map(
+          (s: { step: string; ok: boolean; detail?: string }, i: number) =>
+            `${i + 1}. ${s.ok ? "✓" : "✗"} ${s.step}${s.detail ? ` - ${s.detail}` : ""}`,
+        )
+        .join("\n"),
   )
 })
 

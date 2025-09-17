@@ -1,9 +1,4 @@
-import {
-  createHash,
-  createPublicKey,
-  createVerify,
-  X509Certificate,
-} from "node:crypto"
+import { createHash, createPublicKey, createVerify, X509Certificate } from "crypto"
 
 import { getTdxV4SignedRegion, parseTdxQuote } from "./structs.js"
 import {
@@ -25,7 +20,18 @@ export function verifyTdxCertChain(
   date?: number,
   extraCerts?: string[],
 ) {
-  const { signature } = parseTdxQuote(quote)
+  const { header, signature } = parseTdxQuote(quote)
+  // Sanity checks for TDX v4 quotes and expected DCAP cert data layout (type 5)
+  if (header.version !== 4) {
+    throw new Error(
+      `verifyTdxCertChain: unsupported quote version ${header.version}`,
+    )
+  }
+  if (signature.cert_data_len > 0 && signature.cert_data_type !== 5) {
+    throw new Error(
+      `verifyTdxCertChain: unexpected cert_data_type ${signature.cert_data_type}`,
+    )
+  }
   const certs = extractPemCertificates(signature.cert_data)
   let { status, root, chain } = verifyPCKChain(certs, date || +new Date())
 
@@ -114,6 +120,11 @@ export function verifyPCKChain(
     chain.push(parent)
   }
 
+  // Require at least leaf + one issuer
+  if (chain.length < 2) {
+    return { status: "invalid", root: null, chain: [] }
+  }
+
   // Validate chaining and validity windows
   for (let i = 0; i < chain.length - 1; i++) {
     const child = chain[i]
@@ -129,6 +140,31 @@ export function verifyPCKChain(
     if (!(notBefore <= verifyAtTimeMs && verifyAtTimeMs <= notAfter)) {
       return { status: "expired", root: chain[chain.length - 1] ?? null, chain }
     }
+  }
+
+  // Best-effort cryptographic checks (Node's X509Certificate lacks full PKIX evaluation).
+  // Verify child is signed by parent when possible; ensure root is self-signed and a CA.
+  try {
+    for (let i = 0; i < chain.length - 1; i++) {
+      const child: any = chain[i] as any
+      const parent = chain[i + 1]
+      if (typeof child.verify === "function") {
+        const ok = child.verify(parent.publicKey)
+        if (!ok) return { status: "invalid", root: null, chain: [] }
+      }
+    }
+    const root = chain[chain.length - 1]
+    const rootAny: any = root as any
+    if (root.issuer !== root.subject) return { status: "invalid", root: null, chain: [] }
+    if (typeof rootAny.verify === "function") {
+      const ok = rootAny.verify(root.publicKey)
+      if (!ok) return { status: "invalid", root: null, chain: [] }
+    }
+    if (typeof rootAny.checkCA === "function") {
+      if (!rootAny.checkCA()) return { status: "invalid", root: null, chain: [] }
+    }
+  } catch {
+    return { status: "invalid", root: null, chain: [] }
   }
 
   return { status: "valid", root: chain[chain.length - 1] ?? null, chain }
@@ -299,4 +335,68 @@ export function verifyTdxV4Signature(quoteInput: string | Buffer): boolean {
   verifier.update(message)
   verifier.end()
   return verifier.verify(publicKey, derSig)
+}
+
+/**
+ * Build a human-readable list of verification steps for a TDX v4 quote.
+ */
+export function describeTdxChainOfTrust(
+  quoteInput: string | Buffer,
+  pinnedRootCerts: X509Certificate[],
+  date?: number,
+  extraCerts?: string[],
+): Array<{ step: string; ok: boolean; detail?: string }> {
+  const steps: Array<{ step: string; ok: boolean; detail?: string }> = []
+  const quoteBytes = Buffer.isBuffer(quoteInput)
+    ? quoteInput
+    : Buffer.from(quoteInput, "base64")
+
+  try {
+    const { header, signature } = parseTdxQuote(quoteBytes)
+    steps.push({
+      step: "Parse quote header/body (expect v4, TDX)",
+      ok: header.version === 4 && header.tee_type === 129,
+      detail: `version=${header.version}, tee_type=${header.tee_type}`,
+    })
+
+    if (signature.cert_data_len > 0) {
+      steps.push({
+        step: "Cert data type is DCAP PCK (type 5)",
+        ok: signature.cert_data_type === 5,
+        detail: `type=${signature.cert_data_type}`,
+      })
+    } else {
+      steps.push({ step: "No embedded certs; using extraCerts fallback", ok: !!extraCerts && (extraCerts?.length || 0) > 0 })
+    }
+
+    const embedded = extractPemCertificates(signature.cert_data)
+    const certs = embedded.length > 0 ? embedded : extraCerts ?? []
+    const { status, root, chain } = verifyPCKChain(certs, date || Date.now())
+    steps.push({
+      step: "Build and validate PCK chain (issuer path, time, signatures)",
+      ok: status === "valid",
+      detail: `chain_len=${chain.length}`,
+    })
+
+    if (root) {
+      const rootHash = computeCertSha256Hex(root)
+      const pinned = new Set(pinnedRootCerts.map(computeCertSha256Hex))
+      steps.push({ step: "Pin Intel Root CA (hash match)", ok: pinned.has(rootHash), detail: rootHash })
+    } else {
+      steps.push({ step: "Pin Intel Root CA (hash match)", ok: false, detail: "no root" })
+    }
+
+    const bindOk = verifyQeReportBinding(quoteBytes)
+    steps.push({ step: "QE report binds attestation public key", ok: bindOk })
+
+    const qeSigOk = verifyQeReportSignature(quoteBytes, certs)
+    steps.push({ step: "QE report signature verifies with PCK leaf", ok: qeSigOk })
+
+    const quoteSigOk = verifyTdxV4Signature(quoteBytes)
+    steps.push({ step: "Quote body signed by attestation public key (covers TD measurement)", ok: quoteSigOk })
+  } catch (e: any) {
+    steps.push({ step: "Exception during verification", ok: false, detail: String(e?.message || e) })
+  }
+
+  return steps
 }
