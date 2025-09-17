@@ -4,6 +4,12 @@ import {
   createVerify,
   X509Certificate,
 } from "node:crypto"
+import {
+  X509Certificate as ExtX509Certificate,
+  BasicConstraintsExtension,
+  KeyUsagesExtension,
+  KeyUsageFlags,
+} from "@peculiar/x509"
 
 import { getTdxV4SignedRegion, parseTdxQuote } from "./structs.js"
 import {
@@ -108,7 +114,12 @@ export function verifyPCKChain(
 } {
   if (certData.length === 0) return { status: "invalid", root: null, chain: [] }
 
-  const certs = certData.map((text) => new X509Certificate(text))
+  // Build paired views for each certificate (Node for chaining, Peculiar for extensions)
+  const pairs = certData.map((pem) => ({
+    node: new X509Certificate(pem),
+    ext: new ExtX509Certificate(pem),
+  }))
+  const certs = pairs.map((p) => p.node)
 
   // Identify leaf (not an issuer of any other provided cert)
   let leaf: X509Certificate | undefined
@@ -172,6 +183,78 @@ export function verifyPCKChain(
       }
     } catch {
       return { status: "invalid", root: null, chain: [] }
+    }
+  }
+
+  // Practical minimum path extension checks (RFC 5280-inspired)
+  // - CA certs must assert basicConstraints.ca = true
+  // - CA certs with keyUsage must include keyCertSign
+  // - End-entity leaf must assert ca = false if basicConstraints present
+  // - End-entity with keyUsage must include digitalSignature (used for ECDSA signing)
+  // - Respect pathLenConstraint when present on CA certs
+  const getExtForNode = (node: X509Certificate): ExtX509Certificate | null => {
+    const idx = certs.indexOf(node)
+    if (idx === -1) return null
+    return pairs[idx].ext
+  }
+
+  // Determine CA flag of each cert in the path using BasicConstraints if present
+  const isCAInChain: boolean[] = chain.map((node) => {
+    const extCert = getExtForNode(node)
+    if (!extCert) return false
+    const bc = extCert.getExtension(BasicConstraintsExtension)
+    return bc ? !!bc.ca : false
+  })
+
+  // Leaf checks
+  {
+    const leafNode = chain[0]
+    const extCert = getExtForNode(leafNode)
+    if (extCert) {
+      const bc = extCert.getExtension(BasicConstraintsExtension)
+      if (bc && bc.ca) {
+        return { status: "invalid", root: null, chain: [] }
+      }
+      const ku = extCert.getExtension(KeyUsagesExtension)
+      if (ku) {
+        const hasDigitalSignature = (ku.usages & KeyUsageFlags.digitalSignature) !== 0
+        if (!hasDigitalSignature) {
+          return { status: "invalid", root: null, chain: [] }
+        }
+      }
+    }
+  }
+
+  // CA and pathLen checks for all issuers in the chain
+  for (let i = 1; i < chain.length; i++) {
+    const issuerNode = chain[i]
+    const extCert = getExtForNode(issuerNode)
+    if (!extCert) continue
+
+    const bc = extCert.getExtension(BasicConstraintsExtension)
+    // CA certs must assert CA=true
+    if (!bc || !bc.ca) {
+      return { status: "invalid", root: null, chain: [] }
+    }
+
+    // keyUsage, if present, must include keyCertSign
+    const ku = extCert.getExtension(KeyUsagesExtension)
+    if (ku) {
+      const canSignCert = (ku.usages & KeyUsageFlags.keyCertSign) !== 0
+      if (!canSignCert) {
+        return { status: "invalid", root: null, chain: [] }
+      }
+    }
+
+    // pathLenConstraint validation: number of subsequent non-self-issued CA certs
+    if (typeof bc.pathLength === "number") {
+      let subsequentCAs = 0
+      for (let j = 0; j < i; j++) {
+        if (isCAInChain[j]) subsequentCAs++
+      }
+      if (subsequentCAs > bc.pathLength) {
+        return { status: "invalid", root: null, chain: [] }
+      }
     }
   }
 
