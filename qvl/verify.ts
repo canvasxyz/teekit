@@ -20,6 +20,14 @@ import {
   parseCrlRevokedSerials,
   toBase64Url,
 } from "./utils.js"
+import { intelSgxRootCaPem } from "../test/certs/intel-sgx-root.js"
+
+export interface VerifyTdxConfig {
+  pinnedRootCerts?: X509Certificate[]
+  date?: number
+  extraCerts?: string[]
+  crls?: Buffer[]
+}
 
 /**
  * Verify a complete chain of trust for a TDX enclave, including the
@@ -29,11 +37,18 @@ import {
  */
 export function verifyTdx(
   quote: Buffer,
-  pinnedRootCerts: X509Certificate[],
-  date?: number,
-  extraCerts?: string[],
-  crls?: Buffer[],
+  config?: VerifyTdxConfig,
 ) {
+  const pinnedRootCerts = config?.pinnedRootCerts ?? (() => {
+    try {
+      return [new X509Certificate(intelSgxRootCaPem)]
+    } catch {
+      return []
+    }
+  })()
+  const date = config?.date
+  const extraCerts = config?.extraCerts
+  const crls = config?.crls
   const { signature, header } = parseTdxQuote(quote)
   const certs = extractPemCertificates(signature.cert_data)
   let { status, root } = verifyPCKChain(certs, date ?? +new Date(), crls)
@@ -92,17 +107,11 @@ export function verifyTdx(
 
 export function verifyTdxBase64(
   quote: string,
-  pinnedRootCerts: X509Certificate[],
-  date?: number,
-  extraCerts?: string[],
-  crls?: Buffer[],
+  config?: VerifyTdxConfig,
 ) {
   return verifyTdx(
     Buffer.from(quote, "base64"),
-    pinnedRootCerts,
-    date,
-    extraCerts,
-    crls,
+    config,
   )
 }
 

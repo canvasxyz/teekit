@@ -37,10 +37,11 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
   t.true(
     verifyTdx(
       quote,
-      loadRootCerts("test/certs"),
-      Date.parse("2025-09-01"),
-      undefined,
-      [],
+      {
+        pinnedRootCerts: loadRootCerts("test/certs"),
+        date: Date.parse("2025-09-01"),
+        crls: [],
+      },
     ),
   )
 })
@@ -65,10 +66,11 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
   t.true(
     verifyTdx(
       quote,
-      loadRootCerts("test/certs"),
-      Date.parse("2025-09-01"),
-      undefined,
-      [],
+      {
+        pinnedRootCerts: loadRootCerts("test/certs"),
+        date: Date.parse("2025-09-01"),
+        crls: [],
+      },
     ),
   )
 })
@@ -93,10 +95,11 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
   t.true(
     verifyTdx(
       quote,
-      loadRootCerts("test/certs"),
-      Date.parse("2025-09-01"),
-      undefined,
-      [],
+      {
+        pinnedRootCerts: loadRootCerts("test/certs"),
+        date: Date.parse("2025-09-01"),
+        crls: [],
+      },
     ),
   )
 })
@@ -122,10 +125,7 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
   t.true(
     verifyTdx(
       quote,
-      loadRootCerts("test/certs"),
-      Date.parse("2025-09-01"),
-      undefined,
-      [],
+      { pinnedRootCerts: loadRootCerts("test/certs"), date: Date.parse("2025-09-01"), crls: [] },
     ),
   )
 })
@@ -150,7 +150,7 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
   t.true(
-    verifyTdx(quote, loadRootCerts("test/certs"), Date.parse("2025-09-01")),
+    verifyTdx(quote, { pinnedRootCerts: loadRootCerts("test/certs"), date: Date.parse("2025-09-01") }),
   )
 })
 
@@ -174,10 +174,7 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
   t.true(
     verifyTdxBase64(
       quote,
-      loadRootCerts("test/certs"),
-      Date.parse("2025-09-01"),
-      undefined,
-      [],
+      { pinnedRootCerts: loadRootCerts("test/certs"), date: Date.parse("2025-09-01"), crls: [] },
     ),
   )
 })
@@ -202,10 +199,7 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
   t.true(
     verifyTdx(
       quote,
-      loadRootCerts("test/certs"),
-      Date.parse("2025-09-01"),
-      undefined,
-      [],
+      { pinnedRootCerts: loadRootCerts("test/certs"), date: Date.parse("2025-09-01"), crls: [] },
     ),
   )
 })
@@ -240,7 +234,12 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
     fs.readFileSync("test/sample/tdx/rootCaCrl.der"),
     fs.readFileSync("test/sample/tdx/intermediateCaCrl.der"),
   ]
-  t.true(verifyTdx(quote, root, Date.parse("2025-09-01"), certdata, crls))
+  t.true(
+    verifyTdx(
+      quote,
+      { pinnedRootCerts: root, date: Date.parse("2025-09-01"), extraCerts: certdata, crls },
+    ),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from GCP", async (t) => {
@@ -266,10 +265,7 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
   t.true(
     verifyTdxBase64(
       quote,
-      loadRootCerts("test/certs"),
-      Date.parse("2025-09-01"),
-      undefined,
-      [],
+      { pinnedRootCerts: loadRootCerts("test/certs"), date: Date.parse("2025-09-01"), crls: [] },
     ),
   )
 })
@@ -437,7 +433,7 @@ function getGcpCertPems(): {
 
 test.serial("Reject a V4 TDX quote, missing root cert", async (t) => {
   const quoteB64 = getGcpQuoteBase64()
-  const err = t.throws(() => verifyTdxBase64(quoteB64, [], BASE_TIME))
+  const err = t.throws(() => verifyTdxBase64(quoteB64, { pinnedRootCerts: [], date: BASE_TIME }))
   t.truthy(err)
   t.regex(err!.message, /invalid root/i)
 })
@@ -448,7 +444,7 @@ test.serial("Reject a V4 TDX quote, missing intermediate cert", async (t) => {
   const { leaf, root } = getGcpCertPems()
   const noEmbedded = rebuildQuoteWithCertData(quoteBuf, Buffer.alloc(0))
   const err = t.throws(() =>
-    verifyTdx(noEmbedded, loadRootCerts("test/certs"), BASE_TIME, [leaf, root]),
+    verifyTdx(noEmbedded, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, extraCerts: [leaf, root] }),
   )
   t.truthy(err)
   t.regex(err!.message, /invalid root/i)
@@ -460,10 +456,10 @@ test.serial("Reject a V4 TDX quote, missing leaf cert", async (t) => {
   const { intermediate, root } = getGcpCertPems()
   const noEmbedded = rebuildQuoteWithCertData(quoteBuf, Buffer.alloc(0))
   const err = t.throws(() =>
-    verifyTdx(noEmbedded, loadRootCerts("test/certs"), BASE_TIME, [
+    verifyTdx(noEmbedded, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, extraCerts: [
       intermediate,
       root,
-    ]),
+    ] }),
   )
   t.truthy(err)
   t.regex(err!.message, /invalid cert chain/i)
@@ -480,10 +476,7 @@ test.serial("Reject a V4 TDX quote, revoked root cert", async (t) => {
   const err = t.throws(() =>
     verifyTdxBase64(
       quoteB64,
-      loadRootCerts("test/certs"),
-      BASE_TIME,
-      undefined,
-      [crl],
+      { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, crls: [crl] },
     ),
   )
   t.truthy(err)
@@ -501,10 +494,7 @@ test.serial("Reject a V4 TDX quote, revoked intermediate cert", async (t) => {
   const err = t.throws(() =>
     verifyTdxBase64(
       quoteB64,
-      loadRootCerts("test/certs"),
-      BASE_TIME,
-      undefined,
-      [crl],
+      { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, crls: [crl] },
     ),
   )
   t.truthy(err)
@@ -522,10 +512,7 @@ test.serial("Reject a V4 TDX quote, revoked leaf cert", async (t) => {
   const err = t.throws(() =>
     verifyTdxBase64(
       quoteB64,
-      loadRootCerts("test/certs"),
-      BASE_TIME,
-      undefined,
-      [crl],
+      { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, crls: [crl] },
     ),
   )
   t.truthy(err)
@@ -539,11 +526,11 @@ test.serial("Reject a V4 TDX quote, invalid root self-signature", async (t) => {
   const tamperedRoot = tamperPemSignature(root)
   const noEmbedded = rebuildQuoteWithCertData(quoteBuf, Buffer.alloc(0))
   const err = t.throws(() =>
-    verifyTdx(noEmbedded, loadRootCerts("test/certs"), BASE_TIME, [
+    verifyTdx(noEmbedded, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, extraCerts: [
       leaf,
       intermediate,
       tamperedRoot,
-    ]),
+    ] }),
   )
   t.truthy(err)
   t.regex(err!.message, /invalid cert chain/i)
@@ -558,11 +545,11 @@ test.serial(
     const tamperedIntermediate = tamperPemSignature(intermediate)
     const noEmbedded = rebuildQuoteWithCertData(quoteBuf, Buffer.alloc(0))
     const err = t.throws(() =>
-      verifyTdx(noEmbedded, loadRootCerts("test/certs"), BASE_TIME, [
+      verifyTdx(noEmbedded, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, extraCerts: [
         leaf,
         tamperedIntermediate,
         root,
-      ]),
+      ] }),
     )
     t.truthy(err)
     t.regex(err!.message, /invalid cert chain/i)
@@ -576,11 +563,11 @@ test.serial("Reject a V4 TDX quote, invalid leaf cert signature", async (t) => {
   const tamperedLeaf = tamperPemSignature(leaf)
   const noEmbedded = rebuildQuoteWithCertData(quoteBuf, Buffer.alloc(0))
   const err = t.throws(() =>
-    verifyTdx(noEmbedded, loadRootCerts("test/certs"), BASE_TIME, [
+    verifyTdx(noEmbedded, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME, extraCerts: [
       tamperedLeaf,
       intermediate,
       root,
-    ]),
+    ] }),
   )
   t.truthy(err)
   t.regex(err!.message, /invalid cert chain/i)
@@ -608,7 +595,7 @@ test.serial("Reject a V4 TDX quote, incorrect QE signature", async (t) => {
     sigData,
   ])
   const err = t.throws(() =>
-    verifyTdx(mutated, loadRootCerts("test/certs"), BASE_TIME),
+    verifyTdx(mutated, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
   )
   t.truthy(err)
   t.regex(err!.message, /invalid qe report signature/i)
@@ -636,7 +623,7 @@ test.serial("Reject a V4 TDX quote, incorrect QE binding", async (t) => {
     sigData,
   ])
   const err = t.throws(() =>
-    verifyTdx(mutated, loadRootCerts("test/certs"), BASE_TIME),
+    verifyTdx(mutated, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
   )
   t.truthy(err)
   t.regex(err!.message, /invalid qe report binding/i)
@@ -664,7 +651,7 @@ test.serial("Reject a V4 TDX quote, incorrect TD signature", async (t) => {
     sigData,
   ])
   const err = t.throws(() =>
-    verifyTdx(mutated, loadRootCerts("test/certs"), BASE_TIME),
+    verifyTdx(mutated, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
   )
   t.truthy(err)
   t.regex(err!.message, /attestation_public_key signature/i)
@@ -676,8 +663,8 @@ test.serial(
     const quoteB64 = getGcpQuoteBase64()
     const base = Buffer.from(quoteB64, "base64")
     const noEmbedded = rebuildQuoteWithCertData(base, Buffer.alloc(0))
-    const err = t.throws(() =>
-      verifyTdx(noEmbedded, loadRootCerts("test/certs"), BASE_TIME),
+  const err = t.throws(() =>
+      verifyTdx(noEmbedded, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
     )
     t.truthy(err)
     t.regex(err!.message, /missing certdata/i)
@@ -688,8 +675,8 @@ test.serial(
   "Reject a V4 TDX quote, expired or not-yet-valid certificate chain",
   async (t) => {
     const quoteB64 = getGcpQuoteBase64()
-    const err = t.throws(() =>
-      verifyTdxBase64(quoteB64, loadRootCerts("test/certs"), 0),
+  const err = t.throws(() =>
+      verifyTdxBase64(quoteB64, { pinnedRootCerts: loadRootCerts("test/certs"), date: 0 }),
     )
     t.truthy(err)
     t.regex(err!.message, /expired cert chain/i)
@@ -703,7 +690,7 @@ test.serial("Reject a V4 TDX quote, unsupported TEE type", async (t) => {
   // header.tee_type at offset 4 (UInt32LE)
   mutated.writeUInt32LE(0, 4)
   const err = t.throws(() =>
-    verifyTdx(mutated, loadRootCerts("test/certs"), BASE_TIME),
+    verifyTdx(mutated, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
   )
   t.truthy(err)
   t.regex(err!.message, /only tdx is supported/i)
@@ -718,7 +705,7 @@ test.serial(
     // header.att_key_type at offset 2 (UInt16LE)
     mutated.writeUInt16LE(1, 2)
     const err = t.throws(() =>
-      verifyTdx(mutated, loadRootCerts("test/certs"), BASE_TIME),
+      verifyTdx(mutated, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
     )
     t.truthy(err)
     t.regex(err!.message, /only ECDSA att_key_type is supported/i)
@@ -730,7 +717,7 @@ test.serial("Reject a V4 TDX quote, unsupported cert_data_type", async (t) => {
   const original = Buffer.from(quoteB64, "base64")
   const mutated = rebuildQuoteWithCertType(original, 0)
   const err = t.throws(() =>
-    verifyTdx(mutated, loadRootCerts("test/certs"), BASE_TIME),
+    verifyTdx(mutated, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
   )
   t.truthy(err)
   t.regex(err!.message, /only PCK cert_data is supported/i)
@@ -743,7 +730,7 @@ test.serial("Reject a TDX quote with unsupported version", async (t) => {
   // header.version at offset 0 (UInt16LE)
   mutated.writeUInt16LE(5, 0)
   const err = t.throws(() =>
-    verifyTdx(mutated, loadRootCerts("test/certs"), BASE_TIME),
+    verifyTdx(mutated, { pinnedRootCerts: loadRootCerts("test/certs"), date: BASE_TIME }),
   )
   t.truthy(err)
   t.regex(err!.message, /Unsupported quote version/i)
