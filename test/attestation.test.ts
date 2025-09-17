@@ -12,6 +12,7 @@ import {
   verifyTdxCertChain,
   verifyTdxCertChainBase64,
   loadRootCerts,
+  verifyTdxChain,
 } from "../qvl"
 import { X509Certificate } from "node:crypto"
 
@@ -258,6 +259,21 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
       Date.parse("2025-09-01"),
     ),
   )
+})
+
+test.serial("Print chain-of-trust steps for Azure quote", async (t) => {
+  const quoteB64 = fs.readFileSync("test/sample/tdx-v4-azure-quote", "utf-8")
+  const steps = verifyTdxChain(quoteB64, loadRootCerts("test/certs"), {
+    date: Date.parse("2025-09-01"),
+  })
+  // Emit a readable checklist for human review
+  const lines = steps.steps.map(
+    (s, i) => `${i + 1}. ${s.ok ? "[OK]" : "[FAIL]"} ${s.name}${
+      s.details ? ` - ${s.details}` : ""
+    }`,
+  )
+  for (const l of lines) t.log(l)
+  t.true(steps.ok)
 })
 
 test.serial("Return expired if certificate is not yet valid", async (t) => {

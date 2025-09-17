@@ -13,6 +13,126 @@ import {
   toBase64Url,
 } from "./utils.js"
 
+/** Minimal view of SGX Report fields inside QE report */
+function parseSgxReport(report: Buffer) {
+  if (report.length !== 384) {
+    throw new Error("Unexpected SGX report length")
+  }
+  const attributes = report.subarray(48, 64)
+  const mrEnclave = report.subarray(64, 96)
+  const mrSigner = report.subarray(128, 160)
+  const isvProdId = report.readUInt16LE(256)
+  const isvSvn = report.readUInt16LE(258)
+  const reportData = report.subarray(320, 384)
+  return { attributes, mrEnclave, mrSigner, isvProdId, isvSvn, reportData }
+}
+
+type QeIdentity = {
+  enclaveIdentity: {
+    id: string
+    version: number
+    issueDate: string
+    nextUpdate: string
+    tcbEvaluationDataNumber: number
+    miscselect?: string
+    miscselectMask?: string
+    attributes: string
+    attributesMask: string
+    mrsigner: string
+    isvprodid?: number
+    tcbLevels: Array<{
+      tcb: { isvsvn: number }
+      tcbDate: string
+      tcbStatus: string
+      advisoryIDs?: string[]
+    }>
+  }
+  signature?: string
+}
+
+type TcbInfo = {
+  tcbInfo: {
+    id: string
+    version: number
+    issueDate: string
+    nextUpdate: string
+    tcbType?: number
+    fmspc?: string
+    pceId?: string
+  }
+  signature?: string
+}
+
+export type TrustStep = {
+  name: string
+  ok: boolean
+  details?: string
+}
+
+function hexEqualsMasked(actual: Buffer, expectedHex: string, maskHex: string) {
+  const exp = Buffer.from(expectedHex, "hex")
+  const mask = Buffer.from(maskHex, "hex")
+  if (exp.length !== actual.length || mask.length !== actual.length) return false
+  for (let i = 0; i < actual.length; i++) {
+    if ((actual[i] & mask[i]) !== (exp[i] & mask[i])) return false
+  }
+  return true
+}
+
+/** Verify QE Identity against the QE report embedded in the quote. */
+export function verifyQeIdentity(
+  quoteInput: string | Buffer,
+  qeIdentity: QeIdentity,
+  atTimeMs?: number,
+): boolean {
+  const now = atTimeMs ?? Date.now()
+  const quoteBytes = Buffer.isBuffer(quoteInput)
+    ? quoteInput
+    : Buffer.from(quoteInput, "base64")
+
+  const { signature } = parseTdxQuote(quoteBytes)
+  if (!signature.qe_report_present) return false
+  const report = parseSgxReport(signature.qe_report)
+
+  const id = qeIdentity.enclaveIdentity
+  const notBefore = Date.parse(id.issueDate)
+  const notAfter = Date.parse(id.nextUpdate)
+  if (!(notBefore <= now && now <= notAfter)) return false
+
+  // Attributes with mask
+  if (!hexEqualsMasked(report.attributes, id.attributes, id.attributesMask)) {
+    return false
+  }
+
+  // MRSIGNER must match exactly
+  if (report.mrSigner.toString("hex") !== id.mrsigner.toLowerCase()) {
+    return false
+  }
+
+  // Optional ISVPRODID
+  if (typeof id.isvprodid === "number" && id.isvprodid !== report.isvProdId) {
+    return false
+  }
+
+  // Pick an UpToDate level if available; otherwise accept any level
+  const level =
+    id.tcbLevels.find((l) => l.tcbStatus.toLowerCase() === "uptodate") ||
+    id.tcbLevels[0]
+  if (!level) return false
+  if (level.tcb.isvsvn !== report.isvSvn) return false
+
+  return true
+}
+
+/** Minimal freshness validation for TCB Info collateral. */
+export function verifyTcbInfoFreshness(tcbInfo: TcbInfo, atTimeMs?: number) {
+  const now = atTimeMs ?? Date.now()
+  const info = tcbInfo.tcbInfo
+  const notBefore = Date.parse(info.issueDate)
+  const notAfter = Date.parse(info.nextUpdate)
+  return notBefore <= now && now <= notAfter
+}
+
 /**
  * Verify a complete certificate chain for a TDX enclave, including the
  * Intel SGX Root CA, PCK certificate chain, and QE signature and binding.
@@ -129,6 +249,22 @@ export function verifyPCKChain(
     if (!(notBefore <= verifyAtTimeMs && verifyAtTimeMs <= notAfter)) {
       return { status: "expired", root: chain[chain.length - 1] ?? null, chain }
     }
+  }
+
+  // Basic constraints sanity: non-leaf should be CA
+  for (let i = 1; i < chain.length; i++) {
+    // parent certs only
+    const parent = chain[i]
+    try {
+      const legacy = (parent as any).toLegacyObject?.()
+      const constraints: boolean | undefined = legacy?.extensions?.find?.(
+        (e: any) => e.name === "basicConstraints",
+      )?.cA
+      // If extension present, require CA=true
+      if (constraints !== undefined && constraints !== true) {
+        return { status: "invalid", root: null, chain: [] }
+      }
+    } catch {}
   }
 
   return { status: "valid", root: chain[chain.length - 1] ?? null, chain }
@@ -299,4 +435,94 @@ export function verifyTdxV4Signature(quoteInput: string | Buffer): boolean {
   verifier.update(message)
   verifier.end()
   return verifier.verify(publicKey, derSig)
+}
+
+/**
+ * Perform a comprehensive chain-of-trust evaluation for a TDX v4 quote.
+ * Returns a per-step breakdown without throwing on failures.
+ */
+export function verifyTdxChain(
+  quoteInput: string | Buffer,
+  pinnedRootCerts: X509Certificate[],
+  options?: {
+    date?: number
+    extraCerts?: string[]
+    qeIdentity?: QeIdentity
+    tcbInfo?: TcbInfo
+  },
+): { ok: boolean; steps: TrustStep[] } {
+  const steps: TrustStep[] = []
+  const at = options?.date ?? Date.now()
+
+  const quoteBytes = Buffer.isBuffer(quoteInput)
+    ? quoteInput
+    : Buffer.from(quoteInput, "base64")
+
+  // 1. Quote signature
+  let ok = false
+  try {
+    ok = verifyTdxV4Signature(quoteBytes)
+  } catch {
+    ok = false
+  }
+  steps.push({ name: "TDX v4 quote signature (attestation key)", ok })
+
+  // 2. QE binding
+  let okBinding = false
+  try {
+    okBinding = verifyQeReportBinding(quoteBytes)
+  } catch {
+    okBinding = false
+  }
+  steps.push({ name: "QE report binding (attestation key to QE report)", ok: okBinding })
+
+  // 3. QE report signature by PCK
+  let okQeSig = false
+  try {
+    okQeSig = verifyQeReportSignature(quoteBytes, options?.extraCerts)
+  } catch {
+    okQeSig = false
+  }
+  steps.push({ name: "QE report signature (by PCK leaf)", ok: okQeSig })
+
+  // 4. PCK certificate chain and root pin
+  let okChain = false
+  try {
+    const result = verifyTdxCertChain(
+      quoteBytes,
+      pinnedRootCerts,
+      at,
+      options?.extraCerts,
+    )
+    okChain = !!result
+  } catch (e: any) {
+    okChain = false
+    steps.push({ name: "PCK cert chain/root pin", ok: false, details: String(e?.message || e) })
+  }
+  if (okChain) steps.push({ name: "PCK cert chain/root pin", ok: true })
+
+  // 5. QE Identity (optional collateral)
+  if (options?.qeIdentity) {
+    let okQeId = false
+    try {
+      okQeId = verifyQeIdentity(quoteBytes, options.qeIdentity, at)
+    } catch {
+      okQeId = false
+    }
+    steps.push({ name: "QE Identity (MRSIGNER/attributes/ISV)", ok: okQeId })
+  }
+
+  // 6. TCB Info freshness (optional collateral)
+  if (options?.tcbInfo) {
+    let okTcb = false
+    try {
+      okTcb = verifyTcbInfoFreshness(options.tcbInfo, at)
+    } catch {
+      okTcb = false
+    }
+    steps.push({ name: "TCB Info freshness window", ok: okTcb })
+  }
+
+  const allOk = steps.every((s) => s.ok)
+  return { ok: allOk, steps }
 }
