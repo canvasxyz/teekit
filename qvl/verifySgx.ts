@@ -185,8 +185,13 @@ export function verifySgxQuoteSignature(quoteInput: string | Buffer): boolean {
 
   const { header, signature } = parseSgxQuote(quoteBytes)
   if (header.version !== 3) throw new Error(`Unsupported quote version`)
-
   const message = getSgxSignedRegion(quoteBytes)
+  // Some SGX quotes in the ecosystem are signed over (header || body || sig_data_len).
+  // Fall back to that variant if the primary verification fails.
+  const sigLenField = quoteBytes.subarray(message.length, message.length + 4)
+  const messageWithLen = sigLenField.length === 4
+    ? Buffer.concat([message, sigLenField])
+    : message
   const rawSig = signature.ecdsa_signature
   const derSig = encodeEcdsaSignatureToDer(rawSig)
 
@@ -205,9 +210,14 @@ export function verifySgxQuoteSignature(quoteInput: string | Buffer): boolean {
   } as const
 
   const publicKey = createPublicKey({ key: jwk, format: "jwk" })
-
-  const verifier = createVerify("sha256")
+  // Try standard SGX signed region first
+  let verifier = createVerify("sha256")
   verifier.update(message)
+  verifier.end()
+  if (verifier.verify(publicKey, derSig)) return true
+  // Fallback: include sig_data_len in the signed region
+  verifier = createVerify("sha256")
+  verifier.update(messageWithLen)
   verifier.end()
   return verifier.verify(publicKey, derSig)
 }
