@@ -44,7 +44,9 @@ export function toBase64Url(buf: Buffer): string {
 
 /** Extract PEM certificates embedded in DCAP cert_data (type 5) */
 export function extractPemCertificates(certData: Buffer): string[] {
-  const text = certData.toString("utf8")
+  // Use 'latin1' encoding to avoid UTF-8 corruption of binary data
+  // This preserves all byte values 0-255 as-is
+  const text = certData.toString("latin1")
   const pemRegex =
     /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g
   const matches = text.match(pemRegex)
