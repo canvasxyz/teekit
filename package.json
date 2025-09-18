@@ -24,7 +24,7 @@
     "node-mocks-http": "^1.17.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "typed-struct": "^2.6.0",
+    "binary-parser": "^2.2.1",
     "webcrypto-liner": "^1.4.3",
     "ws": "^8.18.3"
   },

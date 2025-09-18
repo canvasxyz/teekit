@@ -4,10 +4,9 @@ import {
   TdxQuoteBody_1_5,
   TdxSignature,
 } from "./structs.js"
-import { ExtractType } from "typed-struct"
 import { hex } from "./utils.js"
 
-export const formatTDXHeader = (header: ExtractType<typeof QuoteHeader>) => {
+export const formatTDXHeader = (header: ReturnType<typeof QuoteHeader.parse>) => {
   return {
     version: header.version,
     att_key_type: header.att_key_type,
@@ -21,8 +20,8 @@ export const formatTDXHeader = (header: ExtractType<typeof QuoteHeader>) => {
 
 export const formatTDXQuoteBodyV4 = (
   report:
-    | ExtractType<typeof TdxQuoteBody_1_0>
-    | InstanceType<typeof TdxQuoteBody_1_5>,
+    | ReturnType<typeof TdxQuoteBody_1_0.parse>
+    | ReturnType<typeof TdxQuoteBody_1_5.parse>,
 ) => {
   return {
     seam_svn: report.seam_svn,
