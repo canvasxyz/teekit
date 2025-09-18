@@ -7,10 +7,9 @@ import {
   cryptoProvider,
 } from "@peculiar/x509"
 
-const webCrypto =
-  globalThis.crypto && globalThis.crypto.subtle
-    ? globalThis.crypto
-    : new Crypto()
+// Set up crypto provider for browser compatibility
+// Use @peculiar/webcrypto for better browser compatibility
+const webCrypto = new Crypto()
 cryptoProvider.set(webCrypto as any)
 
 import {
