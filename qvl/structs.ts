@@ -1,121 +1,113 @@
-import { ExtractType, Struct } from "typed-struct"
+import { Parser } from "binary-parser"
 
-export const QuoteHeader = new Struct("QuoteHeader")
-  .UInt16LE("version")
-  .UInt16LE("att_key_type")
-  .UInt32LE("tee_type")
-  .UInt16LE("qe_svn")
-  .UInt16LE("pce_svn")
-  .Buffer("qe_vendor_id", 16)
-  .Buffer("user_data", 20)
-  .compile()
+export type Parsed<T extends Parser<any>> = T extends Parser<infer R> ? R : never
 
-export const SgxReportBody = new Struct("SgxReportBody")
-  .Buffer("cpu_svn", 16)
-  .UInt32LE("misc_select")
-  .Buffer("reserved1", 28)
-  .Buffer("attributes", 16)
-  .Buffer("mr_enclave", 32)
-  .Buffer("reserved2", 32)
-  .Buffer("mr_signer", 32)
-  .Buffer("reserved3", 96)
-  .UInt16LE("isv_prod_id")
-  .UInt16LE("isv_svn")
-  .Buffer("reserved4", 60)
-  .Buffer("report_data", 64)
-  .compile()
+export const QuoteHeader = new Parser()
+  .uint16le("version")
+  .uint16le("att_key_type")
+  .uint32le("tee_type")
+  .uint16le("qe_svn")
+  .uint16le("pce_svn")
+  .buffer("qe_vendor_id", { length: 16 })
+  .buffer("user_data", { length: 20 })
 
-export const TdxQuoteBody_1_0 = new Struct("TdxQuoteBodyV1_0")
-  .Buffer("tee_tcb_svn", 16)
-  .Buffer("mr_seam", 48)
-  .Buffer("mr_seam_signer", 48)
-  .UInt32LE("seam_svn")
-  .UInt32LE("reserved0")
-  .Buffer("td_attributes", 8)
-  .Buffer("xfam", 8)
-  .Buffer("mr_td", 48)
-  .Buffer("mr_config_id", 48)
-  .Buffer("mr_owner", 48)
-  .Buffer("mr_owner_config", 48)
-  .Buffer("rtmr0", 48)
-  .Buffer("rtmr1", 48)
-  .Buffer("rtmr2", 48)
-  .Buffer("rtmr3", 48)
-  .Buffer("report_data", 64)
-  .compile()
+export const SgxReportBody = new Parser()
+  .buffer("cpu_svn", { length: 16 })
+  .uint32le("misc_select")
+  .buffer("reserved1", { length: 28 })
+  .buffer("attributes", { length: 16 })
+  .buffer("mr_enclave", { length: 32 })
+  .buffer("reserved2", { length: 32 })
+  .buffer("mr_signer", { length: 32 })
+  .buffer("reserved3", { length: 96 })
+  .uint16le("isv_prod_id")
+  .uint16le("isv_svn")
+  .buffer("reserved4", { length: 60 })
+  .buffer("report_data", { length: 64 })
 
-export const TdxQuoteBody_1_5 = new Struct("TdxQuoteBodyV1_5")
-  .Buffer("tee_tcb_svn", 16)
-  .Buffer("mr_seam", 48)
-  .Buffer("mr_seam_signer", 48)
-  .UInt32LE("seam_svn")
-  .UInt32LE("reserved0")
-  .Buffer("td_attributes", 8)
-  .Buffer("xfam", 8)
-  .Buffer("mr_td", 48)
-  .Buffer("mr_config_id", 48)
-  .Buffer("mr_owner", 48)
-  .Buffer("mr_owner_config", 48)
-  .Buffer("rtmr0", 48)
-  .Buffer("rtmr1", 48)
-  .Buffer("rtmr2", 48)
-  .Buffer("rtmr3", 48)
-  .Buffer("report_data", 64)
-  .Buffer("tee_tcb_svn_2", 16) // appended
-  .Buffer("mrservictd", 48) // appended
-  .compile()
+export const TdxQuoteBody_1_0 = new Parser()
+  .buffer("tee_tcb_svn", { length: 16 })
+  .buffer("mr_seam", { length: 48 })
+  .buffer("mr_seam_signer", { length: 48 })
+  .uint32le("seam_svn")
+  .uint32le("reserved0")
+  .buffer("td_attributes", { length: 8 })
+  .buffer("xfam", { length: 8 })
+  .buffer("mr_td", { length: 48 })
+  .buffer("mr_config_id", { length: 48 })
+  .buffer("mr_owner", { length: 48 })
+  .buffer("mr_owner_config", { length: 48 })
+  .buffer("rtmr0", { length: 48 })
+  .buffer("rtmr1", { length: 48 })
+  .buffer("rtmr2", { length: 48 })
+  .buffer("rtmr3", { length: 48 })
+  .buffer("report_data", { length: 64 })
 
-export const SgxQuote = new Struct("SgxQuote")
-  .Struct("header", QuoteHeader)
-  .Struct("body", SgxReportBody)
-  .UInt32LE("sig_data_len")
-  .Buffer("sig_data")
-  .compile()
+export const TdxQuoteBody_1_5 = new Parser()
+  .buffer("tee_tcb_svn", { length: 16 })
+  .buffer("mr_seam", { length: 48 })
+  .buffer("mr_seam_signer", { length: 48 })
+  .uint32le("seam_svn")
+  .uint32le("reserved0")
+  .buffer("td_attributes", { length: 8 })
+  .buffer("xfam", { length: 8 })
+  .buffer("mr_td", { length: 48 })
+  .buffer("mr_config_id", { length: 48 })
+  .buffer("mr_owner", { length: 48 })
+  .buffer("mr_owner_config", { length: 48 })
+  .buffer("rtmr0", { length: 48 })
+  .buffer("rtmr1", { length: 48 })
+  .buffer("rtmr2", { length: 48 })
+  .buffer("rtmr3", { length: 48 })
+  .buffer("report_data", { length: 64 })
+  .buffer("tee_tcb_svn_2", { length: 16 })
+  .buffer("mrservictd", { length: 48 })
 
-export const SgxTail = new Struct("SgxTail")
-  .UInt16LE("cert_data_type")
-  .UInt32LE("cert_data_len")
-  .Buffer("cert_data")
-  .compile()
+export const SgxQuote = new Parser()
+  .nest("header", { type: QuoteHeader })
+  .nest("body", { type: SgxReportBody })
+  .uint32le("sig_data_len")
+  .buffer("sig_data", { readUntil: "eof" })
 
-export const TdxQuoteV4 = new Struct("TdxQuoteV4")
-  .Struct("header", QuoteHeader)
-  .Struct("body", TdxQuoteBody_1_0)
-  .UInt32LE("sig_data_len")
-  .Buffer("sig_data")
-  .compile()
+export const SgxTail = new Parser()
+  .uint16le("cert_data_type")
+  .uint32le("cert_data_len")
+  .buffer("cert_data", { readUntil: "eof" })
 
-export const TdxQuoteV5Descriptor = new Struct("TdxQuoteV5BodyDescriptor")
-  .Struct("header", QuoteHeader)
-  .UInt16LE("body_type")
-  .UInt32LE("body_size")
-  .Buffer("extra")
-  .compile()
+export const TdxQuoteV4 = new Parser()
+  .nest("header", { type: QuoteHeader })
+  .nest("body", { type: TdxQuoteBody_1_0 })
+  .uint32le("sig_data_len")
+  .buffer("sig_data", { readUntil: "eof" })
 
-export const TdxQuoteV5SigDescriptor = new Struct("TdxQuoteV5SigDescriptor")
-  .UInt32LE("sig_data_len")
-  .Buffer("sig_data")
-  .compile()
+export const TdxQuoteV5Descriptor = new Parser()
+  .nest("header", { type: QuoteHeader })
+  .uint16le("body_type")
+  .uint32le("body_size")
+  .buffer("extra", { readUntil: "eof" })
+
+export const TdxQuoteV5SigDescriptor = new Parser()
+  .uint32le("sig_data_len")
+  .buffer("sig_data", { readUntil: "eof" })
 
 /**
  * SGX signatures contain a fixed-length ECDSA signature section, and
  * a variable-length cert_data tail.
  */
 export function parseSgxSignature(quote: Buffer) {
-  const { sig_data } = new SgxQuote(quote)
+  const { sig_data } = SgxQuote.parse(quote)
 
-  const EcdsaSignatureFixed = new Struct("EcdsaSignatureFixed")
-    .Buffer("signature", 64)
-    .Buffer("attestation_public_key", 64)
-    .Buffer("qe_report", 384)
-    .Buffer("qe_report_signature", 64)
-    .UInt16LE("qe_auth_data_len")
-    .Buffer("extra")
-    .compile()
-  const fixed = new EcdsaSignatureFixed(sig_data)
+  const EcdsaSignatureFixed = new Parser()
+    .buffer("signature", { length: 64 })
+    .buffer("attestation_public_key", { length: 64 })
+    .buffer("qe_report", { length: 384 })
+    .buffer("qe_report_signature", { length: 64 })
+    .uint16le("qe_auth_data_len")
+    .buffer("extra", { readUntil: "eof" })
+  const fixed = EcdsaSignatureFixed.parse(sig_data)
 
   const tail = fixed.extra.subarray(fixed.qe_auth_data_len)
-  const { cert_data_type, cert_data_len, cert_data } = new SgxTail(tail)
+  const { cert_data_type, cert_data_len, cert_data } = SgxTail.parse(tail)
 
   return {
     ecdsa_signature: fixed.signature,
@@ -139,24 +131,23 @@ export function parseSgxSignature(quote: Buffer) {
 export function parseTdxSignature(quote: Buffer, v5?: boolean) {
   let sig_data
   if (!v5) {
-    sig_data = new TdxQuoteV4(quote).sig_data
+    sig_data = TdxQuoteV4.parse(quote).sig_data
   } else {
-    const { body_size, extra } = new TdxQuoteV5Descriptor(quote)
-    sig_data = new TdxQuoteV5SigDescriptor(extra.subarray(body_size)).sig_data
+    const { body_size, extra } = TdxQuoteV5Descriptor.parse(quote)
+    sig_data = TdxQuoteV5SigDescriptor.parse(extra.subarray(body_size)).sig_data
   }
 
-  const EcdsaSigFixed = new Struct("EcdsaSigFixed")
-    .Buffer("signature", 64)
-    .Buffer("attestation_public_key", 64)
-    .UInt16LE("cert_type")
-    .UInt32LE("cert_size")
-    .Buffer("qe_report", 384)
-    .Buffer("qe_report_signature", 64)
-    .UInt16LE("qe_auth_data_len")
-    .compile()
+  const EcdsaSigFixed = new Parser()
+    .buffer("signature", { length: 64 })
+    .buffer("attestation_public_key", { length: 64 })
+    .uint16le("cert_type")
+    .uint32le("cert_size")
+    .buffer("qe_report", { length: 384 })
+    .buffer("qe_report_signature", { length: 64 })
+    .uint16le("qe_auth_data_len")
 
-  const fixed = new EcdsaSigFixed(sig_data)
-  let offset = EcdsaSigFixed.baseSize
+  const fixed = EcdsaSigFixed.parse(sig_data)
+  let offset = EcdsaSigFixed.sizeOf()
 
   const qe_auth_data = sig_data.subarray(
     offset,
@@ -164,20 +155,16 @@ export function parseTdxSignature(quote: Buffer, v5?: boolean) {
   )
   offset += fixed.qe_auth_data_len
 
-  const Tail = new Struct("Tail")
-    .UInt16LE("cert_data_type")
-    .UInt32LE("cert_data_len")
-    .compile()
+  const Tail = new Parser()
+    .uint16le("cert_data_type")
+    .uint32le("cert_data_len")
 
-  const { cert_data_type, cert_data_len } = new Tail(
-    sig_data.subarray(offset, offset + Tail.baseSize),
+  const { cert_data_type, cert_data_len } = Tail.parse(
+    sig_data.subarray(offset, offset + Tail.sizeOf()),
   )
-  offset += Tail.baseSize
+  offset += Tail.sizeOf()
 
-  const CertData = new Struct("CertData")
-    .Buffer("cert_data", cert_data_len)
-    .compile()
-  const { cert_data } = new CertData(sig_data.subarray(offset))
+  const cert_data = sig_data.subarray(offset, offset + cert_data_len)
 
   return {
     ecdsa_signature: fixed.signature,
@@ -200,15 +187,15 @@ export type TdxSignature = ReturnType<typeof parseTdxSignature>
  * Compute the signed region of an SGX quote: header || body (excludes sig length and sig_data)
  */
 export function getSgxSignedRegion(quoteBytes: Buffer): Buffer {
-  return quoteBytes.subarray(0, QuoteHeader.baseSize + SgxReportBody.baseSize)
+  return quoteBytes.subarray(0, QuoteHeader.sizeOf() + SgxReportBody.sizeOf())
 }
 
 /**
  * Compute the signed region of a TDX 1.0 quote: header || body (excludes sig length and sig_data)
  */
 export function getTdx10SignedRegion(quoteBytes: Buffer): Buffer {
-  const headerLen = QuoteHeader.baseSize as number
-  const bodyLen = TdxQuoteBody_1_0.baseSize as number
+  const headerLen = QuoteHeader.sizeOf()
+  const bodyLen = TdxQuoteBody_1_0.sizeOf()
   return quoteBytes.subarray(0, headerLen + bodyLen)
 }
 
@@ -216,8 +203,8 @@ export function getTdx10SignedRegion(quoteBytes: Buffer): Buffer {
  * Compute the signed region of a TDX 1.5 quote: header || body_descriptor || body
  */
 export function getTdx15SignedRegion(quoteBytes: Buffer): Buffer {
-  const { body_size } = new TdxQuoteV5Descriptor(quoteBytes)
-  const headerLen = QuoteHeader.baseSize as number
+  const { body_size } = TdxQuoteV5Descriptor.parse(quoteBytes)
+  const headerLen = QuoteHeader.sizeOf()
   const totalLen = headerLen + 2 + 4 + body_size
   return quoteBytes.subarray(0, totalLen)
 }
@@ -225,27 +212,31 @@ export function getTdx15SignedRegion(quoteBytes: Buffer): Buffer {
 /**
  * Parse a TDX 1.0 or 1.5 quote as header, body, and signature.
  */
+export type QuoteHeaderType = Parsed<typeof QuoteHeader>
+export type TdxQuoteBody10Type = Parsed<typeof TdxQuoteBody_1_0>
+export type TdxQuoteBody15Type = Parsed<typeof TdxQuoteBody_1_5>
+
 export function parseTdxQuote(quote: Buffer): {
-  header: ExtractType<typeof QuoteHeader>
-  body: ExtractType<typeof TdxQuoteBody_1_0 | typeof TdxQuoteBody_1_5>
+  header: QuoteHeaderType
+  body: TdxQuoteBody10Type | TdxQuoteBody15Type
   signature: TdxSignature
 } {
-  const header = new QuoteHeader(quote)
+  const header = QuoteHeader.parse(quote)
   if (header.version === 4) {
-    const { body } = new TdxQuoteV4(quote)
+    const { body } = TdxQuoteV4.parse(quote)
     const signature = parseTdxSignature(quote)
 
     return { header, body, signature }
   } else if (header.version === 5) {
-    const { body_type, body_size, extra } = new TdxQuoteV5Descriptor(quote)
+    const { body_type, body_size, extra } = TdxQuoteV5Descriptor.parse(quote)
 
-    let body
+    let body: TdxQuoteBody10Type | TdxQuoteBody15Type
     if (body_type === 1) {
       throw new Error("parseQuote: unexpected body_type = 1")
     } else if (body_type === 2) {
-      body = new TdxQuoteBody_1_0(extra.subarray(0, body_size))
+      body = TdxQuoteBody_1_0.parse(extra.subarray(0, body_size))
     } else if (body_type === 3) {
-      body = new TdxQuoteBody_1_5(extra.subarray(0, body_size))
+      body = TdxQuoteBody_1_5.parse(extra.subarray(0, body_size))
     } else {
       throw new Error("parseQuote: unexpected body_type")
     }
@@ -267,16 +258,16 @@ export function parseTdxQuoteBase64(quote: string) {
  * Parse a TDX 1.0 or 1.5 quote as header, body, and signature.
  */
 export function parseSgxQuote(quote: Buffer): {
-  header: ExtractType<typeof QuoteHeader>
-  body: ExtractType<typeof SgxReportBody>
+  header: QuoteHeaderType
+  body: Parsed<typeof SgxReportBody>
   signature: SgxSignature
 } {
-  const header = new QuoteHeader(quote)
+  const header = QuoteHeader.parse(quote)
   if (header.version !== 3) {
     throw new Error("parseQuote: Unsupported SGX quote version")
   }
 
-  const { body } = new SgxQuote(quote)
+  const { body } = SgxQuote.parse(quote)
   const signature = parseSgxSignature(quote)
 
   return { header, body, signature }
