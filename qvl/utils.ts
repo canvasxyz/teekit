@@ -44,11 +44,22 @@ export function toBase64Url(buf: Buffer): string {
 
 /** Extract PEM certificates embedded in DCAP cert_data (type 5) */
 export function extractPemCertificates(certData: Buffer): string[] {
-  const text = certData.toString("utf8")
+  // DCAP cert_data may include trailing NUL padding; strip it for consistency
+  let end = certData.length
+  while (end > 0 && certData[end - 1] === 0x00) end--
+  const sanitized = certData.subarray(0, end)
+
+  // Normalize line endings to LF to avoid environment-dependent CRLF/LF differences
+  const text = sanitized.toString("utf8").replace(/\r\n/g, "\n")
+
   const pemRegex =
     /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g
   const matches = text.match(pemRegex)
-  return matches ? matches : []
+  if (!matches) return []
+  return matches.map((pem) => {
+    const trimmed = pem.trim()
+    return trimmed.endsWith("\n") ? trimmed : trimmed + "\n"
+  })
 }
 
 /** Compute SHA-256 of a certificate's DER bytes, lowercase hex */
