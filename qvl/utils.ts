@@ -1,4 +1,8 @@
-import { createHash, X509Certificate } from "crypto"
+import { Crypto } from "@peculiar/webcrypto"
+import { X509Certificate, cryptoProvider } from "@peculiar/x509"
+
+const crypto = new Crypto()
+cryptoProvider.set(crypto)
 
 export const hex = (b: Buffer) => b.toString("hex")
 
@@ -49,8 +53,9 @@ export function extractPemCertificates(certData: Buffer): string[] {
 }
 
 /** Compute SHA-256 of a certificate's DER bytes, lowercase hex */
-export function computeCertSha256Hex(cert: X509Certificate): string {
-  return createHash("sha256").update(cert.raw).digest("hex")
+export async function computeCertSha256Hex(cert: X509Certificate): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", cert.rawData)
+  return Buffer.from(hashBuffer).toString("hex")
 }
 
 /** Normalize a certificate serial number to uppercase hex without delimiters or leading zeros */

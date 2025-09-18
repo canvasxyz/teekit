@@ -1,15 +1,14 @@
+import { Crypto } from "@peculiar/webcrypto"
 import {
-  createHash,
-  createPublicKey,
-  createVerify,
   X509Certificate,
-} from "crypto"
-import {
-  X509Certificate as ExtX509Certificate,
   BasicConstraintsExtension,
   KeyUsagesExtension,
   KeyUsageFlags,
+  cryptoProvider,
 } from "@peculiar/x509"
+
+const crypto = new Crypto()
+cryptoProvider.set(crypto)
 
 import {
   getTdx10SignedRegion,
@@ -43,7 +42,7 @@ export const DEFAULT_PINNED_ROOT_CERTS: X509Certificate[] = [
  *
  * Optional: accepts `extraCertdata`, which is used if `quote` is missing certdata.
  */
-export function verifyTdx(quote: Buffer, config?: VerifyConfig) {
+export async function verifyTdx(quote: Buffer, config?: VerifyConfig) {
   if (
     config !== undefined &&
     (typeof config !== "object" || Array.isArray(config))
@@ -57,14 +56,14 @@ export function verifyTdx(quote: Buffer, config?: VerifyConfig) {
   const crls = config?.crls
   const { signature, header } = parseTdxQuote(quote)
   const certs = extractPemCertificates(signature.cert_data)
-  let { status, root } = verifyPCKChain(certs, date ?? +new Date(), crls)
+  let { status, root } = await verifyPCKChain(certs, date ?? +new Date(), crls)
 
   // Use fallback certs, only if certdata is not provided
   if (!root && certs.length === 0) {
     if (!extraCertdata) {
       throw new Error("verifyTdx: missing certdata")
     }
-    const fallback = verifyPCKChain(extraCertdata, date ?? +new Date(), crls)
+    const fallback = await verifyPCKChain(extraCertdata, date ?? +new Date(), crls)
     status = fallback.status
     root = fallback.root
   }
@@ -82,8 +81,8 @@ export function verifyTdx(quote: Buffer, config?: VerifyConfig) {
   }
 
   // Check against the pinned root certificates
-  const candidateRootHash = computeCertSha256Hex(root)
-  const knownRootHashes = new Set(pinnedRootCerts.map(computeCertSha256Hex))
+  const candidateRootHash = await computeCertSha256Hex(root)
+  const knownRootHashes = new Set(await Promise.all(pinnedRootCerts.map(computeCertSha256Hex)))
   const rootIsValid = knownRootHashes.has(candidateRootHash)
   if (!rootIsValid) {
     throw new Error("verifyTdx: invalid root")
@@ -98,21 +97,21 @@ export function verifyTdx(quote: Buffer, config?: VerifyConfig) {
   if (signature.cert_data_type !== 5) {
     throw new Error("verifyTdx: only PCK cert_data is supported")
   }
-  if (!verifyTdxQeReportSignature(quote, extraCertdata)) {
+  if (!(await verifyTdxQeReportSignature(quote, extraCertdata))) {
     throw new Error("verifyTdx: invalid qe report signature")
   }
-  if (!verifyTdxQeReportBinding(quote)) {
+  if (!(await verifyTdxQeReportBinding(quote))) {
     throw new Error("verifyTdx: invalid qe report binding")
   }
-  if (!verifyTdxQuoteSignature(quote)) {
+  if (!(await verifyTdxQuoteSignature(quote))) {
     throw new Error("verifyTdx: invalid signature over quote")
   }
 
   return true
 }
 
-export function verifyTdxBase64(quote: string, config?: VerifyConfig) {
-  return verifyTdx(Buffer.from(quote, "base64"), config)
+export async function verifyTdxBase64(quote: string, config?: VerifyConfig) {
+  return await verifyTdx(Buffer.from(quote, "base64"), config)
 }
 
 /**
@@ -121,23 +120,19 @@ export function verifyTdxBase64(quote: string, config?: VerifyConfig) {
  * - Expects at least two certificates.
  * - Checks the validity window of each certificate.
  */
-export function verifyPCKChain(
+export async function verifyPCKChain(
   certData: string[],
   verifyAtTimeMs: number | null,
   crls?: Buffer[],
-): {
+): Promise<{
   status: "valid" | "invalid" | "expired" | "revoked"
   root: X509Certificate | null
   chain: X509Certificate[]
-} {
+}> {
   if (certData.length === 0) return { status: "invalid", root: null, chain: [] }
 
-  // Build paired views for each certificate (Node for chaining, Peculiar for extensions)
-  const pairs = certData.map((pem) => ({
-    node: new X509Certificate(pem),
-    ext: new ExtX509Certificate(pem),
-  }))
-  const certs = pairs.map((p) => p.node)
+  // Build certificate objects using @peculiar/x509
+  const certs = certData.map((pem) => new X509Certificate(pem))
 
   // Identify leaf (not an issuer of any other provided cert)
   let leaf: X509Certificate | undefined
@@ -169,8 +164,8 @@ export function verifyPCKChain(
 
   // Check for expired or not-yet-valid certificates
   for (const c of chain) {
-    const notBefore = new Date(c.validFrom).getTime()
-    const notAfter = new Date(c.validTo).getTime()
+    const notBefore = c.notBefore.getTime()
+    const notAfter = c.notAfter.getTime()
     if (
       verifyAtTimeMs !== null &&
       !(notBefore <= verifyAtTimeMs && verifyAtTimeMs <= notAfter)
@@ -184,7 +179,7 @@ export function verifyPCKChain(
     const child = chain[i]
     const parent = chain[i + 1]
     try {
-      if (!child.verify(parent.publicKey)) {
+      if (!(await child.verify(parent))) {
         return { status: "invalid", root: null, chain: [] }
       }
     } catch {
@@ -196,7 +191,7 @@ export function verifyPCKChain(
   const terminal = chain[chain.length - 1]
   if (terminal && terminal.subject === terminal.issuer) {
     try {
-      if (!terminal.verify(terminal.publicKey)) {
+      if (!(await terminal.verify(terminal))) {
         return { status: "invalid", root: null, chain: [] }
       }
     } catch {
@@ -210,52 +205,39 @@ export function verifyPCKChain(
   // - End-entity leaf must assert ca = false if basicConstraints present
   // - End-entity with keyUsage must include digitalSignature (used for ECDSA signing)
   // - Respect pathLenConstraint when present on CA certs
-  const getExtForNode = (node: X509Certificate): ExtX509Certificate | null => {
-    const idx = certs.indexOf(node)
-    if (idx === -1) return null
-    return pairs[idx].ext
-  }
 
   // Determine CA flag of each cert in the path using BasicConstraints if present
   const isCAInChain: boolean[] = chain.map((node) => {
-    const extCert = getExtForNode(node)
-    if (!extCert) return false
-    const bc = extCert.getExtension(BasicConstraintsExtension)
+    const bc = node.getExtension(BasicConstraintsExtension)
     return bc ? !!bc.ca : false
   })
 
   // Leaf checks
   const leafNode = chain[0]
-  const extCert = getExtForNode(leafNode)
-  if (extCert) {
-    const bc = extCert.getExtension(BasicConstraintsExtension)
-    if (bc && bc.ca) {
+  const bc = leafNode.getExtension(BasicConstraintsExtension)
+  if (bc && bc.ca) {
+    return { status: "invalid", root: null, chain: [] }
+  }
+  const ku = leafNode.getExtension(KeyUsagesExtension)
+  if (ku) {
+    const hasDigitalSignature =
+      (ku.usages & KeyUsageFlags.digitalSignature) !== 0
+    if (!hasDigitalSignature) {
       return { status: "invalid", root: null, chain: [] }
-    }
-    const ku = extCert.getExtension(KeyUsagesExtension)
-    if (ku) {
-      const hasDigitalSignature =
-        (ku.usages & KeyUsageFlags.digitalSignature) !== 0
-      if (!hasDigitalSignature) {
-        return { status: "invalid", root: null, chain: [] }
-      }
     }
   }
 
   // CA and pathLen checks for all issuers in the chain
   for (let i = 1; i < chain.length; i++) {
     const issuerNode = chain[i]
-    const extCert = getExtForNode(issuerNode)
-    if (!extCert) continue
-
-    const bc = extCert.getExtension(BasicConstraintsExtension)
+    const bc = issuerNode.getExtension(BasicConstraintsExtension)
     // CA certs must assert CA=true
     if (!bc || !bc.ca) {
       return { status: "invalid", root: null, chain: [] }
     }
 
     // keyUsage, if present, must include keyCertSign
-    const ku = extCert.getExtension(KeyUsagesExtension)
+    const ku = issuerNode.getExtension(KeyUsagesExtension)
     if (ku) {
       const canSignCert = (ku.usages & KeyUsageFlags.keyCertSign) !== 0
       if (!canSignCert) {
@@ -301,10 +283,10 @@ export function verifyPCKChain(
  * This verifies the PCK leaf certificate public key, against qe_report_signature
  * and the qe_report body (384 bytes).
  */
-export function verifyTdxQeReportSignature(
+export async function verifyTdxQeReportSignature(
   quoteInput: string | Buffer,
   extraCerts?: string[],
-): boolean {
+): Promise<boolean> {
   const quoteBytes = Buffer.isBuffer(quoteInput)
     ? quoteInput
     : Buffer.from(quoteInput, "base64")
@@ -325,7 +307,7 @@ export function verifyTdxQeReportSignature(
   }
   if (certs.length === 0) return false
 
-  const { chain } = verifyPCKChain(certs, null)
+  const { chain } = await verifyPCKChain(certs, null)
 
   if (chain.length === 0) return false
 
@@ -333,19 +315,32 @@ export function verifyTdxQeReportSignature(
   const pckLeafKey = pckLeafCert.publicKey
 
   // Following Intel's C++ implementation:
-  // 1. Convert raw ECDSA signature (64 bytes: r||s) to DER format
+  // 1. Use raw ECDSA signature (64 bytes: r||s) directly
   // 2. Verify with SHA-256 against the raw QE report blob (384 bytes)
   try {
-    const derSignature = encodeEcdsaSignatureToDer(
-      signature.qe_report_signature,
+    // Use the raw signature directly - webcrypto expects raw format for ECDSA
+    const rawSignature = signature.qe_report_signature
+    
+    // Import the public key for verification
+    const publicKey = await crypto.subtle.importKey(
+      "spki",
+      pckLeafKey.rawData,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"]
     )
-    const verifier = createVerify("sha256")
-    verifier.update(signature.qe_report)
-    verifier.end()
-    const result = verifier.verify(pckLeafKey, derSignature)
+    
+    // Verify the signature
+    const result = await crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      publicKey,
+      rawSignature,
+      signature.qe_report
+    )
 
     return result
-  } catch {
+  } catch (error) {
+    console.error("TDX QE report signature verification error:", error)
     return false
   }
 }
@@ -358,7 +353,7 @@ export function verifyTdxQeReportSignature(
  *
  * Accept several reasonable variants to accommodate ecosystem differences.
  */
-export function verifyTdxQeReportBinding(quoteInput: string | Buffer): boolean {
+export async function verifyTdxQeReportBinding(quoteInput: string | Buffer): Promise<boolean> {
   const quoteBytes = Buffer.isBuffer(quoteInput)
     ? quoteInput
     : Buffer.from(quoteInput, "base64")
@@ -368,16 +363,11 @@ export function verifyTdxQeReportBinding(quoteInput: string | Buffer): boolean {
     throw new Error("Unsupported quote version")
   if (!signature.qe_report_present) throw new Error("Missing QE report")
 
-  const hashedPubkey = createHash("sha256")
-    .update(signature.attestation_public_key)
-    .update(signature.qe_auth_data)
-    .digest()
-  const hashedUncompressedPubkey = createHash("sha256")
-    .update(
-      Buffer.concat([Buffer.from([0x04]), signature.attestation_public_key]),
-    )
-    .update(signature.qe_auth_data)
-    .digest()
+  const combinedData = Buffer.concat([signature.attestation_public_key, signature.qe_auth_data])
+  const hashedPubkey = await crypto.subtle.digest("SHA-256", combinedData)
+  
+  const uncompressedData = Buffer.concat([Buffer.from([0x04]), signature.attestation_public_key, signature.qe_auth_data])
+  const hashedUncompressedPubkey = await crypto.subtle.digest("SHA-256", uncompressedData)
 
   // QE report is 384 bytes; report_data occupies the last 64 bytes (offset 320).
   // The attestation_public_key should be embedded in the first half.
@@ -385,8 +375,8 @@ export function verifyTdxQeReportBinding(quoteInput: string | Buffer): boolean {
   const reportDataEmbed = reportData.subarray(0, 32)
 
   return (
-    hashedPubkey.equals(reportDataEmbed) ||
-    hashedUncompressedPubkey.equals(reportDataEmbed)
+    Buffer.from(hashedPubkey).equals(reportDataEmbed) ||
+    Buffer.from(hashedUncompressedPubkey).equals(reportDataEmbed)
   )
 }
 
@@ -395,7 +385,7 @@ export function verifyTdxQeReportBinding(quoteInput: string | Buffer): boolean {
  * with a ECDSA-P256 signature. This checks only the quote signature itself and
  * does not validate the certificate chain, QE report, CRLs, TCBs, etc.
  */
-export function verifyTdxQuoteSignature(quoteInput: string | Buffer): boolean {
+export async function verifyTdxQuoteSignature(quoteInput: string | Buffer): Promise<boolean> {
   const quoteBytes = Buffer.isBuffer(quoteInput)
     ? quoteInput
     : Buffer.from(quoteInput, "base64")
@@ -412,7 +402,6 @@ export function verifyTdxQuoteSignature(quoteInput: string | Buffer): boolean {
   }
 
   const rawSig = signature.ecdsa_signature
-  const derSig = encodeEcdsaSignatureToDer(rawSig)
 
   const pub = signature.attestation_public_key
   if (pub.length !== 64) {
@@ -428,10 +417,20 @@ export function verifyTdxQuoteSignature(quoteInput: string | Buffer): boolean {
     y,
   } as const
 
-  const publicKey = createPublicKey({ key: jwk, format: "jwk" })
+  // Import the public key from JWK format
+  const publicKey = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["verify"]
+  )
 
-  const verifier = createVerify("sha256")
-  verifier.update(message)
-  verifier.end()
-  return verifier.verify(publicKey, derSig)
+  // Verify the signature
+  return await crypto.subtle.verify(
+    { name: "ECDSA", hash: "SHA-256" },
+    publicKey,
+    rawSig,
+    message
+  )
 }
