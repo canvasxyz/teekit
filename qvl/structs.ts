@@ -1,4 +1,5 @@
 import { Parser } from "binary-parser"
+import { Buffer } from "buffer"
 
 export type Parsed<T extends Parser<any>> = T extends Parser<infer R>
   ? R
@@ -96,8 +97,8 @@ export const TdxQuoteV5SigDescriptor = new Parser()
  * SGX signatures contain a fixed-length ECDSA signature section, and
  * a variable-length cert_data tail.
  */
-export function parseSgxSignature(quote: Buffer) {
-  const { sig_data } = SgxQuote.parse(quote)
+export function parseSgxSignature(quote: Buffer | Uint8Array) {
+  const { sig_data } = SgxQuote.parse(Buffer.from(quote))
 
   const EcdsaSignatureFixed = new Parser()
     .buffer("signature", { length: 64 })
@@ -130,12 +131,12 @@ export function parseSgxSignature(quote: Buffer) {
  * variable offset for V5 quotes. It contains a fixed-length ECDSA signature,
  * variable-length QE auth_data, and variable-length cert_data tail.
  */
-export function parseTdxSignature(quote: Buffer, v5?: boolean) {
+export function parseTdxSignature(quote: Buffer | Uint8Array, v5?: boolean) {
   let sig_data
   if (!v5) {
-    sig_data = TdxQuoteV4.parse(quote).sig_data
+    sig_data = TdxQuoteV4.parse(Buffer.from(quote)).sig_data
   } else {
-    const { body_size, extra } = TdxQuoteV5Descriptor.parse(quote)
+    const { body_size, extra } = TdxQuoteV5Descriptor.parse(Buffer.from(quote))
     sig_data = TdxQuoteV5SigDescriptor.parse(extra.subarray(body_size)).sig_data
   }
 
@@ -186,27 +187,29 @@ export type TdxSignature = ReturnType<typeof parseTdxSignature>
 /**
  * Compute the signed region of an SGX quote: header || body (excludes sig length and sig_data)
  */
-export function getSgxSignedRegion(quoteBytes: Buffer): Buffer {
-  return quoteBytes.subarray(0, QuoteHeader.sizeOf() + SgxReportBody.sizeOf())
+export function getSgxSignedRegion(quoteBytes: Uint8Array): Buffer {
+  return Buffer.from(
+    quoteBytes.subarray(0, QuoteHeader.sizeOf() + SgxReportBody.sizeOf()),
+  )
 }
 
 /**
  * Compute the signed region of a TDX 1.0 quote: header || body (excludes sig length and sig_data)
  */
-export function getTdx10SignedRegion(quoteBytes: Buffer): Buffer {
+export function getTdx10SignedRegion(quoteBytes: Uint8Array): Buffer {
   const headerLen = QuoteHeader.sizeOf()
   const bodyLen = TdxQuoteBody_1_0.sizeOf()
-  return quoteBytes.subarray(0, headerLen + bodyLen)
+  return Buffer.from(quoteBytes.subarray(0, headerLen + bodyLen))
 }
 
 /**
  * Compute the signed region of a TDX 1.5 quote: header || body_descriptor || body
  */
-export function getTdx15SignedRegion(quoteBytes: Buffer): Buffer {
-  const { body_size } = TdxQuoteV5Descriptor.parse(quoteBytes)
+export function getTdx15SignedRegion(quoteBytes: Uint8Array): Buffer {
+  const { body_size } = TdxQuoteV5Descriptor.parse(Buffer.from(quoteBytes))
   const headerLen = QuoteHeader.sizeOf()
   const totalLen = headerLen + 2 + 4 + body_size
-  return quoteBytes.subarray(0, totalLen)
+  return Buffer.from(quoteBytes.subarray(0, totalLen))
 }
 
 /**
@@ -216,19 +219,21 @@ export type QuoteHeaderType = Parsed<typeof QuoteHeader>
 export type TdxQuoteBody10Type = Parsed<typeof TdxQuoteBody_1_0>
 export type TdxQuoteBody15Type = Parsed<typeof TdxQuoteBody_1_5>
 
-export function parseTdxQuote(quote: Buffer): {
+export function parseTdxQuote(quote: Buffer | Uint8Array): {
   header: QuoteHeaderType
   body: TdxQuoteBody10Type | TdxQuoteBody15Type
   signature: TdxSignature
 } {
-  const header = QuoteHeader.parse(quote)
+  const header = QuoteHeader.parse(Buffer.from(quote))
   if (header.version === 4) {
-    const { body } = TdxQuoteV4.parse(quote)
-    const signature = parseTdxSignature(quote)
+    const { body } = TdxQuoteV4.parse(Buffer.from(quote))
+    const signature = parseTdxSignature(Buffer.from(quote))
 
     return { header, body, signature }
   } else if (header.version === 5) {
-    const { body_type, body_size, extra } = TdxQuoteV5Descriptor.parse(quote)
+    const { body_type, body_size, extra } = TdxQuoteV5Descriptor.parse(
+      Buffer.from(quote),
+    )
 
     let body: TdxQuoteBody10Type | TdxQuoteBody15Type
     if (body_type === 1) {
@@ -241,7 +246,7 @@ export function parseTdxQuote(quote: Buffer): {
       throw new Error("parseQuote: unexpected body_type")
     }
 
-    const signature = parseTdxSignature(quote, true)
+    const signature = parseTdxSignature(Buffer.from(quote), true)
     return { header, body, signature }
   } else {
     throw new Error(

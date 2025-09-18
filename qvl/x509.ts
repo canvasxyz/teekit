@@ -4,6 +4,7 @@ import {
   BasicConstraints,
   RelativeDistinguishedNames,
 } from "pkijs"
+import { toString as u8aToString, fromString as u8aFromString } from "uint8arrays"
 
 // Adapters to be API-compatible with previous code
 export class BasicConstraintsExtension {
@@ -20,13 +21,12 @@ function pemToDerBytes(pem: string): Uint8Array {
     .replace(/-----BEGIN CERTIFICATE-----/g, "")
     .replace(/-----END CERTIFICATE-----/g, "")
     .replace(/\s+/g, "")
-  const buf = Buffer.from(b64, "base64")
-  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+  return u8aFromString(b64, "base64pad")
 }
 
 function nameToComparableString(name: RelativeDistinguishedNames): string {
   try {
-    const parts = name.typesAndValues.map((atv) => {
+    const parts = (name as any).typesAndValues.map((atv: any) => {
       const oid = atv.type
       const val = String(atv.value.valueBlock.value)
       return `${oid}=${val}`
@@ -38,7 +38,7 @@ function nameToComparableString(name: RelativeDistinguishedNames): string {
 }
 
 export class QV_X509Certificate {
-  private _cert: Certificate
+  private _cert: any
   public rawData: Uint8Array
 
   constructor(pem: string) {
@@ -47,24 +47,25 @@ export class QV_X509Certificate {
     if (asn1.offset === -1) {
       throw new Error("Failed to parse certificate")
     }
-    const cert = new Certificate({ schema: asn1.result })
+    const cert = new (Certificate as any)({ schema: asn1.result })
     this._cert = cert
     this.rawData = derBytes
   }
 
   get subject(): string {
-    return nameToComparableString(this._cert.subject)
+    return nameToComparableString(this._cert.subject as any)
   }
 
   get issuer(): string {
-    return nameToComparableString(this._cert.issuer)
+    return nameToComparableString(this._cert.issuer as any)
   }
 
   get serialNumber(): string {
     // Uppercase hex without leading 0x
-    const hex = Buffer.from(
-      this._cert.serialNumber.valueBlock.valueHexView,
-    ).toString("hex")
+    const hex = u8aToString(
+      (this._cert.serialNumber as any).valueBlock.valueHexView,
+      "hex",
+    )
     return hex.toUpperCase()
   }
 
@@ -78,14 +79,14 @@ export class QV_X509Certificate {
 
   get publicKey(): { rawData: ArrayBuffer } {
     // Export SPKI for WebCrypto import
-    const spki = this._cert.subjectPublicKeyInfo.toSchema().toBER(false)
+    const spki = (this._cert.subjectPublicKeyInfo as any).toSchema().toBER(false)
     return { rawData: spki }
   }
 
   async verify(issuerCert: QV_X509Certificate): Promise<boolean> {
     try {
       // Determine hash and curve
-      const sigOid = this._cert.signatureAlgorithm.algorithmId
+      const sigOid = (this._cert.signatureAlgorithm as any).algorithmId
       let hash: "SHA-256" | "SHA-384" | "SHA-512" = "SHA-256"
       if (sigOid.includes("1.2.840.10045.4.3.3")) hash = "SHA-384"
       else if (sigOid.includes("1.2.840.10045.4.3.4")) hash = "SHA-512"
@@ -93,8 +94,8 @@ export class QV_X509Certificate {
       // Named curve from issuer public key
       let namedCurve: "P-256" | "P-384" | "P-521" = "P-256"
       try {
-        const params =
-          issuerCert._cert.subjectPublicKeyInfo.algorithm.algorithmParams
+        const params = (issuerCert._cert.subjectPublicKeyInfo as any).algorithm
+          .algorithmParams
         const curveOid = params?.valueBlock?.toString?.() || ""
         if (curveOid === "1.3.132.0.34") namedCurve = "P-384"
         else if (curveOid === "1.3.132.0.35") namedCurve = "P-521"
@@ -106,11 +107,13 @@ export class QV_X509Certificate {
       const curveLen =
         namedCurve === "P-256" ? 32 : namedCurve === "P-384" ? 48 : 66
 
-      const tbs = this._cert.encodeTBS().toBER(false) as ArrayBuffer
+      const tbs = (this._cert as any).encodeTBS().toBER(false) as ArrayBuffer
       const sigDer = new Uint8Array(
-        this._cert.signatureValue.valueBlock.valueHex,
+        (this._cert.signatureValue as any).valueBlock.valueHex,
       )
-      const spki = issuerCert._cert.subjectPublicKeyInfo.toSchema().toBER(false)
+      const spki = (issuerCert._cert.subjectPublicKeyInfo as any)
+        .toSchema()
+        .toBER(false)
       const publicKey = await crypto.subtle.importKey(
         "spki",
         spki,
@@ -174,18 +177,23 @@ export class QV_X509Certificate {
     // Support BasicConstraints extension
     // OID 2.5.29.19, KeyUsage OID 2.5.29.15
     if (type === BasicConstraintsExtension) {
-      const ext = this._cert.extensions?.find((e) => e.extnID === "2.5.29.19")
+      const ext = (this._cert.extensions as any)?.find(
+        (e: any) => e.extnID === "2.5.29.19",
+      )
       if (!ext) return null
       try {
         const parsed = ext.parsedValue
         if (parsed) {
-          const bc = parsed as BasicConstraints
+          const bc = parsed as any
           const ca = !!bc.cA
           const pathLen =
             typeof bc.pathLenConstraint === "number"
               ? bc.pathLenConstraint
               : bc.pathLenConstraint?.valueBlock?.valueDec
-          return new BasicConstraintsExtension(ca, pathLen) as unknown as T
+          return new (BasicConstraintsExtension as any)(
+            ca,
+            pathLen,
+          ) as unknown as T
         }
         // Fallback parse
         const view = ext.extnValue.valueBlock.valueHexView
@@ -194,13 +202,16 @@ export class QV_X509Certificate {
           view.byteOffset,
           view.byteLength,
         )
-        const bc = new BasicConstraints({ schema: fromBER(innerView).result })
+        const bc = new (BasicConstraints as any)({ schema: fromBER(innerView).result })
         const ca = !!bc.cA
         const pathLen =
           typeof bc.pathLenConstraint === "number"
             ? bc.pathLenConstraint
             : bc.pathLenConstraint?.valueBlock?.valueDec
-        return new BasicConstraintsExtension(ca, pathLen) as unknown as T
+        return new (BasicConstraintsExtension as any)(
+          ca,
+          pathLen,
+        ) as unknown as T
       } catch {
         return null
       }

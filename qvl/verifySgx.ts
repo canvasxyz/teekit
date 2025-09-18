@@ -1,4 +1,5 @@
 import { getSgxSignedRegion, parseSgxQuote } from "./structs.js"
+import { Buffer } from "buffer"
 import {
   computeCertSha256Hex,
   extractPemCertificates,
@@ -9,8 +10,9 @@ import {
   VerifyConfig,
   verifyPCKChain,
 } from "./verifyTdx.js"
+import { concat as u8aConcat } from "uint8arrays"
 
-export async function verifySgx(quote: Buffer, config?: VerifyConfig) {
+export async function verifySgx(quote: Uint8Array, config?: VerifyConfig) {
   if (
     config !== undefined &&
     (typeof config !== "object" || Array.isArray(config))
@@ -22,7 +24,7 @@ export async function verifySgx(quote: Buffer, config?: VerifyConfig) {
   const date = config?.date
   const extraCertdata = config?.extraCertdata
   const crls = config?.crls
-  const { signature, header } = parseSgxQuote(quote)
+  const { signature, header } = parseSgxQuote(Buffer.from(quote))
   const certs = extractPemCertificates(signature.cert_data)
   let { status, root } = await verifyPCKChain(certs, date ?? +new Date(), crls)
 
@@ -91,14 +93,15 @@ export async function verifySgx(quote: Buffer, config?: VerifyConfig) {
  * (qe_report_body, 384 bytes) in qe_report_signature.
  */
 export async function verifySgxQeReportSignature(
-  quoteInput: string | Buffer,
+  quoteInput: string | Uint8Array,
   extraCerts?: string[],
 ): Promise<boolean> {
-  const quoteBytes = Buffer.isBuffer(quoteInput)
-    ? quoteInput
-    : Buffer.from(quoteInput, "base64")
+  const quoteBytes =
+    typeof quoteInput === "string"
+      ? (await import("uint8arrays")).fromString(quoteInput, "base64")
+      : new Uint8Array(quoteInput)
 
-  const { header, signature } = parseSgxQuote(quoteBytes)
+  const { header, signature } = parseSgxQuote(Buffer.from(quoteBytes))
   if (header.version !== 3) throw new Error("Unsupported quote version")
 
   // Must have a QE report to verify
@@ -157,24 +160,25 @@ export async function verifySgxQeReportSignature(
  * qe_report.report_data[0..32) == SHA256(attestation_public_key || qe_auth_data)
  */
 export async function verifySgxQeReportBinding(
-  quoteInput: string | Buffer,
+  quoteInput: string | Uint8Array,
 ): Promise<boolean> {
-  const quoteBytes = Buffer.isBuffer(quoteInput)
-    ? quoteInput
-    : Buffer.from(quoteInput, "base64")
+  const quoteBytes =
+    typeof quoteInput === "string"
+      ? (await import("uint8arrays")).fromString(quoteInput, "base64")
+      : new Uint8Array(quoteInput)
 
-  const { header, signature } = parseSgxQuote(quoteBytes)
+  const { header, signature } = parseSgxQuote(Buffer.from(quoteBytes))
   if (header.version !== 3) throw new Error("Unsupported quote version")
   if (!signature.qe_report_present) throw new Error("Missing QE report")
 
-  const combinedData = Buffer.concat([
+  const combinedData = u8aConcat([
     signature.attestation_public_key,
     signature.qe_auth_data,
   ])
   const hashedPubkey = await crypto.subtle.digest("SHA-256", combinedData)
 
-  const uncompressedData = Buffer.concat([
-    Buffer.from([0x04]),
+  const uncompressedData = u8aConcat([
+    Uint8Array.from([0x04]),
     signature.attestation_public_key,
     signature.qe_auth_data,
   ])
@@ -188,10 +192,12 @@ export async function verifySgxQeReportBinding(
   const reportData = signature.qe_report.subarray(320, 384)
   const reportDataEmbed = reportData.subarray(0, 32)
 
-  return (
-    Buffer.from(hashedPubkey).equals(reportDataEmbed) ||
-    Buffer.from(hashedUncompressedPubkey).equals(reportDataEmbed)
-  )
+  const hp = new Uint8Array(hashedPubkey)
+  const hup = new Uint8Array(hashedUncompressedPubkey)
+  const embed = new Uint8Array(reportDataEmbed)
+  const eq = (a: Uint8Array, b: Uint8Array) =>
+    a.length === b.length && a.every((v, i) => v === b[i])
+  return eq(hp, embed) || eq(hup, embed)
 }
 
 /**
@@ -199,13 +205,14 @@ export async function verifySgxQeReportBinding(
  * Does not validate the certificate chain, QE report, CRLs, TCBs, etc.
  */
 export async function verifySgxQuoteSignature(
-  quoteInput: string | Buffer,
+  quoteInput: string | Uint8Array,
 ): Promise<boolean> {
-  const quoteBytes = Buffer.isBuffer(quoteInput)
-    ? quoteInput
-    : Buffer.from(quoteInput, "base64")
+  const quoteBytes =
+    typeof quoteInput === "string"
+      ? (await import("uint8arrays")).fromString(quoteInput, "base64")
+      : new Uint8Array(quoteInput)
 
-  const { header, signature } = parseSgxQuote(quoteBytes)
+  const { header, signature } = parseSgxQuote(Buffer.from(quoteBytes))
   if (header.version !== 3) throw new Error(`Unsupported quote version`)
 
   const message = getSgxSignedRegion(quoteBytes)
@@ -244,5 +251,6 @@ export async function verifySgxQuoteSignature(
 }
 
 export async function verifySgxBase64(quote: string, config?: VerifyConfig) {
-  return await verifySgx(Buffer.from(quote, "base64"), config)
+  const { fromString } = await import("uint8arrays")
+  return await verifySgx(fromString(quote, "base64"), config)
 }

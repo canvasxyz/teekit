@@ -1,4 +1,6 @@
 import { parseTdxQuote } from "./structs.js"
+import { Buffer } from "buffer"
+import { fromString as u8aFromString } from "uint8arrays"
 
 type QeIdentity = {
   enclaveIdentity: {
@@ -37,9 +39,9 @@ function parseSgxReport(report: Buffer) {
   return { attributes, mrEnclave, mrSigner, isvProdId, isvSvn, reportData }
 }
 
-function hexEqualsMasked(actual: Buffer, expectedHex: string, maskHex: string) {
-  const exp = Buffer.from(expectedHex, "hex")
-  const mask = Buffer.from(maskHex, "hex")
+function hexEqualsMasked(actual: Uint8Array, expectedHex: string, maskHex: string) {
+  const exp = u8aFromString(expectedHex, "hex")
+  const mask = u8aFromString(maskHex, "hex")
   if (exp.length !== actual.length || mask.length !== actual.length)
     return false
   for (let i = 0; i < actual.length; i++) {
@@ -49,17 +51,18 @@ function hexEqualsMasked(actual: Buffer, expectedHex: string, maskHex: string) {
 }
 
 /** Verify QE Identity against the QE report embedded in the quote. */
-export function verifyQeIdentity(
-  quoteInput: string | Buffer,
+export async function verifyQeIdentity(
+  quoteInput: string | Uint8Array | string,
   qeIdentity: QeIdentity,
   atTimeMs?: number,
-): boolean {
+): Promise<boolean> {
   const now = atTimeMs ?? Date.now()
-  const quoteBytes = Buffer.isBuffer(quoteInput)
-    ? quoteInput
-    : Buffer.from(quoteInput, "base64")
+  const quoteBytes =
+    typeof quoteInput === "string"
+      ? (await import("uint8arrays")).fromString(quoteInput, "base64")
+      : new Uint8Array(quoteInput)
 
-  const { signature } = parseTdxQuote(quoteBytes)
+  const { signature } = parseTdxQuote(Buffer.from(quoteBytes))
   if (!signature.qe_report_present) return false
   const report = parseSgxReport(signature.qe_report)
 
@@ -74,7 +77,9 @@ export function verifyQeIdentity(
   }
 
   // MRSIGNER must match exactly
-  if (report.mrSigner.toString("hex") !== id.mrsigner.toLowerCase()) {
+  if (
+    Buffer.from(report.mrSigner).toString("hex") !== id.mrsigner.toLowerCase()
+  ) {
     return false
   }
 

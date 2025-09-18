@@ -1,4 +1,5 @@
 import { QV_X509Certificate, BasicConstraintsExtension } from "./x509.js"
+import { Buffer } from "buffer"
 import {
   getTdx10SignedRegion,
   getTdx15SignedRegion,
@@ -12,9 +13,10 @@ import {
   toBase64Url,
 } from "./utils.js"
 import { intelSgxRootCaPem } from "./rootCa.js"
+import { concat as u8aConcat } from "uint8arrays"
 
 export interface VerifyConfig {
-  crls: Buffer[]
+  crls: Uint8Array[]
   pinnedRootCerts?: QV_X509Certificate[]
   date?: number
   extraCertdata?: string[]
@@ -30,7 +32,7 @@ export const DEFAULT_PINNED_ROOT_CERTS: QV_X509Certificate[] = [
  *
  * Optional: accepts `extraCertdata`, which is used if `quote` is missing certdata.
  */
-export async function verifyTdx(quote: Buffer, config?: VerifyConfig) {
+export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
   if (
     config !== undefined &&
     (typeof config !== "object" || Array.isArray(config))
@@ -42,7 +44,7 @@ export async function verifyTdx(quote: Buffer, config?: VerifyConfig) {
   const date = config?.date
   const extraCertdata = config?.extraCertdata
   const crls = config?.crls
-  const { signature, header } = parseTdxQuote(quote)
+  const { signature, header } = parseTdxQuote(Buffer.from(quote))
   const certs = extractPemCertificates(signature.cert_data)
   let { status, root } = await verifyPCKChain(certs, date ?? +new Date(), crls)
 
@@ -105,7 +107,8 @@ export async function verifyTdx(quote: Buffer, config?: VerifyConfig) {
 }
 
 export async function verifyTdxBase64(quote: string, config?: VerifyConfig) {
-  return await verifyTdx(Buffer.from(quote, "base64"), config)
+  const { fromString } = await import("uint8arrays")
+  return await verifyTdx(fromString(quote, "base64"), config)
 }
 
 /**
@@ -117,7 +120,7 @@ export async function verifyTdxBase64(quote: string, config?: VerifyConfig) {
 export async function verifyPCKChain(
   certData: string[],
   verifyAtTimeMs: number | null,
-  crls?: Buffer[],
+  crls?: Uint8Array[],
 ): Promise<{
   status: "valid" | "invalid" | "expired" | "revoked"
   root: QV_X509Certificate | null
@@ -253,14 +256,15 @@ export async function verifyPCKChain(
  * and the qe_report body (384 bytes).
  */
 export async function verifyTdxQeReportSignature(
-  quoteInput: string | Buffer,
+  quoteInput: string | Uint8Array,
   extraCerts?: string[],
 ): Promise<boolean> {
-  const quoteBytes = Buffer.isBuffer(quoteInput)
-    ? quoteInput
-    : Buffer.from(quoteInput, "base64")
+  const quoteBytes =
+    typeof quoteInput === "string"
+      ? (await import("uint8arrays")).fromString(quoteInput, "base64")
+      : new Uint8Array(quoteInput)
 
-  const { header, signature } = parseTdxQuote(quoteBytes)
+  const { header, signature } = parseTdxQuote(Buffer.from(quoteBytes))
   if (header.version !== 4 && header.version !== 5)
     throw new Error("Unsupported quote version")
 
@@ -323,25 +327,26 @@ export async function verifyTdxQeReportSignature(
  * Accept several reasonable variants to accommodate ecosystem differences.
  */
 export async function verifyTdxQeReportBinding(
-  quoteInput: string | Buffer,
+  quoteInput: string | Uint8Array,
 ): Promise<boolean> {
-  const quoteBytes = Buffer.isBuffer(quoteInput)
-    ? quoteInput
-    : Buffer.from(quoteInput, "base64")
+  const quoteBytes =
+    typeof quoteInput === "string"
+      ? (await import("uint8arrays")).fromString(quoteInput, "base64")
+      : new Uint8Array(quoteInput)
 
-  const { header, signature } = parseTdxQuote(quoteBytes)
+  const { header, signature } = parseTdxQuote(Buffer.from(quoteBytes))
   if (header.version !== 4 && header.version !== 5)
     throw new Error("Unsupported quote version")
   if (!signature.qe_report_present) throw new Error("Missing QE report")
 
-  const combinedData = Buffer.concat([
+  const combinedData = u8aConcat([
     signature.attestation_public_key,
     signature.qe_auth_data,
   ])
   const hashedPubkey = await crypto.subtle.digest("SHA-256", combinedData)
 
-  const uncompressedData = Buffer.concat([
-    Buffer.from([0x04]),
+  const uncompressedData = u8aConcat([
+    Uint8Array.from([0x04]),
     signature.attestation_public_key,
     signature.qe_auth_data,
   ])
@@ -355,10 +360,12 @@ export async function verifyTdxQeReportBinding(
   const reportData = signature.qe_report.subarray(320, 384)
   const reportDataEmbed = reportData.subarray(0, 32)
 
-  return (
-    Buffer.from(hashedPubkey).equals(reportDataEmbed) ||
-    Buffer.from(hashedUncompressedPubkey).equals(reportDataEmbed)
-  )
+  const hp = new Uint8Array(hashedPubkey)
+  const hup = new Uint8Array(hashedUncompressedPubkey)
+  const embed = new Uint8Array(reportDataEmbed)
+  const eq = (a: Uint8Array, b: Uint8Array) =>
+    a.length === b.length && a.every((v, i) => v === b[i])
+  return eq(hp, embed) || eq(hup, embed)
 }
 
 /**
@@ -367,13 +374,14 @@ export async function verifyTdxQeReportBinding(
  * does not validate the certificate chain, QE report, CRLs, TCBs, etc.
  */
 export async function verifyTdxQuoteSignature(
-  quoteInput: string | Buffer,
+  quoteInput: string | Uint8Array,
 ): Promise<boolean> {
-  const quoteBytes = Buffer.isBuffer(quoteInput)
-    ? quoteInput
-    : Buffer.from(quoteInput, "base64")
+  const quoteBytes =
+    typeof quoteInput === "string"
+      ? (await import("uint8arrays")).fromString(quoteInput, "base64")
+      : new Uint8Array(quoteInput)
 
-  const { header, signature } = parseTdxQuote(quoteBytes)
+  const { header, signature } = parseTdxQuote(Buffer.from(quoteBytes))
 
   let message
   if (header.version === 4) {

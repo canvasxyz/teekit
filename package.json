@@ -27,7 +27,8 @@
     "react-dom": "^19.1.1",
     "binary-parser": "^2.2.0",
     "webcrypto-liner": "^1.4.3",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "uint8arrays": "^5.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
