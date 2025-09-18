@@ -12,7 +12,7 @@ export const QuoteHeader = new Struct("QuoteHeader")
 
 export const SgxReportBody = new Struct("SgxReportBody")
   .Buffer("cpu_svn", 16)
-  .UInt32LE("misc_select", 32)
+  .UInt32LE("misc_select")
   .Buffer("reserved1", 28)
   .Buffer("attributes", 16)
   .Buffer("mr_enclave", 32)

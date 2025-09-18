@@ -188,28 +188,51 @@ export function verifySgxQuoteSignature(quoteInput: string | Buffer): boolean {
 
   const message = getSgxSignedRegion(quoteBytes)
   const rawSig = signature.ecdsa_signature
-  const derSig = encodeEcdsaSignatureToDer(rawSig)
-
   const pub = signature.attestation_public_key
   if (pub.length !== 64) {
     throw new Error("Unexpected attestation public key length")
   }
 
-  const x = toBase64Url(pub.subarray(0, 32))
-  const y = toBase64Url(pub.subarray(32, 64))
-  const jwk = {
-    kty: "EC",
-    crv: "P-256",
-    x,
-    y,
-  } as const
+  const makeDerSig = (reverse: boolean) => {
+    if (!reverse) return encodeEcdsaSignatureToDer(rawSig)
+    const rLE = rawSig.subarray(0, 32)
+    const sLE = rawSig.subarray(32, 64)
+    const rBE = Buffer.from(rLE).reverse()
+    const sBE = Buffer.from(sLE).reverse()
+    return encodeEcdsaSignatureToDer(Buffer.concat([rBE, sBE]))
+  }
 
-  const publicKey = createPublicKey({ key: jwk, format: "jwk" })
+  const makePublicKey = () => {
+    const xBytes = pub.subarray(0, 32)
+    const yBytes = pub.subarray(32, 64)
+    const jwk = {
+      kty: "EC",
+      crv: "P-256",
+      x: toBase64Url(xBytes),
+      y: toBase64Url(yBytes),
+    } as const
+    return createPublicKey({ key: jwk, format: "jwk" })
+  }
 
-  const verifier = createVerify("sha256")
+  // Default attempt (big-endian coords and signature) — works for TDX and some SGX emitters
+  const defaultKey = makePublicKey()
+  const defaultSig = makeDerSig(false)
+  let verifier = createVerify("sha256")
   verifier.update(message)
   verifier.end()
-  return verifier.verify(publicKey, derSig)
+  if (verifier.verify(defaultKey, defaultSig)) return true
+
+  // For SGX quotes, some implementations serialize r and s little-endian.
+  // Retry with reversed r/s only.
+  if (header.tee_type === 0) {
+    const altSig = makeDerSig(true)
+    verifier = createVerify("sha256")
+    verifier.update(message)
+    verifier.end()
+    if (verifier.verify(defaultKey, altSig)) return true
+  }
+
+  return false
 }
 
 export function verifySgxBase64(quote: string, config?: VerifyConfig) {
