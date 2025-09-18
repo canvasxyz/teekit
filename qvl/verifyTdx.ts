@@ -367,7 +367,10 @@ export async function verifyTdxQeReportBinding(
     signature.attestation_public_key,
     signature.qe_auth_data,
   ])
-  const hashedPubkey = await crypto.subtle.digest("SHA-256", combinedData)
+  const hashedPubkey = await crypto.subtle.digest(
+    "SHA-256",
+    new Uint8Array(combinedData),
+  )
 
   const uncompressedData = Buffer.concat([
     Buffer.from([0x04]),
@@ -376,7 +379,7 @@ export async function verifyTdxQeReportBinding(
   ])
   const hashedUncompressedPubkey = await crypto.subtle.digest(
     "SHA-256",
-    uncompressedData,
+    new Uint8Array(uncompressedData),
   )
 
   // QE report is 384 bytes; report_data occupies the last 64 bytes (offset 320).
@@ -442,7 +445,7 @@ export async function verifyTdxQuoteSignature(
   return await crypto.subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     publicKey,
-    rawSig,
-    message,
+    new Uint8Array(rawSig),
+    new Uint8Array(message),
   )
 }
