@@ -1,4 +1,5 @@
-import { createHash, X509Certificate } from "crypto"
+import { X509Certificate } from "@peculiar/x509"
+import { ensureSubtle } from "./crypto.js"
 
 export const hex = (b: Buffer) => b.toString("hex")
 
@@ -49,8 +50,12 @@ export function extractPemCertificates(certData: Buffer): string[] {
 }
 
 /** Compute SHA-256 of a certificate's DER bytes, lowercase hex */
-export function computeCertSha256Hex(cert: X509Certificate): string {
-  return createHash("sha256").update(cert.raw).digest("hex")
+export async function computeCertSha256Hex(cert: X509Certificate): Promise<string> {
+  const subtle = await ensureSubtle()
+  const data = new Uint8Array(cert.rawData)
+  const digest = await subtle.digest("SHA-256", data)
+  const out = Buffer.from(new Uint8Array(digest)).toString("hex")
+  return out
 }
 
 /** Normalize a certificate serial number to uppercase hex without delimiters or leading zeros */
@@ -173,4 +178,52 @@ export function parseCrlRevokedSerials(der: Buffer): string[] {
   }
 
   return revokedSerials
+}
+
+/** Extract certificate serial (uppercase hex without leading zeros) by parsing cert DER */
+export function getCertSerialUpperHex(cert: X509Certificate): string {
+  const der = Buffer.from(new Uint8Array(cert.rawData))
+  const readTLV = (buf: Buffer, offset: number) => {
+    if (offset >= buf.length) throw new Error("DER: out of bounds")
+    const tag = buf[offset]
+    let cursor = offset + 1
+    if (cursor >= buf.length) throw new Error("DER: truncated length")
+    let lenByte = buf[cursor++]
+    let length = 0
+    if (lenByte & 0x80) {
+      const numBytes = lenByte & 0x7f
+      if (numBytes === 0 || cursor + numBytes > buf.length)
+        throw new Error("DER: invalid length")
+      for (let i = 0; i < numBytes; i++) {
+        length = (length << 8) | buf[cursor++]
+      }
+    } else {
+      length = lenByte
+    }
+    const valueOffset = cursor
+    const nextOffset = valueOffset + length
+    if (nextOffset > buf.length) throw new Error("DER: value out of bounds")
+    return { tag, length, valueOffset, nextOffset }
+  }
+
+  try {
+    const outer = readTLV(der, 0)
+    if (outer.tag !== 0x30) return ""
+    const tbs = readTLV(der, outer.valueOffset)
+    if (tbs.tag !== 0x30) return ""
+    let p = tbs.valueOffset
+    // Optional version: [0] EXPLICIT
+    const maybeVersion = readTLV(der, p)
+    if ((maybeVersion.tag & 0xe0) === 0xa0) {
+      p = maybeVersion.nextOffset
+    }
+    const serialTLV = readTLV(der, p)
+    if (serialTLV.tag !== 0x02) return ""
+    const raw = der.subarray(serialTLV.valueOffset, serialTLV.nextOffset)
+    let hexStr = Buffer.from(raw).toString("hex").toUpperCase()
+    hexStr = hexStr.replace(/^0+(?=[0-9A-F])/g, "")
+    return hexStr
+  } catch {
+    return ""
+  }
 }
