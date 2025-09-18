@@ -1,5 +1,5 @@
 import { Crypto } from "@peculiar/webcrypto"
-import { cryptoProvider } from "@peculiar/x509"
+import { cryptoProvider } from "./x509.js"
 
 cryptoProvider.set(new Crypto())
 
