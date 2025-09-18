@@ -75,7 +75,6 @@ export const SgxQuote = new Struct("SgxQuote")
 export const SgxTail = new Struct("SgxTail")
   .UInt16LE("cert_data_type")
   .UInt32LE("cert_data_len")
-  .Buffer("cert_data")
   .compile()
 
 export const TdxQuoteV4 = new Struct("TdxQuoteV4")
@@ -115,7 +114,13 @@ export function parseSgxSignature(quote: Buffer) {
   const fixed = new EcdsaSignatureFixed(sig_data)
 
   const tail = fixed.extra.subarray(fixed.qe_auth_data_len)
-  const { cert_data_type, cert_data_len, cert_data } = new SgxTail(tail)
+  const { cert_data_type, cert_data_len } = new SgxTail(tail)
+
+  // Read cert_data with exact length, similar to TDX parsing
+  const CertData = new Struct("CertData")
+    .Buffer("cert_data", cert_data_len)
+    .compile()
+  const { cert_data } = new CertData(tail.subarray(SgxTail.baseSize))
 
   return {
     ecdsa_signature: fixed.signature,
@@ -127,7 +132,7 @@ export function parseSgxSignature(quote: Buffer) {
     qe_auth_data: fixed.extra.subarray(0, fixed.qe_auth_data_len),
     cert_data_type,
     cert_data_len,
-    cert_data: cert_data.subarray(0, cert_data_len),
+    cert_data,
   }
 }
 
