@@ -20,7 +20,8 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Types */
-    "typeRoots": ["./types", "./node_modules/@types"]
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "types": ["node"]
   },
-  "include": ["src", "qvl", "tunnel"]
+  "include": ["src", "qvl", "tunnel", "test"]
 }
