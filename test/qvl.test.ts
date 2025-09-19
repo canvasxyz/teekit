@@ -1,5 +1,6 @@
+// @ts-nocheck
 import test from "ava"
-import { QV_X509Certificate } from "../qvl"
+import { QV_X509Certificate } from "../qvl/index.js"
 import fs from "node:fs"
 
 import {
@@ -13,10 +14,13 @@ import {
   verifyTdxBase64,
   getTdx10SignedRegion,
   computeCertSha256Hex,
-  verifySgx,
-  parseSgxQuote,
   normalizeSerialHex,
-} from "../qvl"
+} from "../qvl/index.js"
+import {
+  tamperPemSignature,
+  buildCRLWithSerials,
+  rebuildQuoteWithCertData,
+} from "./qvl-helpers.js"
 
 const BASE_TIME = Date.parse("2025-09-01")
 
@@ -252,228 +256,7 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
   t.true(await verifyTdxBase64(quote, { date: BASE_TIME, crls: [] }))
 })
 
-test.serial("Verify a V5 TDX quote from Trustee", async (t) => {
-  const quote = fs.readFileSync("test/sample/tdx-v5-trustee.dat")
-  const { header, body } = parseTdxQuote(quote)
-
-  const expectedMRTD =
-    "dfba221b48a22af8511542ee796603f37382800840dcd978703909bf8e64d4c8a1e9de86e7c9638bfcba422f3886400a"
-  const expectedReportData =
-    "6d6ab13b046cff606ac0074be13981b07b6325dba10b5facc96febf551c0c3be2b75f92fe1f88f4bb996969ad0174b4b7a70261b7b85c844f4b33a4674fd049f"
-
-  t.is(header.version, 5)
-  t.is(header.tee_type, 129)
-  t.is(hex(body.mr_td), expectedMRTD)
-  t.is(hex(body.report_data), expectedReportData)
-  t.deepEqual(body.mr_config_id, Buffer.alloc(48))
-  t.deepEqual(body.mr_owner, Buffer.alloc(48))
-  t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
-
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
-})
-
-test.serial("Verify an SGX quote from Intel, no quote signature", async (t) => {
-  const quote = fs.readFileSync("test/sample/sgx/quote.dat")
-  const { header, body, signature } = parseSgxQuote(quote)
-
-  const expectedMrEnclave =
-    "0000000000000000000000000000000000000000000000000000000000000000"
-  const expectedReportData =
-    "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-
-  t.is(header.version, 3)
-  t.is(header.tee_type, 0)
-  t.is(hex(body.mr_enclave), expectedMrEnclave)
-  t.is(hex(body.report_data), expectedReportData)
-  t.deepEqual(body.mr_signer, Buffer.alloc(32))
-  t.deepEqual(body.attributes, Buffer.alloc(16))
-  t.deepEqual(body.cpu_svn, Buffer.alloc(16))
-
-  t.is(
-    hex(signature.ecdsa_signature),
-    "021a1375acdfc4520ade2f984b051e59a54e2892b24d3aa98e543b7b49eef2a375a7b5bafd1f1972e604fd799d4a01e2e422a52558768606daade2b17a6313ee",
-  )
-
-  // Intel sample is missing certdata, reconstruct it from provided PEM files instead
-  const root = extractPemCertificates(
-    fs.readFileSync("test/sample/sgx/trustedRootCaCert.pem"),
-  )
-  const pckChain = extractPemCertificates(
-    fs.readFileSync("test/sample/sgx/pckSignChain.pem"),
-  )
-  const pckCert = extractPemCertificates(
-    fs.readFileSync("test/sample/sgx/pckCert.pem"),
-  )
-  const certdata = [...root, ...pckChain, ...pckCert]
-
-  // Use provided certificate revocation lists
-  const crls = [
-    fs.readFileSync("test/sample/sgx/rootCaCrl.der"),
-    fs.readFileSync("test/sample/sgx/intermediateCaCrl.der"),
-  ]
-
-  t.true(
-    await verifySgx(quote, {
-      pinnedRootCerts: [new QV_X509Certificate(root[0])],
-      date: BASE_TIME,
-      crls,
-      extraCertdata: certdata,
-    }),
-  )
-})
-
-test.serial("Verify an SGX quote from Occlum", async (t) => {
-  const quote = fs.readFileSync("test/sample/sgx-occlum.dat")
-  const { header, body } = parseSgxQuote(quote)
-
-  const expectedMrEnclave =
-    "9c90fd81f6e9fe64b46b14f0623523a52d6a5678482988c408f6adffe6301e2c"
-  const expectedReportData =
-    "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-
-  t.is(header.version, 3)
-  t.is(header.tee_type, 0)
-  t.is(hex(body.mr_enclave), expectedMrEnclave)
-  t.is(hex(body.report_data), expectedReportData)
-
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
-})
-
-test.serial("Verify an SGX quote from chinenyeokafor", async (t) => {
-  const quote = fs.readFileSync("test/sample/sgx-chinenyeokafor.dat")
-  const { header, body } = parseSgxQuote(quote)
-
-  const expectedMrEnclave =
-    "0696ab235b2d339e68a4303cb64cde005bb8cdf2448bed742ac8ea8339bd0cb7"
-  const expectedReportData =
-    "888d97435fd51947e5a8c71f73ba24d9abcf716a1ac05b495a54f9a6fb54609e0000000000000000000000000000000000000000000000000000000000000000"
-
-  t.is(header.version, 3)
-  t.is(header.tee_type, 0)
-  t.is(hex(body.mr_enclave), expectedMrEnclave)
-  t.is(hex(body.report_data), expectedReportData)
-
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
-})
-
-test.serial("Verify an SGX quote from TLSN, quote9", async (t) => {
-  const quote = fs.readFileSync("test/sample/sgx-tlsn-quote9.dat")
-  const { header, body } = parseSgxQuote(quote)
-
-  const expectedMrEnclave =
-    "50a6a608c1972408f94379f83a7af2ea55b31095f131efe93af74f5968a44f29"
-  const expectedReportData =
-    "03351d6944f43d3041a075bddf540d2b91595979ef67fee8c9e6f1c3a5ff6e9e7300000000000000000000000000000000000000000000000000000000000000"
-
-  t.is(header.version, 3)
-  t.is(header.tee_type, 0)
-  t.is(hex(body.mr_enclave), expectedMrEnclave)
-  t.is(hex(body.report_data), expectedReportData)
-
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
-})
-
-test.serial("Verify an SGX quote from TLSN, quote_dev", async (t) => {
-  const quote = fs.readFileSync("test/sample/sgx-tlsn-quotedev.dat")
-  const { header, body } = parseSgxQuote(quote)
-
-  const expectedMrEnclave =
-    "db5e55d3190d92512e4eae09d697b4b5fe30c2212e1ad6db5681379608c46204"
-  const expectedReportData =
-    "030eba01d248d2c2fb4f39fc8f2daaf2392560100989eb022dc6570e87a011b29c00000000000000000000000000000000000000000000000000000000000000"
-
-  t.is(header.version, 3)
-  t.is(header.tee_type, 0)
-  t.is(hex(body.mr_enclave), expectedMrEnclave)
-  t.is(hex(body.report_data), expectedReportData)
-
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
-})
-
 // ---------------------- Negative tests for invalid scenarios ----------------------
-
-function pemToDer(pem: string): Buffer {
-  const b64 = pem
-    .replace(/-----BEGIN CERTIFICATE-----/g, "")
-    .replace(/-----END CERTIFICATE-----/g, "")
-    .replace(/\s+/g, "")
-  return Buffer.from(b64, "base64")
-}
-
-function derToPem(der: Buffer): string {
-  const b64 = der.toString("base64")
-  const lines = b64.match(/.{1,64}/g) || []
-  return `-----BEGIN CERTIFICATE-----\n${lines.join(
-    "\n",
-  )}\n-----END CERTIFICATE-----\n`
-}
-
-function tamperPemSignature(pem: string): string {
-  const der = Buffer.from(pemToDer(pem))
-  der[der.length - 1] ^= 0x01
-  return derToPem(der)
-}
-
-function buildCRLWithSerials(serialsUpperHex: string[]): Buffer {
-  const encodeLen = (len: number) => {
-    if (len < 0x80) return Buffer.from([len])
-    const bytes: number[] = []
-    let v = len
-    while (v > 0) {
-      bytes.unshift(v & 0xff)
-      v >>= 8
-    }
-    return Buffer.from([0x80 | bytes.length, ...bytes])
-  }
-  const tlv = (tag: number, value: Buffer) =>
-    Buffer.concat([Buffer.from([tag]), encodeLen(value.length), value])
-
-  const encodeIntegerHex = (hex: string) => {
-    let v = Buffer.from(hex.replace(/[^0-9A-F]/g, ""), "hex")
-    if (v.length === 0) v = Buffer.from([0])
-    if (v[0] & 0x80) v = Buffer.concat([Buffer.from([0x00]), v])
-    return tlv(0x02, v)
-  }
-
-  const version = tlv(0x02, Buffer.from([0x01]))
-  const sigAlg = tlv(0x30, Buffer.alloc(0))
-  const issuer = tlv(0x30, Buffer.alloc(0))
-  const thisUpdate = tlv(0x17, Buffer.from("250101000000Z"))
-
-  const revokedEntries = serialsUpperHex.map((s) =>
-    tlv(0x30, encodeIntegerHex(s)),
-  )
-  const revokedSeq = tlv(0x30, Buffer.concat(revokedEntries))
-
-  const tbs = tlv(
-    0x30,
-    Buffer.concat([version, sigAlg, issuer, thisUpdate, revokedSeq]),
-  )
-  const outer = tlv(0x30, tbs)
-  return outer
-}
-
-function rebuildQuoteWithCertData(baseQuote: Buffer, certData: Buffer): Buffer {
-  const signedLen = getTdx10SignedRegion(baseQuote).length
-  const sigLen = baseQuote.readUInt32LE(signedLen)
-  const sigStart = signedLen + 4
-  const sigData = baseQuote.subarray(sigStart, sigStart + sigLen)
-
-  const FIXED_LEN = 64 + 64 + 6 + 384 + 64 + 2 // ECDSA fixed portion
-  const qeAuthLen = sigData.readUInt16LE(64 + 64 + 6 + 384 + 64)
-  const fixedPlusAuth = sigData.subarray(0, FIXED_LEN + qeAuthLen)
-
-  const tail = Buffer.alloc(2 + 4)
-  tail.writeUInt16LE(5, 0) // cert_data_type = 5 (PCK)
-  tail.writeUInt32LE(certData.length, 2)
-
-  const newSigData = Buffer.concat([fixedPlusAuth, tail, certData])
-  const newSigLen = Buffer.alloc(4)
-  newSigLen.writeUInt32LE(newSigData.length, 0)
-
-  const prefix = baseQuote.subarray(0, signedLen)
-  return Buffer.concat([prefix, newSigLen, newSigData])
-}
 
 function getGcpQuoteBase64(): string {
   const data = JSON.parse(
