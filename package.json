@@ -17,7 +17,6 @@
     "@peculiar/webcrypto": "^1.5.0",
     "@scure/base": "^2.0.0",
     "asn1js": "^3.0.5",
-    "binary-parser": "^2.2.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
@@ -27,6 +26,7 @@
     "pkijs": "^3.0.18",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "restructure": "^3.0.2",
     "uint8array-extras": "^1.5.0",
     "webcrypto-liner": "^1.4.3",
     "ws": "^8.18.3"
