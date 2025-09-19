@@ -1,7 +1,9 @@
 // @ts-nocheck
 import {
   getTdx10SignedRegion,
+  getSgxSignedRegion,
   parseTdxQuote,
+  parseSgxQuote,
   extractPemCertificates,
   verifyPCKChain,
   computeCertSha256Hex,
@@ -92,6 +94,48 @@ export function rebuildQuoteWithCertData(
   return Buffer.concat([prefix, newSigLen, newSigData])
 }
 
+// Rebuild an SGX quote by replacing the embedded cert_data tail
+export function rebuildSgxQuoteWithCertData(
+  baseQuote: Buffer,
+  certData: Buffer,
+): Buffer {
+  const signedLen = getSgxSignedRegion(baseQuote).length
+  const sigLen = baseQuote.readUInt32LE(signedLen)
+  const sigStart = signedLen + 4
+  const sigData = baseQuote.subarray(sigStart, sigStart + sigLen)
+
+  const FIXED_LEN = 64 + 64 + 384 + 64 + 2 // ECDSA fixed portion for SGX
+  const qeAuthLen = sigData.readUInt16LE(64 + 64 + 384 + 64)
+  const fixedPlusAuth = sigData.subarray(0, FIXED_LEN + qeAuthLen)
+
+  const tail = Buffer.alloc(2 + 4)
+  tail.writeUInt16LE(5, 0) // cert_data_type = 5 (PCK)
+  tail.writeUInt32LE(certData.length, 2)
+
+  const newSigData = Buffer.concat([fixedPlusAuth, tail, certData])
+  const newSigLen = Buffer.alloc(4)
+  newSigLen.writeUInt32LE(newSigData.length, 0)
+
+  const prefix = baseQuote.subarray(0, signedLen)
+  return Buffer.concat([prefix, newSigLen, newSigData])
+}
+
+// Generic helper to mutate SGX sig_data in-place and reassemble the quote
+export function mutateSgxSigData(
+  baseQuote: Buffer,
+  mutator: (sigData: Buffer) => void,
+): Buffer {
+  const signedLen = getSgxSignedRegion(baseQuote).length
+  const sigLen = baseQuote.readUInt32LE(signedLen)
+  const sigStart = signedLen + 4
+  const sigData = Buffer.from(baseQuote.subarray(sigStart, sigStart + sigLen))
+  mutator(sigData)
+  const newSigLen = Buffer.alloc(4)
+  newSigLen.writeUInt32LE(sigData.length, 0)
+  const prefix = baseQuote.subarray(0, signedLen)
+  return Buffer.concat([prefix, newSigLen, sigData])
+}
+
 export async function getCertPemsFromTdxQuoteBuffer(): Promise<{
   leaf: string
   intermediate: string
@@ -112,6 +156,33 @@ export async function getCertPemsFromTdxQuoteBufferImpl(
   all: string[]
 }> {
   const { signature } = parseTdxQuote(quote)
+  const pems = extractPemCertificates(signature.cert_data)
+  const { chain } = await verifyPCKChain(pems, null)
+  const hashToPem = new Map<string, string>()
+  for (const pem of pems) {
+    const h = await computeCertSha256Hex(new QV_X509Certificate(pem))
+    hashToPem.set(h, pem)
+  }
+  const leafPem = hashToPem.get(await computeCertSha256Hex(chain[0]))!
+  const intermediatePem = hashToPem.get(await computeCertSha256Hex(chain[1]))!
+  const rootPem = hashToPem.get(await computeCertSha256Hex(chain[2]))!
+  return {
+    leaf: leafPem,
+    intermediate: intermediatePem,
+    root: rootPem,
+    all: pems,
+  }
+}
+
+export async function getCertPemsFromSgxQuoteBufferImpl(
+  quote: Buffer,
+): Promise<{
+  leaf: string
+  intermediate: string
+  root: string
+  all: string[]
+}> {
+  const { signature } = parseSgxQuote(quote)
   const pems = extractPemCertificates(signature.cert_data)
   const { chain } = await verifyPCKChain(pems, null)
   const hashToPem = new Map<string, string>()
