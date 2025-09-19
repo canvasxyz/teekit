@@ -1,6 +1,7 @@
 // @ts-nocheck
 import {
   getTdx10SignedRegion,
+  getTdx15SignedRegion,
   parseTdxQuote,
   extractPemCertificates,
   verifyPCKChain,
@@ -71,7 +72,11 @@ export function rebuildQuoteWithCertData(
   baseQuote: Buffer,
   certData: Buffer,
 ): Buffer {
-  const signedLen = getTdx10SignedRegion(baseQuote).length
+  const { header } = parseTdxQuote(baseQuote)
+  const signedLen =
+    header.version === 5
+      ? getTdx15SignedRegion(baseQuote).length
+      : getTdx10SignedRegion(baseQuote).length
   const sigLen = baseQuote.readUInt32LE(signedLen)
   const sigStart = signedLen + 4
   const sigData = baseQuote.subarray(sigStart, sigStart + sigLen)
