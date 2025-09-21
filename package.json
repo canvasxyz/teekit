@@ -17,12 +17,6 @@
   "workspaces": [
     "packages/*"
   ],
-  "dependencies": {
-    "tsx": "^4.20.5"
-  },
-  "devDependencies": {
-    "process": "^0.11.10"
-  },
   "ava": {
     "extensions": [
       "ts"
