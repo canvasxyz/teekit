@@ -297,20 +297,31 @@ export class TunnelServer {
         query[key] = value
       })
 
+      const parsedBody =
+        tunnelReq.body !== undefined
+          ? parseBody(tunnelReq.body, tunnelReq.headers["content-type"])
+          : undefined
+
       const req = httpMocks.createRequest({
         method: tunnelReq.method as RequestMethod,
         url: tunnelReq.url,
         path: urlObj.pathname,
         headers: tunnelReq.headers,
-        body: tunnelReq.body
-          ? parseBody(tunnelReq.body, tunnelReq.headers["content-type"])
-          : undefined,
+        body: parsedBody,
         query: query,
       })
+
+      // Ensure req.body reflects parsed body exactly, including empty string
+      ;(req as any).body = parsedBody as any
 
       const res = httpMocks.createResponse({
         eventEmitter: EventEmitter,
       })
+
+      // Some Express internals (finalhandler) may call req.unpipe(). Ensure it's safe on mocks.
+      try {
+        ;(req as any).unpipe = (_dest?: any) => req as any
+      } catch {}
 
       // Pass responses back through the tunnel
       // TODO: if ws.send() fails due to connectivity, the client could

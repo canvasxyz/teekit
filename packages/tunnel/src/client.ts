@@ -431,35 +431,132 @@ export class TunnelClient {
     ): Promise<Response> => {
       await this.ensureConnection()
 
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url
-      const method = init?.method || "GET"
+      // Normalize Request input and headers
+      const isRequestObject =
+        typeof Request !== "undefined" && input instanceof Request
+
+      let url: string
+      if (typeof input === "string") {
+        url = input
+      } else if (input instanceof URL) {
+        url = input.toString()
+      } else if (isRequestObject) {
+        url = (input as Request).url
+      } else {
+        url = (input as any).url
+      }
+
       const headers: Record<string, string> = {}
 
-      if (init?.headers) {
-        if (init.headers instanceof Headers) {
-          init.headers.forEach((value, key) => {
-            headers[key] = value
+      const addHeaders = (h: HeadersInit | undefined) => {
+        if (!h) return
+        if (h instanceof Headers) {
+          h.forEach((value, key) => {
+            headers[key.toLowerCase()] = value
           })
-        } else if (Array.isArray(init.headers)) {
-          init.headers.forEach(([key, value]) => {
-            headers[key] = value
+        } else if (Array.isArray(h)) {
+          h.forEach(([key, value]) => {
+            headers[String(key).toLowerCase()] = String(value)
           })
         } else {
-          Object.assign(headers, init.headers)
+          for (const [key, value] of Object.entries(h)) {
+            headers[key.toLowerCase()] = String(value)
+          }
         }
       }
 
+      if (isRequestObject) {
+        addHeaders((input as Request).headers as any)
+      }
+      addHeaders(init?.headers)
+
+      const method = init?.method || (isRequestObject ? (input as Request).method : "GET")
+
+      // Serialize body from either init or Request object
+      const contentType = headers["content-type"] || headers["Content-Type" as any]
+
+      const serializeBody = async (value: unknown): Promise<string> => {
+        if (value === undefined || value === null) return ""
+        if (typeof value === "string") return value
+
+        // URLSearchParams
+        if (typeof URLSearchParams !== "undefined" && value instanceof URLSearchParams) {
+          return value.toString()
+        }
+
+        // Blob
+        if (typeof Blob !== "undefined" && value instanceof Blob) {
+          try {
+            return await (value as Blob).text()
+          } catch {
+            const buf = await (value as Blob).arrayBuffer()
+            return new TextDecoder().decode(new Uint8Array(buf))
+          }
+        }
+
+        // ArrayBuffer or TypedArray
+        if (value instanceof ArrayBuffer) {
+          return new TextDecoder().decode(new Uint8Array(value))
+        }
+        if (ArrayBuffer.isView(value)) {
+          return new TextDecoder().decode(new Uint8Array((value as ArrayBufferView).buffer))
+        }
+
+        // ReadableStream (Web Streams API)
+        const maybeStream = value as any
+        if (maybeStream && typeof maybeStream.getReader === "function") {
+          const reader = maybeStream.getReader()
+          const chunks: Uint8Array[] = []
+          let total = 0
+          while (true) {
+            const { done, value: chunk } = await reader.read()
+            if (done) break
+            const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk)
+            chunks.push(bytes)
+            total += bytes.length
+          }
+          const all = new Uint8Array(total)
+          let offset = 0
+          for (const c of chunks) {
+            all.set(c, offset)
+            offset += c.length
+          }
+          // Default to text decoding
+          return new TextDecoder().decode(all)
+        }
+
+        // Fallback: JSON stringify objects, else string cast
+        if (typeof value === "object") {
+          try {
+            return JSON.stringify(value as any)
+          } catch {
+            return String(value)
+          }
+        }
+
+        return String(value)
+      }
+
       let body: string | undefined
-      if (init?.body) {
-        if (typeof init.body === "string") {
-          body = init.body
-        } else {
-          body = JSON.stringify(init.body)
+
+      if (init && Object.prototype.hasOwnProperty.call(init, "body")) {
+        // Preserve empty string bodies
+        body = await serializeBody((init as any).body)
+      } else if (isRequestObject) {
+        // Read body from Request object if present
+        try {
+          const req = input as Request
+          // If Request has a body, consume as text; otherwise leave undefined
+          // Note: GET/HEAD typically have no body; this will resolve to empty string
+          const text = await (req.text().catch(() => ""))
+          if (text !== "") {
+            body = text
+          } else if (contentType) {
+            // If content-type provided but empty string body, keep empty string
+            body = ""
+          }
+        } catch {
+          // ignore
         }
       }
 
@@ -495,8 +592,8 @@ export class TunnelClient {
           }
         }, 30000)
 
-        if (typeof timer.unref === "function") {
-          timer.unref()
+        if (typeof (timer as any).unref === "function") {
+          ;(timer as any).unref()
         }
       })
     }
