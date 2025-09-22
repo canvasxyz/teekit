@@ -23,6 +23,7 @@ let messages: Message[] = []
 let totalMessageCount = 0
 const MAX_MESSAGES = 30
 const startTime = Date.now()
+let counter = 0
 
 // API Routes
 app.get("/uptime", (_req, res) => {
@@ -42,6 +43,11 @@ app.get("/uptime", (_req, res) => {
       }s`,
     },
   })
+})
+
+app.post("/increment", (_req, res) => {
+  counter += 1
+  res.json({ counter })
 })
 
 wss.on("connection", (ws: WebSocket) => {

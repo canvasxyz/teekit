@@ -7,4 +7,12 @@ export default defineConfig({
   define: {
     "process.env": JSON.stringify({}),
   },
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        "tunnel-sw": "src/sw/tunnel-sw.ts",
+      },
+    },
+  },
 })

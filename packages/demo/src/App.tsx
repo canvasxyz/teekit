@@ -39,6 +39,8 @@ function App() {
   const [uptime, setUptime] = useState<string>("")
   const [hiddenMessagesCount, setHiddenMessagesCount] = useState<number>(0)
   const [verifyResult, setVerifyResult] = useState<string>("")
+  const [swUptime, setSwUptime] = useState<string>("")
+  const [swCounter, setSwCounter] = useState<number>(0)
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -216,6 +218,38 @@ function App() {
           >
             Disconnect
           </a>
+        </div>
+      </div>
+
+      <div style={{ margin: "12px 0", padding: 12, border: "1px solid #ddd", borderRadius: 8 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>ServiceWorker tunnel test (native fetch)</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            onClick={async () => {
+              try {
+                const r = await fetch("/uptime")
+                const j = await r.json()
+                setSwUptime(j?.uptime?.formatted || "")
+              } catch {}
+            }}
+          >
+            GET /uptime
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const r = await fetch("/increment", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+                const j = await r.json()
+                setSwCounter(j?.counter || 0)
+              } catch {}
+            }}
+          >
+            POST /increment
+          </button>
+        </div>
+        <div style={{ marginTop: 8, fontSize: "0.9em", color: "#333" }}>
+          <div>Uptime (via SW): {swUptime || "—"}</div>
+          <div>Counter (via SW): {swCounter}</div>
         </div>
       </div>
 
