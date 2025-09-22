@@ -8,6 +8,22 @@ import { encode, decode } from "cbor-x"
 import { TunnelServer } from "ra-https-tunnel"
 import { loadQuote, startTunnelApp, stopTunnel } from "./tunnel.test.js"
 
+// Polyfill CloseEvent for Node
+if (!(globalThis as any).CloseEvent) {
+  class CloseEventPolyfill extends Event {
+    public code: number
+    public reason: string
+    public wasClean: boolean
+    constructor(type: string, init?: any) {
+      super(type)
+      this.code = init?.code ?? 0
+      this.reason = init?.reason ?? ""
+      this.wasClean = !!init?.wasClean
+    }
+  }
+  ;(globalThis as any).CloseEvent = CloseEventPolyfill as any
+}
+
 test.serial(
   "Server sends only encrypted envelope messages after handshake",
   async (t) => {
