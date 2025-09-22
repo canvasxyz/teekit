@@ -30,6 +30,7 @@ import {
   sanitizeHeaders,
   getStatusText,
 } from "./utils/server.js"
+import { markRequestAsEncrypted } from "./express.js"
 import {
   ServerRAMockWebSocket,
   ServerRAMockWebSocketServer,
@@ -363,6 +364,10 @@ export class TunnelServer {
       })
 
       // Execute the request against the Express app
+      // Mark this synthetic request as arriving via the encrypted tunnel
+      try {
+        markRequestAsEncrypted(req)
+      } catch {}
       this.app(req, res)
     } catch (error) {
       const errorResponse: RAEncryptedHTTPResponse = {
