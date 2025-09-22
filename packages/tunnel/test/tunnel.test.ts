@@ -3,14 +3,14 @@ import express, { Request, Response } from "express"
 import type { AddressInfo } from "node:net"
 import sodium from "libsodium-wrappers"
 
-import { TunnelClient, TunnelServer } from "ra-https-tunnel"
+import { TunnelClient, TunnelServer } from "../src/index.js"
 import {
   tappdV4Base64,
   trusteeV5Base64,
   occlumSgxBase64,
 } from "./samples/samples.js"
 import { base64 } from "@scure/base"
-import { hex, parseTdxQuote } from "ra-https-qvl"
+import { hex, parseTdxQuote } from "../../qvl/src/index.js"
 
 // Ensure timers don't keep `npx ava --watch` alive (client sets 30s timeouts)
 const originalSetTimeout = setTimeout
@@ -48,6 +48,78 @@ export async function startTunnelApp() {
   app.get("/ok", (_req, res) => res.status(200).send("ok"))
   app.post("/echo", (req: Request, res: Response) => {
     res.status(200).json({ received: req.body })
+  })
+
+  // Additional routes for comprehensive fetch tests
+  app.all("/echo-all", (req: Request, res: Response) => {
+    res.status(200).json({
+      method: req.method,
+      url: (req as any).originalUrl ?? req.url,
+      headers: req.headers,
+      query: (req as any).query || {},
+      body: (req as any).body,
+    })
+  })
+
+  app.post("/echo-urlencoded", (req: Request, res: Response) => {
+    res.status(200).json({ received: (req as any).body })
+  })
+
+  // For multipart/form-data we just echo the raw body back
+  app.post("/echo-formdata", (req: Request, res: Response) => {
+    res.status(200).send((req as any).body)
+  })
+
+  app.get("/json", (_req: Request, res: Response) => {
+    res.status(200).json({ ok: true, nested: { a: 1, b: "two" } })
+  })
+
+  app.get("/text", (_req: Request, res: Response) => {
+    res.status(200).send("text-ok")
+  })
+
+  app.get("/binary", (_req: Request, res: Response) => {
+    const bytes = Uint8Array.from([0, 1, 2, 255])
+    res.status(200).setHeader("content-type", "application/octet-stream")
+    res.send(Buffer.from(bytes))
+  })
+
+  app.get("/set-cookie", (_req: Request, res: Response) => {
+    res.setHeader("set-cookie", [
+      "a=1; Path=/; HttpOnly",
+      "b=2; Path=/; SameSite=Strict",
+    ])
+    res.status(200).send("ok")
+  })
+
+  app.get("/redirect", (_req: Request, res: Response) => {
+    res.redirect(302, "/hello")
+  })
+
+  app.head("/head", (_req: Request, res: Response) => {
+    res.setHeader("x-head", "1")
+    res.status(204).end()
+  })
+
+  app.get("/stream", (_req: Request, res: Response) => {
+    res.setHeader("content-type", "text/plain; charset=utf-8")
+    res.write("chunk-1:")
+    res.write("chunk-2:")
+    res.end("done")
+  })
+
+  app.get("/status/:code", (req: Request, res: Response) => {
+    const code = Number((req as any).params.code)
+    res.status(Number.isFinite(code) ? code : 500).send(`status-${code}`)
+  })
+
+  app.post("/echo-large-len", (req: Request, res: Response) => {
+    let length = 0
+    const body: any = (req as any).body
+    if (typeof body === "string") length = body.length
+    else if (Buffer.isBuffer(body)) length = body.length
+    else if (body != null) length = Buffer.byteLength(JSON.stringify(body))
+    res.status(200).json({ length })
   })
 
   const quote = loadQuote({ tdxv4: true })

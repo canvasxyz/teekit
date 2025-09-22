@@ -5,7 +5,12 @@
 		"rootDir": ".",
 		"outDir": "lib",
 		"module": "Node16",
-		"moduleResolution": "Node16"
+		"moduleResolution": "Node16",
+		"baseUrl": ".",
+		"paths": {
+			"ra-https-tunnel": ["../src/index.ts"],
+			"ra-https-qvl": ["../../qvl/src/index.ts"]
+		}
 	},
 	"references": [{ "path": "../." }, { "path": "../../qvl" }]
 }

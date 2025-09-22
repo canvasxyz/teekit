@@ -3,7 +3,11 @@
 	"include": ["src"],
 	"compilerOptions": {
 		"rootDir": "src",
-		"outDir": "lib"
+		"outDir": "lib",
+		"baseUrl": ".",
+		"paths": {
+			"ra-https-qvl": ["../qvl/src/index.ts"]
+		}
 	},
 	"references": [{ "path": "../qvl" }]
 }
