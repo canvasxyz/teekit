@@ -37,6 +37,7 @@ function App() {
   const [username] = useState<string>(getStoredUsername)
   const [connected, setConnected] = useState<boolean>(false)
   const [uptime, setUptime] = useState<string>("")
+  const [panelOutput, setPanelOutput] = useState<string>("")
   const [hiddenMessagesCount, setHiddenMessagesCount] = useState<number>(0)
   const [verifyResult, setVerifyResult] = useState<string>("")
   const wsRef = useRef<WebSocket | null>(null)
@@ -155,6 +156,32 @@ function App() {
     })
   }
 
+  // Test panel actions using native fetch without initializing a new tunnel
+  const testGetUptime = useCallback(async () => {
+    try {
+      const res = await fetch("/uptime", { credentials: "same-origin" })
+      const text = await res.text()
+      setPanelOutput(`GET /uptime -> ${res.status}: ${text}`)
+    } catch (e: any) {
+      setPanelOutput(`GET /uptime error: ${e?.message || e}`)
+    }
+  }, [])
+
+  const testPostIncrement = useCallback(async () => {
+    try {
+      const res = await fetch("/increment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+        credentials: "same-origin",
+      })
+      const text = await res.text()
+      setPanelOutput(`POST /increment -> ${res.status}: ${text}`)
+    } catch (e: any) {
+      setPanelOutput(`POST /increment error: ${e?.message || e}`)
+    }
+  }, [])
+
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value)
   }
@@ -220,6 +247,16 @@ function App() {
       </div>
 
       <div className="messages-container">
+        <div className="uptime-display" style={{ marginBottom: "10px" }}>
+          <strong>Service Worker Test Panel</strong>
+          <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+            <button onClick={testGetUptime} style={{ padding: "4px 8px", fontSize: "0.85em" }}>GET /uptime (native)</button>
+            <button onClick={testPostIncrement} style={{ padding: "4px 8px", fontSize: "0.85em" }}>POST /increment (native)</button>
+          </div>
+          {panelOutput && (
+            <pre style={{ whiteSpace: "pre-wrap", background: "#f5f5f5", padding: 8, borderRadius: 4, marginTop: 6 }}>{panelOutput}</pre>
+          )}
+        </div>
         {uptime && (
           <div className="uptime-display">
             Server uptime: {uptime}{" "}
