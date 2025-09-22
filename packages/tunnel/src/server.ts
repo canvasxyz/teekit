@@ -302,11 +302,14 @@ export class TunnelServer {
         url: tunnelReq.url,
         path: urlObj.pathname,
         headers: tunnelReq.headers,
-        body: tunnelReq.body
-          ? parseBody(tunnelReq.body, tunnelReq.headers["content-type"])
-          : undefined,
         query: query,
       })
+
+      // Ensure req.body is set exactly to the parsed body, including empty string
+      ;(req as any).body =
+        tunnelReq.body !== undefined
+          ? parseBody(tunnelReq.body, tunnelReq.headers["content-type"])
+          : undefined
 
       const res = httpMocks.createResponse({
         eventEmitter: EventEmitter,

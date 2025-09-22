@@ -431,35 +431,109 @@ export class TunnelClient {
     ): Promise<Response> => {
       await this.ensureConnection()
 
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url
-      const method = init?.method || "GET"
+      // Normalize Request input to capture url, method, headers, and body
+      let url: string
+      let method: string
       const headers: Record<string, string> = {}
+      let requestBody: BodyInit | null | undefined
 
-      if (init?.headers) {
-        if (init.headers instanceof Headers) {
-          init.headers.forEach((value, key) => {
-            headers[key] = value
-          })
-        } else if (Array.isArray(init.headers)) {
-          init.headers.forEach(([key, value]) => {
-            headers[key] = value
-          })
-        } else {
-          Object.assign(headers, init.headers)
+      if (typeof input === "string") {
+        url = input
+        method = init?.method || "GET"
+        requestBody = init?.body ?? null
+        if (init?.headers) {
+          if (init.headers instanceof Headers) {
+            init.headers.forEach((value, key) => {
+              headers[key] = value
+            })
+          } else if (Array.isArray(init.headers)) {
+            init.headers.forEach(([key, value]) => {
+              headers[key] = value
+            })
+          } else {
+            Object.assign(headers, init.headers)
+          }
         }
+      } else if (input instanceof URL) {
+        url = input.toString()
+        method = init?.method || "GET"
+        requestBody = init?.body ?? null
+        if (init?.headers) {
+          if (init.headers instanceof Headers) {
+            init.headers.forEach((value, key) => {
+              headers[key] = value
+            })
+          } else if (Array.isArray(init.headers)) {
+            init.headers.forEach(([key, value]) => {
+              headers[key] = value
+            })
+          } else {
+            Object.assign(headers, init.headers)
+          }
+        }
+      } else {
+        // input is a Request object
+        url = input.url
+        method = input.method || "GET"
+        input.headers.forEach((value, key) => {
+          headers[key] = value
+        })
+        // If init provided, it can override Request fields
+        if (init?.headers) {
+          if (init.headers instanceof Headers) {
+            init.headers.forEach((value, key) => {
+              headers[key] = value
+            })
+          } else if (Array.isArray(init.headers)) {
+            init.headers.forEach(([key, value]) => {
+              headers[key] = value
+            })
+          } else {
+            Object.assign(headers, init.headers)
+          }
+        }
+        if (init?.method) method = init.method
+        requestBody = init?.body ?? (input as any).body ?? null
       }
 
+      // Normalize body to string by reading ReadableStream or Buffer-like
       let body: string | undefined
-      if (init?.body) {
-        if (typeof init.body === "string") {
-          body = init.body
+      if (requestBody !== undefined && requestBody !== null) {
+        if (typeof requestBody === "string") {
+          body = requestBody
+        } else if (
+          typeof (requestBody as any).arrayBuffer === "function"
+        ) {
+          // Blob, FormData (stringify), or ReadableStream with arrayBuffer
+          const ab = await (requestBody as any).arrayBuffer()
+          body = new TextDecoder().decode(new Uint8Array(ab))
+        } else if (requestBody instanceof Uint8Array) {
+          body = new TextDecoder().decode(requestBody)
+        } else if (requestBody instanceof ArrayBuffer) {
+          body = new TextDecoder().decode(new Uint8Array(requestBody))
+        } else if (
+          typeof (globalThis as any).ReadableStream !== "undefined" &&
+          requestBody instanceof (globalThis as any).ReadableStream
+        ) {
+          // Read ReadableStream to string
+          const reader = (requestBody as any).getReader()
+          const chunks: Uint8Array[] = []
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+            if (value) chunks.push(value)
+          }
+          const totalLen = chunks.reduce((acc, c) => acc + c.length, 0)
+          const merged = new Uint8Array(totalLen)
+          let offset = 0
+          for (const c of chunks) {
+            merged.set(c, offset)
+            offset += c.length
+          }
+          body = new TextDecoder().decode(merged)
         } else {
-          body = JSON.stringify(init.body)
+          // Fallback: JSON stringify unknown bodies
+          body = JSON.stringify(requestBody as any)
         }
       }
 
