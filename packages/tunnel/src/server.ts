@@ -84,6 +84,11 @@ export class TunnelServer {
     { mockWs: ServerRAMockWebSocket; controlWs: WebSocket }
   >()
   private symmetricKeyBySocket = new Map<WebSocket, Uint8Array>()
+  private socketLiveness = new Map<
+    WebSocket,
+    { isAlive: boolean; lastActivityMs: number }
+  >()
+  private heartbeatInterval?: ReturnType<typeof setInterval>
 
   private constructor(
     private app: Express,
@@ -115,6 +120,22 @@ export class TunnelServer {
         socket.destroy()
       }
     })
+
+    // Heartbeat to detect dead control sockets and cleanup
+    const intervalMs = Number(
+      (globalThis as any).process?.env?.RA_HTTPS_HEARTBEAT_INTERVAL_MS || 30000,
+    )
+    this.heartbeatInterval = setInterval(() => this.#heartbeatSweep(), intervalMs)
+    if (typeof (this.heartbeatInterval as any).unref === "function") {
+      ;(this.heartbeatInterval as any).unref()
+    }
+
+    this.server.on("close", () => {
+      if (this.heartbeatInterval) {
+        clearInterval(this.heartbeatInterval)
+        this.heartbeatInterval = undefined
+      }
+    })
   }
 
   static async initialize(
@@ -136,6 +157,18 @@ export class TunnelServer {
       // Intercept messages before they reach application handlers
       const originalEmit = controlWs.emit.bind(controlWs)
 
+      // Initialize liveness tracking
+      this.socketLiveness.set(controlWs, { isAlive: true, lastActivityMs: Date.now() })
+      try {
+        controlWs.on("pong", () => {
+          const l = this.socketLiveness.get(controlWs)
+          if (l) {
+            l.isAlive = true
+            l.lastActivityMs = Date.now()
+          }
+        })
+      } catch {}
+
       // Immediately announce server key-exchange public key to the client
       try {
         const serverKxMessage = {
@@ -151,6 +184,7 @@ export class TunnelServer {
       // Cleanup on close
       controlWs.on("close", () => {
         this.symmetricKeyBySocket.delete(controlWs)
+        this.socketLiveness.delete(controlWs)
 
         const toRemove: string[] = []
         for (const [connId, conn] of this.webSocketConnections.entries()) {
@@ -172,6 +206,8 @@ export class TunnelServer {
 
       controlWs.emit = function (event: string, ...args: any[]): boolean {
         if (event === "message") {
+          const live = ra.socketLiveness.get(controlWs)
+          if (live) live.lastActivityMs = Date.now()
           // Decode incoming message from client
           let message
           try {
@@ -273,13 +309,8 @@ export class TunnelServer {
           }
         }
 
-        // Discard non-tunnel messages other than close
-        if (event === "close") {
-          return originalEmit(event, ...args)
-        } else {
-          console.error("Received message after close:", event, ...args)
-          return true
-        }
+        // Forward all non-message events to the original emitter
+        return originalEmit(event, ...args)
       }
       ;(controlWs as any).ra = this
     })
@@ -556,6 +587,8 @@ export class TunnelServer {
   private sendEncrypted(controlWs: WebSocket, payload: unknown): void {
     const env = this.#encryptForSocket(controlWs, payload)
     controlWs.send(encode(env))
+    const l = this.socketLiveness.get(controlWs)
+    if (l) l.lastActivityMs = Date.now()
   }
 
   /**
@@ -590,10 +623,13 @@ export class TunnelServer {
         )
       }
 
-      // Also warn if there are symmetric keys not tied to tracked connections
+      // Also warn if there are symmetric keys not tied to tracked WS connections,
+      // but only if their socket is not currently OPEN. HTTP-only control sockets
+      // are expected to have a symmetric key without a tracked WS connection.
       const trackedSockets = new Set(entries.map(([, v]) => v.controlWs))
       const strayKeys = Array.from(this.symmetricKeyBySocket.keys()).filter(
-        (controlWs) => !trackedSockets.has(controlWs),
+        (controlWs) =>
+          !trackedSockets.has(controlWs) && controlWs.readyState !== WebSocket.OPEN,
       )
       if (strayKeys.length > 0) {
         console.warn(
@@ -602,6 +638,54 @@ export class TunnelServer {
       }
     } catch (e) {
       console.error("Failed to log WebSocket connections:", e)
+    }
+  }
+
+  // Periodic heartbeat to prune dead sockets and cleanup keys
+  #heartbeatSweep(): void {
+    try {
+      const timeoutMs = Number(
+        (globalThis as any).process?.env?.RA_HTTPS_HEARTBEAT_TIMEOUT_MS || 60000,
+      )
+      const now = Date.now()
+
+      for (const ws of this.controlWss.clients) {
+        const l = this.socketLiveness.get(ws)
+        if (!l) {
+          this.socketLiveness.set(ws, { isAlive: true, lastActivityMs: now })
+          try {
+            ws.ping()
+          } catch {}
+          continue
+        }
+
+        // If a previous ping went unanswered, terminate to trigger cleanup
+        if (l.isAlive === false || now - l.lastActivityMs > timeoutMs) {
+          try {
+            ws.terminate()
+          } catch {}
+          continue
+        }
+
+        // Ask for a pong next interval
+        l.isAlive = false
+        try {
+          ws.ping()
+        } catch {}
+      }
+
+      // Proactively remove keys for sockets that are CLOSED or no longer tracked by ws server
+      for (const controlWs of Array.from(this.symmetricKeyBySocket.keys())) {
+        if (
+          controlWs.readyState === WebSocket.CLOSED ||
+          !this.controlWss.clients.has(controlWs)
+        ) {
+          this.symmetricKeyBySocket.delete(controlWs)
+          this.socketLiveness.delete(controlWs)
+        }
+      }
+    } catch (e) {
+      console.error("Heartbeat sweep failed:", e)
     }
   }
 }
