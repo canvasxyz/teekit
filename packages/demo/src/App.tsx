@@ -52,6 +52,7 @@ function App() {
   const [swCounter, setSwCounter] = useState<number>(0)
   const initializedRef = useRef<boolean>(false)
   const wsRef = useRef<WebSocket | null>(null)
+  const manualDisconnectRef = useRef<boolean>(false)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
@@ -102,58 +103,78 @@ function App() {
     return () => clearInterval(interval)
   }, [fetchUptime])
 
-  useEffect(() => {
-    if (
-      wsRef.current &&
-      (wsRef.current.readyState === WebSocket.CONNECTING ||
-        wsRef.current.readyState === WebSocket.OPEN)
-    ) {
-      return
-    }
-
-    const wsUrl = baseUrl
-      .replace(/^http:\/\//, "ws://")
-      .replace(/^https:\/\//, "wss://")
-    const ws = new enc.WebSocket(wsUrl)
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      setConnected(true)
-      console.log("Connected to chat server")
-      setTimeout(() => {
-        inputRef.current?.focus()
-      }, 1)
-    }
-
-    ws.onmessage = (event: MessageEvent) => {
-      const data: WebSocketMessage = JSON.parse(event.data)
-
-      if (data.type === "backlog") {
-        setMessages(data.messages || [])
-        setHiddenMessagesCount(data.hiddenCount || 0)
-      } else if (data.type === "message" && data.message) {
-        setMessages((prev) => [...prev, data.message!])
+  const openChatSocket = useCallback(async () => {
+    try {
+      // Avoid duplicate connections
+      if (
+        wsRef.current &&
+        (wsRef.current.readyState === WebSocket.CONNECTING ||
+          wsRef.current.readyState === WebSocket.OPEN)
+      ) {
+        return
       }
-    }
 
-    ws.onclose = () => {
-      setConnected(false)
-      console.log("Disconnected from chat server")
-    }
+      // Ensure the RA control channel is connected
+      await enc.ensureConnection()
 
-    ws.onerror = (error: Event) => {
-      console.error("WebSocket error:", error)
-      setConnected(false)
-    }
+      const wsUrl = baseUrl
+        .replace(/^http:\/\//, "ws://")
+        .replace(/^https:\/\//, "wss://")
 
-    return () => {
-      try {
-        ws.close()
-      } finally {
-        if (wsRef.current === ws) wsRef.current = null
+      const ws = new enc.WebSocket(wsUrl)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        setConnected(true)
+        console.log("Connected to chat server")
+        setTimeout(() => {
+          inputRef.current?.focus()
+        }, 1)
       }
+
+      ws.onmessage = (event: MessageEvent) => {
+        const data: WebSocketMessage = JSON.parse(event.data)
+
+        if (data.type === "backlog") {
+          setMessages(data.messages || [])
+          setHiddenMessagesCount(data.hiddenCount || 0)
+        } else if (data.type === "message" && data.message) {
+          setMessages((prev) => [...prev, data.message!])
+        }
+      }
+
+      ws.onclose = () => {
+        setConnected(false)
+        console.log("Disconnected from chat server")
+        // Auto-reconnect unless the user explicitly disconnected
+        if (!manualDisconnectRef.current) {
+          setTimeout(() => {
+            openChatSocket().catch(() => {})
+          }, 1000)
+        }
+      }
+
+      ws.onerror = (error: Event) => {
+        console.error("WebSocket error:", error)
+        setConnected(false)
+      }
+    } catch (e) {
+      console.error("Failed to open chat WebSocket:", e)
+      setConnected(false)
     }
   }, [])
+
+  useEffect(() => {
+    // Open on mount
+    openChatSocket()
+    return () => {
+      try {
+        wsRef.current?.close()
+      } finally {
+        wsRef.current = null
+      }
+    }
+  }, [openChatSocket])
 
   const sendMessage = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -233,10 +254,16 @@ function App() {
               onClick={async (e) => {
                 e.preventDefault()
                 if (connected) {
+                  // Mark manual disconnect to suppress auto-reconnect
+                  manualDisconnectRef.current = true
+                  try {
+                    wsRef.current?.close(4000, "user disconnect")
+                  } catch {}
+                  // Also close the RA control channel to simulate tunnel drop
                   disconnectRA()
                 } else {
-                  await enc.ensureConnection()
-                  setConnected(true)
+                  manualDisconnectRef.current = false
+                  openChatSocket()
                 }
               }}
               style={{
