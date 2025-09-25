@@ -102,7 +102,7 @@ function App() {
     return () => clearInterval(interval)
   }, [fetchUptime])
 
-  useEffect(() => {
+  const openChatSocket = useCallback(() => {
     if (
       wsRef.current &&
       (wsRef.current.readyState === WebSocket.CONNECTING ||
@@ -145,15 +145,20 @@ function App() {
       console.error("WebSocket error:", error)
       setConnected(false)
     }
+  }, [])
 
+  useEffect(() => {
+    openChatSocket()
     return () => {
+      const ws = wsRef.current
+      if (!ws) return
       try {
         ws.close()
       } finally {
         if (wsRef.current === ws) wsRef.current = null
       }
     }
-  }, [])
+  }, [openChatSocket])
 
   const sendMessage = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -236,7 +241,7 @@ function App() {
                   disconnectRA()
                 } else {
                   await enc.ensureConnection()
-                  setConnected(true)
+                  openChatSocket()
                 }
               }}
               style={{

@@ -72,8 +72,11 @@ export class TunnelClient {
   >()
   private webSocketConnections = new Map<string, ClientRAMockWebSocket>()
   private reconnectDelay = 1000
+  private readonly reconnectBaseDelay = 1000
+  private readonly reconnectMaxDelay = 30000
   private connectionPromise: Promise<void> | null = null
   private config: TunnelClientConfig
+  private socketGeneration: number = 0
 
   private constructor(
     public readonly origin: string,
@@ -105,6 +108,7 @@ export class TunnelClient {
     }
 
     this.connectionPromise = new Promise((resolve, reject) => {
+      const generation = ++this.socketGeneration
       const controlUrl = new URL(this.origin)
       controlUrl.protocol = controlUrl.protocol.replace(/^http/, "ws")
       // Use dedicated control channel path
@@ -117,6 +121,8 @@ export class TunnelClient {
       }
 
       this.ws.onclose = () => {
+        // Ignore stale sockets
+        if (generation !== this.socketGeneration) return
         this.connectionPromise = null
         // Propagate disconnect to all tunneled WebSockets
         try {
@@ -150,12 +156,22 @@ export class TunnelClient {
 
         // Drop symmetric key; a new handshake will set it on reconnect
         this.symmetricKey = undefined
+        // Backoff for the next attempt
+        this.reconnectDelay = Math.min(
+          this.reconnectDelay * 2,
+          this.reconnectMaxDelay,
+        )
         setTimeout(() => {
-          this.ensureConnection()
+          // Only reconnect if this is still the latest generation
+          if (generation === this.socketGeneration) {
+            this.ensureConnection()
+          }
         }, this.reconnectDelay)
       }
 
       this.ws.onerror = (error) => {
+        // Ignore stale sockets
+        if (generation !== this.socketGeneration) return
         this.connectionPromise = null
         console.error(error)
 
@@ -177,8 +193,14 @@ export class TunnelClient {
         // If not open, attempt reconnect soon; close handler will also handle it
         try {
           if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            this.reconnectDelay = Math.min(
+              this.reconnectDelay * 2,
+              this.reconnectMaxDelay,
+            )
             setTimeout(() => {
-              this.ensureConnection()
+              if (generation === this.socketGeneration) {
+                this.ensureConnection()
+              }
             }, this.reconnectDelay)
           }
         } catch {}
@@ -273,11 +295,19 @@ export class TunnelClient {
             }
             this.send(reply)
 
+            // Handshake complete for current generation only
+            if (generation !== this.socketGeneration) {
+              return
+            }
             this.connectionPromise = null
+            // Reset backoff on successful connection
+            this.reconnectDelay = this.reconnectBaseDelay
             debug("Opened encrypted channel to", this.origin)
             resolve()
           } catch (e) {
-            this.connectionPromise = null
+            if (generation === this.socketGeneration) {
+              this.connectionPromise = null
+            }
             reject(
               e instanceof Error
                 ? e
