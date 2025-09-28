@@ -6,5 +6,8 @@ export { getExpectedReportDataFromUserdata, isUserdataBound } from "./utils.js"
 
 export * from "./verifyTdx.js"
 export * from "./verifySgx.js"
+export * from "./verifyQeIdentity.js"
+export * from "./verifyTcb.js"
 export type * from "./verifyTdx.js"
 export type * from "./verifySgx.js"
+export type * from "./verifyTcb.js"

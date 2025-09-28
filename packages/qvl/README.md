@@ -9,6 +9,7 @@ ra-https-qvl is a lightweight, WebCrypto-based SGX/TDX quote verification librar
 - **CRL-based revocation** checks (DER CRL parsing helper included)
 - **QE report signature** and **QE binding** verification
 - **Quote signature** verification (ECDSA P‑256)
+- Optional: **TCB evaluation** (match quote SVNs against Intel TCB Info JSON)
 - Small API surface; zero native dependencies
 
 ## Requirements
@@ -62,6 +63,9 @@ await verifyTdx(quoteBytes, {
 - `verifyTdxBase64(quote: string, config?: VerifyConfig): Promise<boolean>`
 - `verifySgx(quote: Uint8Array, config?: VerifyConfig): Promise<boolean>`
 - `verifySgxBase64(quote: string, config?: VerifyConfig): Promise<boolean>`
+- `evaluateTcb(quote: string | Uint8Array, tcbInfo: SgxTcbInfo | TdxTcbInfo, options?): { ok, type, matchedStatus, matchedIndex }`
+- `evaluateSgxTcb(...)`, `evaluateTdxTcb(...)` for narrower control
+- `verifyTcbInfoSignature({ tcbInfoObject|tcbInfoText, signature, signingChain })` to check Intel JSON signatures
 
 Verification performs:
 - PCK chain build and validation (leaf → intermediate → root)
@@ -71,6 +75,7 @@ Verification performs:
 - QE report signature verification
 - QE binding check between `attestation_public_key` and QE report data
 - Quote signature verification by `attestation_public_key`
+ - (Optional) TCB evaluation when you provide Intel `tcbInfo.json`
 
 Errors are thrown for invalid conditions (e.g. "invalid root", "invalid cert chain", "expired cert chain, or not yet valid", "revoked certificate in cert chain", "invalid qe report signature", "invalid qe report binding", "invalid signature over quote", "only TDX/SGX is supported", "only ECDSA att_key_type is supported", "only PCK cert_data is supported", "missing certdata", "Unsupported quote version").
 
@@ -105,10 +110,35 @@ Human‑readable JSON views for logging:
 
 ## Limitations
 
-- No TCB checks (for now)
 - Only ECDSA attestation key (P‑256) is supported (for now)
 - Only DCAP `cert_data` type 5 is supported
 - QE report must be present for QE signature/binding checks
+
+## TCB evaluation (frontend friendly)
+
+Intel publishes TCB Info JSON for SGX and TDX. This package ships a lightweight evaluator which compares the quote's SVN values against the TCB levels you provide.
+
+Basic usage in a browser:
+
+```ts
+import { verifyTdxBase64, evaluateTcb } from "ra-https-qvl"
+
+// 1) Perform chain-of-trust validation
+await verifyTdxBase64(quoteBase64, { date: Date.now(), crls: [] })
+
+// 2) Fetch TCB Info JSON from your backend (you fetch & cache Intel docs server-side)
+const tcbInfo = await (await fetch("/tcb/tdx/tcbInfo.json")).json()
+
+// 3) Evaluate TCB
+const { ok, matchedStatus, matchedIndex } = evaluateTcb(quoteBase64, tcbInfo, {
+  atTimeMs: Date.now(),
+  enforceUpToDate: true, // require UpToDate; if false, you can inspect status
+})
+
+if (!ok) throw new Error(`TCB not acceptable: ${matchedStatus}`)
+```
+
+If you need to validate Intel's signature over the TCB Info JSON, use `verifyTcbInfoSignature`. Supply the raw JSON string and the Intel signing chain you trust. In a browser, we recommend downloading and verifying server-side, then serving the verified JSON to clients.
 
 ## License
 

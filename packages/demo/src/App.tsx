@@ -9,7 +9,13 @@ import {
 import "./App.css"
 
 import { TunnelClient } from "ra-https-tunnel"
-import { verifyTdxBase64, verifySgxBase64, hex, isTdxQuote } from "ra-https-qvl"
+import {
+  verifyTdxBase64,
+  verifySgxBase64,
+  hex,
+  isTdxQuote,
+  evaluateTcb,
+} from "ra-https-qvl"
 
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
@@ -55,6 +61,7 @@ function App() {
   const [hiddenMessagesCount, setHiddenMessagesCount] = useState<number>(0)
   const [verifyResult, setVerifyResult] = useState<string>("")
   const [swCounter, setSwCounter] = useState<number>(0)
+  const [tcbStatus, setTcbStatus] = useState<string>("")
   const [attestedMrtd, setAttestedMrtd] = useState<string>("")
   const [expectedReportData, setExpectedReportData] = useState<string>("")
   const [attestedReportData, setAttestedReportData] = useState<string>("")
@@ -233,8 +240,22 @@ function App() {
         crls: [],
       })
 
-      if (ok && ok2 && ok3) {
-        setVerifyResult("✅ Extra TDX v4, v5, SGX verification tests succeeded")
+      // Lightweight TCB evaluation demo using bundled sample TCB JSONs
+      let tcbOk = false
+      try {
+        const tdxtcb = await (await fetch("/sample/tdx/tcbInfo.json")).json()
+        const res = evaluateTcb(tappdV4Base64, tdxtcb, {
+          atTimeMs: Date.parse("2025-09-01"),
+          enforceUpToDate: false,
+        })
+        setTcbStatus(`${res.type.toUpperCase()} TCB: ${res.matchedStatus} (level #${res.matchedIndex})`)
+        tcbOk = res.ok
+      } catch (e) {
+        setTcbStatus(`TCB evaluate error: ${(e as Error)?.message || e}`)
+      }
+
+      if (ok && ok2 && ok3 && tcbOk) {
+        setVerifyResult("✅ Extra TDX v4, v5, SGX + TCB evaluation succeeded")
         return
       }
       setVerifyResult("❌ Extra verification tests failed")
@@ -476,6 +497,9 @@ function App() {
             <div style={{ marginBottom: 6 }}>
               Attested report_data: {attestedReportData}
             </div>
+            {tcbStatus && (
+              <div style={{ marginBottom: 6 }}>TCB Status: {tcbStatus}</div>
+            )}
 
             <hr
               style={{
