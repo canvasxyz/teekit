@@ -69,27 +69,49 @@ function getVerifyTcb(stateRef: TcbRef) {
       now <= Date.parse(tcbInfo.tcbInfo.nextUpdate)
 
     // Determine the TCB status by finding the first Intel TCB level
-    // whose requirements are satisfied by the quote:
-    // - PCE SVN must be >= the level's pcesvn
-    // - For each CPU SVN component key present (sgxtcbcompXXsvn),
-    //   the quote's cpu_svn[XX-1] must be >= the level's value
-    // On first match, adopt that level's tcbStatus; otherwise keep
-    // the default "OutOfDate".
+    // whose requirements are satisfied by the quote.
+    // For SGX quotes, compare against sgxtcbcomponents (array) if present,
+    // otherwise fall back to legacy sgxtcbcompXXsvn keys.
+    // For TDX quotes, compare against tdxtcbcomponents (array) if present.
     let statusFound = "OutOfDate"
+    let matchedLevel = false
     for (const level of tcbInfo.tcbInfo.tcbLevels) {
       const pceOk = pceSvn >= level.tcb.pcesvn
-      let cpuOk = true
-      for (let comp = 1; comp <= 16; comp++) {
-        const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
-        if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
-          if (cpuSvn[comp - 1] < level.tcb[key]) {
-            cpuOk = false
-            break
+
+      // Gather required component SVNs for this level
+      let required: Array<number | undefined> = new Array(16).fill(undefined)
+      if (tdx && Array.isArray(level.tcb.tdxtcbcomponents)) {
+        for (let i = 0; i < Math.min(16, level.tcb.tdxtcbcomponents.length); i++) {
+          const comp = level.tcb.tdxtcbcomponents[i]
+          required[i] = typeof comp?.svn === "number" ? comp.svn : undefined
+        }
+      } else {
+        // Legacy per-component keys: sgxtcbcompXXsvn
+        for (let comp = 1; comp <= 16; comp++) {
+          const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
+          if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
+            required[comp - 1] = level.tcb[key]
           }
         }
       }
+
+      let cpuOk = true
+      for (let i = 0; i < Math.min(16, cpuSvn.length); i++) {
+        const need = required[i]
+        if (typeof need === "number") {
+          const have = cpuSvn[i]
+          if (have !== undefined && have !== null) {
+            if (have < need) {
+              cpuOk = false
+              break
+            }
+          }
+        }
+      }
+
       if (cpuOk && pceOk) {
         statusFound = level.tcbStatus
+        matchedLevel = true
         break
       }
     }
@@ -97,6 +119,12 @@ function getVerifyTcb(stateRef: TcbRef) {
     stateRef.fmspc = fmspcHex
     stateRef.status = statusFound
     stateRef.freshnessOk = freshnessOk
+
+    if (!matchedLevel) {
+      console.log(
+        `[tcb] No matching TCB level found in TcbInfo (id=${tcbInfo.tcbInfo.id}) for ${tdx ? "TDX" : "SGX"} FMSPC=${tcbInfo.tcbInfo.fmspc} PCE_SVN=${pceSvn}; treating as OutOfDate`,
+      )
+    }
 
     const valid =
       freshnessOk &&
