@@ -1,7 +1,14 @@
 import test from "ava"
 import fs from "node:fs"
 import path from "node:path"
-import { verifySgx, isSgxQuote, QV_X509Certificate } from "ra-https-qvl"
+import { Buffer } from "node:buffer"
+import {
+  verifySgx,
+  verifyTdx,
+  isSgxQuote,
+  isTdxQuote,
+  QV_X509Certificate,
+} from "ra-https-qvl"
 import { extractPemCertificates } from "ra-https-qvl/utils"
 
 const BASE_TIME = Date.parse("2025-09-01")
@@ -77,13 +84,23 @@ function buildVerifyFmspcHook(stateRef: {
 }) {
   return async (fmspcHex: string, quote: unknown): Promise<boolean> => {
     try {
-      if (!isSgxQuote(quote as any)) return false
-      const parsed = quote as any
+      // Support both SGX and TDX quotes
+      let cpuSvn: number[] | null = null
+      let pceSvn: number | null = null
+      if (isSgxQuote(quote as any)) {
+        const parsed = quote as any
+        cpuSvn = Array.from(parsed.body.cpu_svn as Uint8Array)
+        pceSvn = parsed.header.pce_svn as number
+      } else if (isTdxQuote(quote as any)) {
+        const parsed = quote as any
+        cpuSvn = Array.from(parsed.body.tee_tcb_svn as Uint8Array)
+        pceSvn = parsed.header.pce_svn as number
+      } else {
+        return false
+      }
 
       // Fetch and evaluate
       const tcbInfo = await fetchAndCacheTcbInfo(fmspcHex)
-      const cpuSvn = Array.from(parsed.body.cpu_svn as Uint8Array)
-      const pceSvn = parsed.header.pce_svn as number
       const now = BASE_TIME
       const freshnessOk =
         Date.parse(tcbInfo.tcbInfo.issueDate) <= now &&
@@ -93,12 +110,12 @@ function buildVerifyFmspcHook(stateRef: {
       for (const level of tcbInfo.tcbInfo.tcbLevels) {
         const tcb = level.tcb as any
         const pceOk =
-          typeof tcb.pcesvn === "number" ? pceSvn >= tcb.pcesvn : true
+          typeof tcb.pcesvn === "number" ? (pceSvn as number) >= tcb.pcesvn : true
         let cpuOk = true
         for (let comp = 1; comp <= 16; comp++) {
           const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
           if (Object.prototype.hasOwnProperty.call(tcb, key)) {
-            if (cpuSvn[comp - 1] < tcb[key]) {
+            if ((cpuSvn as number[])[comp - 1] < tcb[key]) {
               cpuOk = false
               break
             }
@@ -149,6 +166,31 @@ function loadExtraCertsIfNeeded(samplePath: string): {
   return { crls: [] }
 }
 
+function loadTdxExtrasIfNeeded(samplePath: string): {
+  crls: Uint8Array[]
+  extraCertdata?: string[]
+  pinnedRoot?: QV_X509Certificate
+} {
+  if (samplePath.endsWith("test/sample/tdx/quote.dat")) {
+    const root = extractPemCertificates(
+      fs.readFileSync("test/sample/tdx/trustedRootCaCert.pem"),
+    )
+    const pckChain = extractPemCertificates(
+      fs.readFileSync("test/sample/tdx/pckSignChain.pem"),
+    )
+    const pckCert = extractPemCertificates(
+      fs.readFileSync("test/sample/tdx/pckCert.pem"),
+    )
+    const extraCertdata = [...root, ...pckChain, ...pckCert]
+    const crls = [
+      fs.readFileSync("test/sample/tdx/rootCaCrl.der"),
+      fs.readFileSync("test/sample/tdx/intermediateCaCrl.der"),
+    ]
+    return { crls, extraCertdata, pinnedRoot: new QV_X509Certificate(root[0]) }
+  }
+  return { crls: [] }
+}
+
 async function runSgxSample(t: any, sampleRelPath: string) {
   const quote = fs.readFileSync(sampleRelPath)
   const state: { status?: string; freshnessOk?: boolean } = {}
@@ -180,22 +222,115 @@ async function runSgxSample(t: any, sampleRelPath: string) {
   }
 }
 
-test.serial("TCB eval via verifyFmspc: Intel sample quote.dat", async (t) => {
+async function runTdxSampleFromFile(t: any, sampleRelPath: string) {
+  const quote = fs.readFileSync(sampleRelPath)
+  const state: { status?: string; freshnessOk?: boolean } = {}
+  const verifyHook = buildVerifyFmspcHook(state)
+  const extras = loadTdxExtrasIfNeeded(sampleRelPath)
+
+  try {
+    const ok = await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: extras.crls,
+      extraCertdata: extras.extraCertdata,
+      pinnedRootCerts: extras.pinnedRoot ? [extras.pinnedRoot] : undefined,
+      verifyFmspc: verifyHook,
+    })
+
+    t.true(ok)
+    t.truthy(state.status)
+    t.true(state!.freshnessOk === true)
+    t.true(isAcceptableStatus(state.status!))
+  } catch (err: any) {
+    t.regex(String(err?.message ?? ""), /TCB validation failed/i)
+    t.truthy(state.status)
+    const unacceptable = !state!.freshnessOk || !isAcceptableStatus(state.status!)
+    t.true(unacceptable)
+  }
+}
+
+async function runTdxGcpJsonSample(t: any, jsonRelPath: string) {
+  const data = JSON.parse(fs.readFileSync(jsonRelPath, "utf-8"))
+  const quoteB64: string = data?.tdx?.quote ?? data?.quote
+  const quote = Buffer.from(quoteB64, "base64")
+  const state: { status?: string; freshnessOk?: boolean } = {}
+  const verifyHook = buildVerifyFmspcHook(state)
+
+  try {
+    const ok = await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: verifyHook,
+    })
+
+    t.true(ok)
+    t.truthy(state.status)
+    t.true(state!.freshnessOk === true)
+    t.true(isAcceptableStatus(state.status!))
+  } catch (err: any) {
+    t.regex(String(err?.message ?? ""), /TCB validation failed/i)
+    t.truthy(state.status)
+    const unacceptable = !state!.freshnessOk || !isAcceptableStatus(state.status!)
+    t.true(unacceptable)
+  }
+}
+
+test.serial("TCB eval via verifyFmspc: Intel sample quote.dat", async (t: any) => {
   await runSgxSample(t, "test/sample/sgx/quote.dat")
 })
 
-test.serial("TCB eval via verifyFmspc: sgx-occlum.dat", async (t) => {
+test.serial("TCB eval via verifyFmspc: sgx-occlum.dat", async (t: any) => {
   await runSgxSample(t, "test/sample/sgx-occlum.dat")
 })
 
-test.serial("TCB eval via verifyFmspc: sgx-chinenyeokafor.dat", async (t) => {
+test.serial("TCB eval via verifyFmspc: sgx-chinenyeokafor.dat", async (t: any) => {
   await runSgxSample(t, "test/sample/sgx-chinenyeokafor.dat")
 })
 
-test.serial("TCB eval via verifyFmspc: sgx-tlsn-quote9.dat", async (t) => {
+test.serial("TCB eval via verifyFmspc: sgx-tlsn-quote9.dat", async (t: any) => {
   await runSgxSample(t, "test/sample/sgx-tlsn-quote9.dat")
 })
 
-test.serial("TCB eval via verifyFmspc: sgx-tlsn-quotedev.dat", async (t) => {
+test.serial("TCB eval via verifyFmspc: sgx-tlsn-quotedev.dat", async (t: any) => {
   await runSgxSample(t, "test/sample/sgx-tlsn-quotedev.dat")
 })
+
+// TDX samples (v4 and v5)
+test.serial("TCB eval via verifyFmspc (TDX v5): trustee", async (t: any) => {
+  await runTdxSampleFromFile(t, "test/sample/tdx-v5-trustee.dat")
+})
+
+test.serial("TCB eval via verifyFmspc (TDX v4): trustee", async (t: any) => {
+  await runTdxSampleFromFile(t, "test/sample/tdx-v4-trustee.dat")
+})
+
+test.serial("TCB eval via verifyFmspc (TDX v4): edgeless", async (t: any) => {
+  await runTdxSampleFromFile(t, "test/sample/tdx-v4-edgeless.dat")
+})
+
+test.serial("TCB eval via verifyFmspc (TDX v4): phala", async (t: any) => {
+  await runTdxSampleFromFile(t, "test/sample/tdx-v4-phala.dat")
+})
+
+test.serial("TCB eval via verifyFmspc (TDX v4): zkdcap", async (t: any) => {
+  await runTdxSampleFromFile(t, "test/sample/tdx-v4-zkdcap.dat")
+})
+
+test.serial("TCB eval via verifyFmspc (TDX v4): moemahhouk", async (t: any) => {
+  await runTdxSampleFromFile(t, "test/sample/tdx-v4-moemahhouk.dat")
+})
+
+test.serial("TCB eval via verifyFmspc (TDX v4): generic sample", async (t: any) => {
+  await runTdxSampleFromFile(t, "test/sample/tdx/quote.dat")
+})
+
+test.serial("TCB eval via verifyFmspc (TDX v4 GCP): gcp.json", async (t: any) => {
+  await runTdxGcpJsonSample(t, "test/sample/tdx-v4-gcp.json")
+})
+
+test.serial(
+  "TCB eval via verifyFmspc (TDX v4 GCP): gcp-no-nonce.json",
+  async (t: any) => {
+    await runTdxGcpJsonSample(t, "test/sample/tdx-v4-gcp-no-nonce.json")
+  },
+)
