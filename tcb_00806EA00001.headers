@@ -1,0 +1,6 @@
+HTTP/1.1 404 Not Found
+Warning: 299 api.trustedservices.intel.com "The version of Provisioning Certification Service for Intel(R) Software Guard Extensions API you are using is scheduled to end of life not later than October 31, 2025. It may happen earlier, however information about change of that date will be sent at least one year before the new date. For details on how to update to the latest version of the API, please refer to the PCS API spec [located here: https://api.portal.trustedservices.intel.com/documentation]."
+Content-Length: 0
+Request-ID: f9dd2768cfd8495d9be23543818c633a
+Date: Sun, 28 Sep 2025 04:15:30 GMT
+
