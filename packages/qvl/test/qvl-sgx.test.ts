@@ -63,6 +63,10 @@ test.serial("Verify an SGX quote from Intel, no quote signature", async (t) => {
       date: BASE_TIME,
       crls,
       extraCertdata: certdata,
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "00707f000000")
+        return true
+      },
     }),
   )
 })
@@ -81,7 +85,16 @@ test.serial("Verify an SGX quote from Occlum", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
 
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifySgx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "30606a000000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify an SGX quote from chinenyeokafor", async (t) => {
@@ -98,7 +111,16 @@ test.serial("Verify an SGX quote from chinenyeokafor", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
 
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifySgx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "90c06f000000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify an SGX quote from TLSN, quote9", async (t) => {
@@ -115,7 +137,16 @@ test.serial("Verify an SGX quote from TLSN, quote9", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
 
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifySgx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "00906ed50000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify an SGX quote from TLSN, quote_dev", async (t) => {
@@ -132,7 +163,16 @@ test.serial("Verify an SGX quote from TLSN, quote_dev", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
 
-  t.true(await verifySgx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifySgx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "00906ed50000")
+        return true
+      },
+    }),
+  )
 })
 
 // Negative tests based on the Occlum SGX quote

@@ -244,6 +244,9 @@ export async function verifySgx(quote: Uint8Array, config?: VerifyConfig) {
       throw new Error("verifySgx: TCB validation failed")
     }
   }
+  if (fmspc) {
+    console.log("verifySgx fmspc:", fmspc)
+  }
   return true
 }
 

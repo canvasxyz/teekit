@@ -438,6 +438,10 @@ export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
     }
   }
 
+  if (fmspc) {
+    console.log("verifyTdx fmspc:", fmspc)
+  }
+
   return true
 }
 

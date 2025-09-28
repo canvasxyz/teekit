@@ -34,7 +34,16 @@ test.serial("Verify a V5 TDX quote from Trustee", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "90c06f000000")
+        return true
+      },
+    }),
+  )
 })
 
 async function getTrusteeCertPems(): Promise<{
