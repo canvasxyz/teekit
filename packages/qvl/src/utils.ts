@@ -1,6 +1,8 @@
 import { QV_X509Certificate } from "./x509.js"
 import { base64url as scureBase64Url, hex as scureHex } from "@scure/base"
 import { concatUint8Arrays, areUint8ArraysEqual } from "uint8array-extras"
+import type { TdxQuote } from "./verifyTdx.js"
+import type { SgxQuote } from "./verifySgx.js"
 
 export const hex = (b: Uint8Array) => scureHex.encode(b)
 
@@ -184,4 +186,49 @@ export function concatBytes(chunks: Uint8Array[]): Uint8Array {
 
 export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   return areUint8ArraysEqual(a, b)
+}
+
+/**
+ * Compute the expected 64-byte report_data binding for a server X25519 public key,
+ * given the verifier nonce value and issued-at timestamp from the attestation service.
+ *
+ * expected = SHA-512(verifier_nonce.val || verifier_nonce.iat || x25519_public_key)
+ */
+export async function getX25519ExpectedReportData(
+  verifierNonceVal: Uint8Array,
+  verifierNonceIat: Uint8Array,
+  x25519PublicKey: Uint8Array,
+): Promise<Uint8Array> {
+  if (!verifierNonceVal || verifierNonceVal.length === 0)
+    throw new Error("missing verifier_nonce.val")
+  if (!verifierNonceIat || verifierNonceIat.length === 0)
+    throw new Error("missing verifier_nonce.iat")
+  if (!x25519PublicKey || x25519PublicKey.length === 0)
+    throw new Error("missing x25519 key")
+
+  const payload = concatBytes([
+    verifierNonceVal,
+    verifierNonceIat,
+    x25519PublicKey,
+  ])
+  const expectedReport = await crypto.subtle.digest("SHA-512", payload)
+  return new Uint8Array(expectedReport)
+}
+
+/**
+ * Check whether an SGX or TDX quote's report_data equals the expected X25519 binding
+ * derived from verifier_nonce and the server's X25519 public key.
+ */
+export async function isX25519Bound(
+  quote: TdxQuote | SgxQuote,
+  verifierNonceVal: Uint8Array,
+  verifierNonceIat: Uint8Array,
+  x25519PublicKey: Uint8Array,
+): Promise<boolean> {
+  const expected = await getX25519ExpectedReportData(
+    verifierNonceVal,
+    verifierNonceIat,
+    x25519PublicKey,
+  )
+  return bytesEqual(quote.body.report_data, expected)
 }

@@ -13,6 +13,8 @@ import {
   getTdx10SignedRegion,
   normalizeSerialHex,
   QV_X509Certificate,
+  getX25519ExpectedReportData,
+  isX25519Bound,
 } from "ra-https-qvl"
 import {
   tamperPemSignature,
@@ -263,6 +265,42 @@ function getGcpQuoteBase64(): string {
   )
   return data.tdx.quote as string
 }
+
+test.serial("X25519 helpers validate binding with GCP verifier_nonce", async (t) => {
+  const data = JSON.parse(
+    fs.readFileSync("test/sample/tdx-v4-gcp.json", "utf-8"),
+  )
+  const quoteB64: string = data.tdx.quote
+  const { body } = parseTdxQuoteBase64(quoteB64)
+
+  const val = Buffer.from(data.tdx.verifier_nonce.val, "base64")
+  const iat = Buffer.from(data.tdx.verifier_nonce.iat, "base64")
+
+  // Use a synthetic x25519 key and fabricate a quote-like object
+  const x25519Key = new Uint8Array(32)
+  for (let i = 0; i < x25519Key.length; i++) x25519Key[i] = i
+
+  const expected = await getX25519ExpectedReportData(
+    new Uint8Array(val),
+    new Uint8Array(iat),
+    x25519Key,
+  )
+  t.is(expected.length, 64)
+
+  const fakeQuote = { body: { report_data: expected } } as any
+  t.true(await isX25519Bound(fakeQuote, new Uint8Array(val), new Uint8Array(iat), x25519Key))
+
+  // Negative case: wrong key should not match
+  const wrongKey = new Uint8Array(x25519Key)
+  wrongKey[0] ^= 0xff
+  t.false(
+    await isX25519Bound(fakeQuote, new Uint8Array(val), new Uint8Array(iat), wrongKey),
+  )
+
+  // The real GCP quote's report_data equals SHA-512(val||iat||realKey) but we don't have realKey.
+  // Assert only shape and immutability here: body.report_data remains 64 bytes.
+  t.is(body.report_data.length, 64)
+})
 
 test.serial("Reject a V4 TDX quote, missing root cert", async (t) => {
   const quoteB64 = getGcpQuoteBase64()
