@@ -115,6 +115,46 @@ async function main() {
 main()
 ```
 
+### Using the ServiceWorker (browser)
+
+The ServiceWorker transparently upgrades same-origin, programmatic `fetch()` calls from your web app to go over the encrypted tunnel to your `TunnelServer` origin.
+
+1) Add the ServiceWorker plugin to your bundler (Vite example):
+
+```js
+// vite.config.js
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
+import { includeRaServiceWorker } from "ra-https-tunnel/sw"
+
+export default defineConfig({
+  plugins: [react(), includeRaServiceWorker()],
+})
+```
+
+2) Register the ServiceWorker at app startup (point it at your tunnel origin):
+
+```ts
+// src/main.tsx (or similar)
+import { registerServiceWorker } from "ra-https-tunnel/register"
+
+const baseUrl = "http://127.0.0.1:3000" // your TunnelServer origin
+registerServiceWorker(baseUrl)
+```
+
+3) Use `fetch()` as usual; same-origin requests are routed through the tunnel:
+
+```ts
+const res = await fetch("/hello")
+console.log(await res.text()) // "world" via RA-HTTPS
+```
+
+Notes:
+- Only HTTP `fetch()` is upgraded today; for WebSockets, use `TunnelClient.WebSocket`.
+- Interception is limited to same-origin, non-navigation requests (programmatic `fetch`). Asset and navigation requests are not intercepted.
+- If registration or tunneling fails, the handler falls back to the normal network `fetch`.
+- Not using Vite? Serve `__ra-serviceworker__.js` at your web root from `node_modules/ra-https-tunnel/lib/sw.build.js` and call `registerServiceWorker()` as above.
+
 ## Demo
 
 The packages/demo directory contains a demo of a chat app that relays
