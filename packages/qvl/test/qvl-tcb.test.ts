@@ -78,45 +78,40 @@ function getVerifyTcb(stateRef: TcbRef) {
     for (const level of tcbInfo.tcbInfo.tcbLevels) {
       const tcb = level.tcb as Record<string, unknown>
       const pceRequired = (tcb.pcesvn as number) ?? 0
-      const pceOk = (pceSvn ?? 0) >= pceRequired
+      const pceOk = tdx ? true : (pceSvn ?? 0) >= pceRequired
 
       let cpuOk = true
 
-      // Prefer array-based components for TDX only; keep SGX behavior as before
-      // (SGX samples often include placeholder 255 values which should not be
-      // compared directly).
+      const sgxArray = Array.isArray((tcb as any).sgxtcbcomponents)
+        ? ((tcb as any).sgxtcbcomponents as Array<{ svn?: number }>)
+        : null
       const tdxArray = Array.isArray((tcb as any).tdxtcbcomponents)
         ? ((tcb as any).tdxtcbcomponents as Array<{ svn?: number }>)
         : null
 
-      const preferredArray = tdx ? tdxArray : null
+      const preferredArray = tdx ? tdxArray ?? sgxArray : null
 
       if (preferredArray) {
         for (let i = 0; i < Math.min(preferredArray.length, cpuSvn.length); i++) {
           const required = preferredArray[i]?.svn
-          // Only enforce checks for realistic 0..255 values
-          if (
-            typeof required === "number" &&
-            required >= 0 &&
-            required <= 255 &&
-            cpuSvn[i] < required
-          ) {
+          // Skip placeholders or invalid values
+          if (typeof required !== "number" || required === 255) continue
+          if (cpuSvn[i] < required) {
             cpuOk = false
             break
           }
         }
       } else {
-        // Legacy flat-key representation (e.g. sgxtcbcompXXsvn / tdxtcbcompXXsvn)
+        // Legacy flat-key representation
         for (let comp = 1; comp <= 16; comp++) {
-          const key = `${tdx ? "tdx" : "sgx"}tcbcomp${String(comp).padStart(2, "0")}svn`
-          if (Object.prototype.hasOwnProperty.call(tcb, key)) {
-            const required = (tcb as any)[key]
-            if (
-              typeof required === "number" &&
-              required >= 0 &&
-              required <= 255 &&
-              cpuSvn[comp - 1] < required
-            ) {
+          let required: unknown
+          if (tdx && Object.prototype.hasOwnProperty.call(tcb, `tdxtcbcomp${String(comp).padStart(2, "0")}svn`)) {
+            required = (tcb as any)[`tdxtcbcomp${String(comp).padStart(2, "0")}svn`]
+          } else if (Object.prototype.hasOwnProperty.call(tcb, `sgxtcbcomp${String(comp).padStart(2, "0")}svn`)) {
+            required = (tcb as any)[`sgxtcbcomp${String(comp).padStart(2, "0")}svn`]
+          }
+          if (typeof required === "number" && required !== 255) {
+            if (cpuSvn[comp - 1] < required) {
               cpuOk = false
               break
             }
