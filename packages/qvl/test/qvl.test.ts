@@ -43,7 +43,16 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "b0c06f000000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
@@ -63,7 +72,16 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "00806f050000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
@@ -83,7 +101,16 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "b0c06f000000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
@@ -104,7 +131,16 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "b0c06f000000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
@@ -126,7 +162,16 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "90c06f000000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Azure", async (t) => {
@@ -146,7 +191,16 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
   t.deepEqual(body.mr_owner, new Uint8Array(48))
   t.deepEqual(body.mr_owner_config, new Uint8Array(48))
 
-  t.true(await verifyTdxBase64(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdxBase64(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "00806f050000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
@@ -166,7 +220,16 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "50806f000000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
@@ -186,7 +249,16 @@ test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
 
-  t.true(await verifyTdx(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "00806f050000")
+        return true
+      },
+    }),
+  )
 })
 
 test.serial("Verify a V4 TDX quote from Intel", async (t) => {
@@ -230,6 +302,10 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
       date: BASE_TIME,
       extraCertdata: certdata,
       crls,
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "ed742af8adf5")
+        return true
+      },
     }),
   )
 })
@@ -254,7 +330,16 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
   t.deepEqual(body.mr_owner, new Uint8Array(48))
   t.deepEqual(body.mr_owner_config, new Uint8Array(48))
 
-  t.true(await verifyTdxBase64(quote, { date: BASE_TIME, crls: [] }))
+  t.true(
+    await verifyTdxBase64(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyFmspc: async (fmspc) => {
+        t.is(fmspc, "00806f050000")
+        return true
+      },
+    }),
+  )
 })
 
 // Negative tests based on the GCP quote
