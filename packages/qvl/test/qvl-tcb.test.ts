@@ -71,36 +71,79 @@ function getVerifyTcb(stateRef: TcbRef) {
     // Determine the TCB status by finding the first Intel TCB level
     // whose requirements are satisfied by the quote:
     // - PCE SVN must be >= the level's pcesvn
-    // - For each CPU SVN component key present (sgxtcbcompXXsvn),
-    //   the quote's cpu_svn[XX-1] must be >= the level's value
-    // On first match, adopt that level's tcbStatus; otherwise keep
-    // the default "OutOfDate".
-    let statusFound = "OutOfDate"
+    // - For each TCB component present (SGX or TDX),
+    //   the quote's component must be >= the level's required svn
+    // On first match, adopt that level's tcbStatus.
+    let statusFound: string | null = null
     for (const level of tcbInfo.tcbInfo.tcbLevels) {
-      const pceOk = pceSvn >= level.tcb.pcesvn
+      const tcb = level.tcb as Record<string, unknown>
+      const pceRequired = (tcb.pcesvn as number) ?? 0
+      const pceOk = (pceSvn ?? 0) >= pceRequired
+
       let cpuOk = true
-      for (let comp = 1; comp <= 16; comp++) {
-        const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
-        if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
-          if (cpuSvn[comp - 1] < level.tcb[key]) {
+
+      // Prefer array-based components for TDX only; keep SGX behavior as before
+      // (SGX samples often include placeholder 255 values which should not be
+      // compared directly).
+      const tdxArray = Array.isArray((tcb as any).tdxtcbcomponents)
+        ? ((tcb as any).tdxtcbcomponents as Array<{ svn?: number }>)
+        : null
+
+      const preferredArray = tdx ? tdxArray : null
+
+      if (preferredArray) {
+        for (let i = 0; i < Math.min(preferredArray.length, cpuSvn.length); i++) {
+          const required = preferredArray[i]?.svn
+          // Only enforce checks for realistic 0..255 values
+          if (
+            typeof required === "number" &&
+            required >= 0 &&
+            required <= 255 &&
+            cpuSvn[i] < required
+          ) {
             cpuOk = false
             break
           }
         }
+      } else {
+        // Legacy flat-key representation (e.g. sgxtcbcompXXsvn / tdxtcbcompXXsvn)
+        for (let comp = 1; comp <= 16; comp++) {
+          const key = `${tdx ? "tdx" : "sgx"}tcbcomp${String(comp).padStart(2, "0")}svn`
+          if (Object.prototype.hasOwnProperty.call(tcb, key)) {
+            const required = (tcb as any)[key]
+            if (
+              typeof required === "number" &&
+              required >= 0 &&
+              required <= 255 &&
+              cpuSvn[comp - 1] < required
+            ) {
+              cpuOk = false
+              break
+            }
+          }
+        }
       }
+
       if (cpuOk && pceOk) {
         statusFound = level.tcbStatus
         break
       }
     }
 
+    if (!statusFound) {
+      console.log(
+        `[TCB] No matching TCB level found for FMSPC=${fmspcHex.toLowerCase()} (tdx=${tdx}). Defaulting to OutOfDate`,
+      )
+    }
+
     stateRef.fmspc = fmspcHex
-    stateRef.status = statusFound
+    stateRef.status = statusFound ?? "OutOfDate"
     stateRef.freshnessOk = freshnessOk
 
     const valid =
       freshnessOk &&
-      (statusFound === "UpToDate" || statusFound === "ConfigurationNeeded")
+      ((statusFound ?? "OutOfDate") === "UpToDate" ||
+        (statusFound ?? "OutOfDate") === "ConfigurationNeeded")
     // console.log("status", statusFound, "fresh", freshnessOk, "valid", valid)
 
     return valid
