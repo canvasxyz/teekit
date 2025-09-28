@@ -7,6 +7,8 @@ import {
   TdxQuote,
   verifySgx,
   verifyTdx,
+  getX25519ExpectedReportData as qvlGetX25519ExpectedReportData,
+  isX25519Bound as qvlIsX25519Bound,
 } from "ra-https-qvl"
 import { base64 as scureBase64 } from "@scure/base"
 import { concatUint8Arrays, areUint8ArraysEqual } from "uint8array-extras"
@@ -641,11 +643,11 @@ export class TunnelClient {
     if (!nonce) throw new Error("missing verifier_nonce.val")
     if (!issuedAt) throw new Error("missing verifier_nonce.iat")
     if (!this.serverX25519PublicKey) throw new Error("missing x25519 key")
-
-    const userdata = this.serverX25519PublicKey
-    const buf = concatUint8Arrays([nonce, issuedAt, userdata])
-    const expectedReport = await crypto.subtle.digest("SHA-512", buf)
-    return new Uint8Array(expectedReport)
+    return await qvlGetX25519ExpectedReportData(
+      nonce,
+      issuedAt,
+      this.serverX25519PublicKey,
+    )
   }
 
   /**
@@ -654,8 +656,16 @@ export class TunnelClient {
    * to verify that we have a secure connection.
    */
   async isX25519Bound(quote: TdxQuote | SgxQuote): Promise<boolean> {
-    const actualReport = quote.body.report_data
-    const expectedReport = await this.getX25519ExpectedReportData()
-    return areUint8ArraysEqual(actualReport, expectedReport)
+    const nonce = this.reportBindingData?.verifierData?.val
+    const issuedAt = this.reportBindingData?.verifierData?.iat
+    if (!nonce) throw new Error("missing verifier_nonce.val")
+    if (!issuedAt) throw new Error("missing verifier_nonce.iat")
+    if (!this.serverX25519PublicKey) throw new Error("missing x25519 key")
+    return await qvlIsX25519Bound(
+      quote,
+      nonce,
+      issuedAt,
+      this.serverX25519PublicKey,
+    )
   }
 }

@@ -5,7 +5,10 @@
 		"rootDir": ".",
 		"outDir": "lib",
 		"module": "Node16",
-		"moduleResolution": "Node16"
+		"moduleResolution": "Node16",
+		"paths": {
+			"ra-https-qvl": ["../src/index.ts"]
+		}
 	},
 	"references": [{ "path": "../." }]
 }

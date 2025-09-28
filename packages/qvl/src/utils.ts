@@ -1,6 +1,8 @@
 import { QV_X509Certificate } from "./x509.js"
 import { base64url as scureBase64Url, hex as scureHex } from "@scure/base"
 import { concatUint8Arrays, areUint8ArraysEqual } from "uint8array-extras"
+import type { TdxQuote } from "./verifyTdx.js"
+import type { SgxQuote } from "./verifySgx.js"
 
 export const hex = (b: Uint8Array) => scureHex.encode(b)
 
@@ -184,4 +186,44 @@ export function concatBytes(chunks: Uint8Array[]): Uint8Array {
 
 export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   return areUint8ArraysEqual(a, b)
+}
+
+/**
+ * Compute the expected report_data binding for an X25519 public key using the
+ * verifier-provided nonce and issued-at timestamp.
+ *
+ * expected = SHA-512(nonce || iat || x25519PublicKey)
+ */
+export async function getX25519ExpectedReportData(
+  nonce: Uint8Array,
+  issuedAt: Uint8Array,
+  x25519PublicKey: Uint8Array,
+): Promise<Uint8Array> {
+  if (!nonce || nonce.length === 0) throw new Error("missing verifier_nonce.val")
+  if (!issuedAt || issuedAt.length === 0)
+    throw new Error("missing verifier_nonce.iat")
+  if (!x25519PublicKey || x25519PublicKey.length === 0)
+    throw new Error("missing x25519 key")
+
+  const combined = concatUint8Arrays([nonce, issuedAt, x25519PublicKey])
+  const expectedReport = await crypto.subtle.digest("SHA-512", combined)
+  return new Uint8Array(expectedReport)
+}
+
+/**
+ * Check whether a TDX or SGX quote's report_data attests to the given X25519 public key
+ * under the specified verifier nonce and issued-at timestamp.
+ */
+export async function isX25519Bound(
+  quote: TdxQuote | SgxQuote,
+  nonce: Uint8Array,
+  issuedAt: Uint8Array,
+  x25519PublicKey: Uint8Array,
+): Promise<boolean> {
+  const expected = await getX25519ExpectedReportData(
+    nonce,
+    issuedAt,
+    x25519PublicKey,
+  )
+  return areUint8ArraysEqual(quote.body.report_data, expected)
 }

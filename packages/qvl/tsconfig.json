@@ -3,6 +3,9 @@
 	"include": ["src", "types"],
 	"compilerOptions": {
 		"rootDir": "src",
-		"outDir": "lib"
+		"outDir": "lib",
+		"paths": {
+			"ra-https-qvl": ["./src/index.ts"]
+		}
 	}
 }
