@@ -1,0 +1,1325 @@
+{
+  "tcbInfo": {
+    "id": "SGX",
+    "version": 3,
+    "issueDate": "2025-09-28T05:52:19Z",
+    "nextUpdate": "2025-10-28T05:52:19Z",
+    "fmspc": "00906ed50000",
+    "pceId": "0000",
+    "tcbType": 0,
+    "tcbEvaluationDataNumber": 17,
+    "tcbLevels": [
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 21
+            },
+            {
+              "svn": 21
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 14
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 13
+        },
+        "tcbDate": "2024-03-13T00:00:00Z",
+        "tcbStatus": "SWHardeningNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 21
+            },
+            {
+              "svn": 21
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 13
+        },
+        "tcbDate": "2024-03-13T00:00:00Z",
+        "tcbStatus": "ConfigurationAndSWHardeningNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 20
+            },
+            {
+              "svn": 20
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 14
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 13
+        },
+        "tcbDate": "2023-02-15T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00828",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 20
+            },
+            {
+              "svn": 20
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 13
+        },
+        "tcbDate": "2023-02-15T00:00:00Z",
+        "tcbStatus": "OutOfDateConfigurationNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 19
+            },
+            {
+              "svn": 19
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 6
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 13
+        },
+        "tcbDate": "2021-11-10T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 19
+            },
+            {
+              "svn": 19
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 13
+        },
+        "tcbDate": "2021-11-10T00:00:00Z",
+        "tcbStatus": "OutOfDateConfigurationNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00161",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 17
+            },
+            {
+              "svn": 17
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 6
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 11
+        },
+        "tcbDate": "2021-11-10T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00161",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 17
+            },
+            {
+              "svn": 17
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 6
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 10
+        },
+        "tcbDate": "2020-11-11T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00161",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 17
+            },
+            {
+              "svn": 17
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 11
+        },
+        "tcbDate": "2021-11-10T00:00:00Z",
+        "tcbStatus": "OutOfDateConfigurationNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00161",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 17
+            },
+            {
+              "svn": 17
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 10
+        },
+        "tcbDate": "2020-11-11T00:00:00Z",
+        "tcbStatus": "OutOfDateConfigurationNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00477",
+          "INTEL-SA-00161",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 15
+            },
+            {
+              "svn": 15
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 6
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 10
+        },
+        "tcbDate": "2020-06-10T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00161",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 15
+            },
+            {
+              "svn": 15
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 10
+        },
+        "tcbDate": "2020-06-10T00:00:00Z",
+        "tcbStatus": "OutOfDateConfigurationNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00161",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 14
+            },
+            {
+              "svn": 14
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 6
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 10
+        },
+        "tcbDate": "2019-12-11T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00320",
+          "INTEL-SA-00329",
+          "INTEL-SA-00161",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 14
+            },
+            {
+              "svn": 14
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 10
+        },
+        "tcbDate": "2019-12-11T00:00:00Z",
+        "tcbStatus": "OutOfDateConfigurationNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00161",
+          "INTEL-SA-00320",
+          "INTEL-SA-00329",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 13
+            },
+            {
+              "svn": 13
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 9
+        },
+        "tcbDate": "2019-11-13T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00161",
+          "INTEL-SA-00320",
+          "INTEL-SA-00329",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00219",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 13
+            },
+            {
+              "svn": 13
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 9
+        },
+        "tcbDate": "2019-11-13T00:00:00Z",
+        "tcbStatus": "OutOfDateConfigurationNeeded",
+        "advisoryIDs": [
+          "INTEL-SA-00219",
+          "INTEL-SA-00161",
+          "INTEL-SA-00320",
+          "INTEL-SA-00329",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 2
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 7
+        },
+        "tcbDate": "2019-05-15T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00220",
+          "INTEL-SA-00270",
+          "INTEL-SA-00293",
+          "INTEL-SA-00219",
+          "INTEL-SA-00161",
+          "INTEL-SA-00320",
+          "INTEL-SA-00329",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 1
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 7
+        },
+        "tcbDate": "2019-01-09T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00233",
+          "INTEL-SA-00220",
+          "INTEL-SA-00270",
+          "INTEL-SA-00293",
+          "INTEL-SA-00219",
+          "INTEL-SA-00161",
+          "INTEL-SA-00320",
+          "INTEL-SA-00329",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      },
+      {
+        "tcb": {
+          "sgxtcbcomponents": [
+            {
+              "svn": 1
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 2
+            },
+            {
+              "svn": 4
+            },
+            {
+              "svn": 1
+            },
+            {
+              "svn": 128
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ],
+          "pcesvn": 6
+        },
+        "tcbDate": "2018-08-15T00:00:00Z",
+        "tcbStatus": "OutOfDate",
+        "advisoryIDs": [
+          "INTEL-SA-00203",
+          "INTEL-SA-00233",
+          "INTEL-SA-00220",
+          "INTEL-SA-00270",
+          "INTEL-SA-00293",
+          "INTEL-SA-00219",
+          "INTEL-SA-00161",
+          "INTEL-SA-00320",
+          "INTEL-SA-00329",
+          "INTEL-SA-00381",
+          "INTEL-SA-00389",
+          "INTEL-SA-00477",
+          "INTEL-SA-00614",
+          "INTEL-SA-00617",
+          "INTEL-SA-00289",
+          "INTEL-SA-00828",
+          "INTEL-SA-00334",
+          "INTEL-SA-00615"
+        ]
+      }
+    ]
+  },
+  "signature": "ed106dd55d42570a44f6becbc36bf2532685c2e3307cbc32e3677f392c8d770b0d47d7eba39d7fdb474c098b2e938ad3e265618fdd7ddcb3f8fbe2683fb7a815"
+}
