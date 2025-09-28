@@ -115,6 +115,42 @@ async function main() {
 main()
 ```
 
+### ServiceWorker (optional)
+
+Use the built‑in ServiceWorker to automatically upgrade same‑origin `fetch()` calls from your web page to use the encrypted tunnel. This lets you keep using the browser's global `fetch` API without wiring `TunnelClient` into your app code.
+
+1) Serve the ServiceWorker asset
+
+- If you're using Vite/Rollup, add the plugin that serves the worker in dev and emits it during build:
+
+```js
+// vite.config.js / vite.config.ts
+import { defineConfig } from "vite"
+import { includeRaServiceWorker } from "ra-https-tunnel/sw"
+
+export default defineConfig({
+  plugins: [includeRaServiceWorker()],
+})
+```
+
+2) Register the ServiceWorker in your app
+
+```ts
+import { registerServiceWorker } from "ra-https-tunnel/register"
+
+// Pass the TunnelServer origin the worker should forward traffic to
+registerServiceWorker("http://127.0.0.1:3000")
+
+// After registration, programmatic same-origin fetch() goes over the encrypted tunnel
+const res = await fetch("/hello")
+console.log(await res.text())
+```
+
+Notes:
+- Interception targets same-origin, non-navigation, programmatic requests; assets and page navigations are left untouched.
+- WebSockets are not upgraded by the ServiceWorker. For encrypted WebSockets from a page, use `TunnelClient.WebSocket`.
+- The worker is served at `/__ra-serviceworker__.js` by the plugin; keep it at site root so registration works with `scope: "/"`.
+
 ## Demo
 
 The packages/demo directory contains a demo of a chat app that relays
