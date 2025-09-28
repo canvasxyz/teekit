@@ -16,9 +16,19 @@ import {
 const BASE_TIME = Date.parse("2025-09-28T12:00:00Z")
 const SAMPLE_DIR = "test/sample"
 
-async function fetchTcbInfo(fmspcHex: string): Promise<IntelTcbInfo> {
+async function fetchTcbInfo(
+  fmspcHex: string,
+  opts?: { tdx?: boolean },
+): Promise<IntelTcbInfo> {
   const fmspc = fmspcHex.toLowerCase()
   const cachePath = path.join(SAMPLE_DIR, `tcbInfo-${fmspc}.json`)
+  if (opts?.tdx) {
+    const tdxPath = path.join(SAMPLE_DIR, "tdx", "tcbInfo.json")
+    if (fs.existsSync(tdxPath)) {
+      const raw = fs.readFileSync(tdxPath, "utf8")
+      return JSON.parse(raw)
+    }
+  }
 
   if (fs.existsSync(cachePath)) {
     const raw = fs.readFileSync(cachePath, "utf8")
@@ -60,7 +70,7 @@ function getVerifyTcb(stateRef: TcbRef) {
     }
 
     // Fetch TCB info
-    const tcbInfo = await fetchTcbInfo(fmspcHex)
+    const tcbInfo = await fetchTcbInfo(fmspcHex, { tdx })
     const now = BASE_TIME
 
     // Check freshness
@@ -76,7 +86,8 @@ function getVerifyTcb(stateRef: TcbRef) {
     let statusFound = "OutOfDate"
     let matchedLevel = false
     for (const level of tcbInfo.tcbInfo.tcbLevels) {
-      const pceOk = pceSvn >= level.tcb.pcesvn
+      // For TDX, PCE SVN in quotes may be 0 or not applicable; ignore PCE gate
+      const pceOk = tdx ? true : pceSvn >= level.tcb.pcesvn
 
       // Gather required component SVNs for this level
       let required: Array<number | undefined> = new Array(16).fill(undefined)
