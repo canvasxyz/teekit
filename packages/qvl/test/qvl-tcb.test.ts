@@ -9,6 +9,8 @@ import {
   IntelTcbInfo,
   VerifyConfig,
   isTdxQuote,
+  parseTdxQuote,
+  parseSgxQuote,
 } from "ra-https-qvl"
 
 const BASE_TIME = Date.parse("2025-09-29T23:00:00Z")
@@ -147,9 +149,10 @@ async function assertTcb(
     status: string
     fresh: boolean
     fmspc: string
+    pceSvn: number
   },
 ) {
-  const { _tdx, _b64, _json, valid, status, fresh, fmspc } = config
+  const { _tdx, _b64, _json, valid, status, fresh, fmspc, pceSvn } = config
 
   const quote: Uint8Array = _b64
     ? scureBase64.decode(fs.readFileSync(path, "utf-8"))
@@ -168,6 +171,10 @@ async function assertTcb(
   t.is(stateRef.fmspc, fmspc)
   t.is(stateRef.status, status)
   t.is(stateRef.freshnessOk, fresh)
+  
+  // Also verify PCESVN from quote header
+  const parsedQuote = _tdx ? parseTdxQuote(quote) : parseSgxQuote(quote)
+  t.is(parsedQuote.header.pce_svn, pceSvn)
 }
 
 test.serial("Evaluate TCB (SGX): occlum", async (t) => {
@@ -177,6 +184,7 @@ test.serial("Evaluate TCB (SGX): occlum", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "30606a000000",
+    pceSvn: 13,
   })
 })
 
@@ -187,6 +195,7 @@ test.serial("Evaluate TCB (SGX): chinenyeokafor", async (t) => {
     status: "UpToDate",
     fresh: true,
     fmspc: "90c06f000000",
+    pceSvn: 16,
   })
 })
 
@@ -197,6 +206,7 @@ test.serial("Evaluate TCB (SGX): tlsn-quote9", async (t) => {
     status: "SWHardeningNeeded",
     fresh: true,
     fmspc: "00906ed50000",
+    pceSvn: 16,
   })
 })
 
@@ -207,6 +217,7 @@ test.serial("Evaluate TCB (SGX): tlsn-quotedev", async (t) => {
     status: "SWHardeningNeeded",
     fresh: true,
     fmspc: "00906ed50000",
+    pceSvn: 16,
   })
 })
 
@@ -217,6 +228,7 @@ test.serial("Evaluate TCB (TDX v5): trustee", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "90c06f000000",
+    pceSvn: 0,
   })
 })
 
@@ -228,6 +240,7 @@ test.serial("Evaluate TCB (TDX v4): azure", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "00806f050000",
+    pceSvn: 0,
   })
 })
 
@@ -238,6 +251,7 @@ test.serial("Evaluate TCB (TDX v4): edgeless", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "00806f050000",
+    pceSvn: 0,
   })
 })
 
@@ -249,6 +263,7 @@ test.serial("Evaluate TCB (TDX v4): gcp", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "00806f050000",
+    pceSvn: 0,
   })
 })
 
@@ -260,6 +275,7 @@ test.serial("Evaluate TCB (TDX v4): gcp no nonce", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "00806f050000",
+    pceSvn: 0,
   })
 })
 
@@ -270,6 +286,7 @@ test.serial("Evaluate TCB (TDX v4): moemahhouk", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "90c06f000000",
+    pceSvn: 13,
   })
 })
 
@@ -280,6 +297,7 @@ test.serial("Evaluate TCB (TDX v4): phala", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "b0c06f000000",
+    pceSvn: 0,
   })
 })
 
@@ -290,6 +308,7 @@ test.serial("Evaluate TCB (TDX v4): trustee", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "50806f000000",
+    pceSvn: 0,
   })
 })
 
@@ -300,5 +319,6 @@ test.serial("Evaluate TCB (TDX v4): zkdcap", async (t) => {
     status: "OutOfDate",
     fresh: true,
     fmspc: "00806f050000",
+    pceSvn: 0,
   })
 })

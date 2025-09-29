@@ -64,6 +64,7 @@ test.serial("Verify an SGX quote from Intel, no quote signature", async (t) => {
     extraCertdata: certdata,
   })
   t.is(fmspc, "00707f000000")
+  t.is(header.pce_svn, 3)
 
   t.true(
     await verifySgx(quote, {
@@ -91,6 +92,7 @@ test.serial("Verify an SGX quote from Occlum", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
   t.is(fmspc, "30606a000000")
+  t.is(header.pce_svn, 13)
 
   t.true(
     await verifySgx(quote, {
@@ -116,6 +118,7 @@ test.serial("Verify an SGX quote from chinenyeokafor", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
   t.is(fmspc, "90c06f000000")
+  t.is(header.pce_svn, 16)
 
   t.true(
     await verifySgx(quote, {
@@ -141,6 +144,7 @@ test.serial("Verify an SGX quote from TLSN, quote9", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
   t.is(fmspc, "00906ed50000")
+  t.is(header.pce_svn, 16)
 
   t.true(
     await verifySgx(quote, {
@@ -166,6 +170,7 @@ test.serial("Verify an SGX quote from TLSN, quote_dev", async (t) => {
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
   t.is(fmspc, "00906ed50000")
+  t.is(header.pce_svn, 16)
 
   t.true(
     await verifySgx(quote, {

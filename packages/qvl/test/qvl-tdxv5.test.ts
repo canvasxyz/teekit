@@ -36,6 +36,7 @@ test.serial("Verify a V5 TDX quote from Trustee", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "90c06f000000")
+  t.is(header.pce_svn, 0)
 
   t.true(
     await verifyTdx(quote, {
