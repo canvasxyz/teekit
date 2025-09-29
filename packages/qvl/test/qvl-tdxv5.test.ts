@@ -21,7 +21,8 @@ const BASE_TIME = Date.parse("2025-09-01")
 test.serial("Verify a V5 TDX quote from Trustee", async (t) => {
   const quote = fs.readFileSync("test/sample/tdx-v5-trustee.dat")
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
+  console.log(`[Trustee V5] PCESVN: ${pcesvn}`)
 
   const expectedMRTD =
     "dfba221b48a22af8511542ee796603f37382800840dcd978703909bf8e64d4c8a1e9de86e7c9638bfcba422f3886400a"

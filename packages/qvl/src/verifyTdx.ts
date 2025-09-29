@@ -47,9 +47,10 @@ export async function verifyPCKChain(
   root: QV_X509Certificate | null
   chain: QV_X509Certificate[]
   fmspc: string | null
+  pcesvn: number | null
 }> {
   if (certData.length === 0) {
-    return { status: "invalid", root: null, chain: [], fmspc: null }
+    return { status: "invalid", root: null, chain: [], fmspc: null, pcesvn: null }
   }
 
   // Build certificate objects using @peculiar/x509
@@ -80,7 +81,7 @@ export async function verifyPCKChain(
     const child = chain[i]
     const parent = chain[i + 1]
     if (child.issuer !== parent.subject)
-      return { status: "invalid", root: null, chain: [], fmspc: null }
+      return { status: "invalid", root: null, chain: [], fmspc: null, pcesvn: null }
   }
 
   // Check for expired or not-yet-valid certificates
@@ -93,7 +94,8 @@ export async function verifyPCKChain(
     ) {
       const root = chain[chain.length - 1] ?? null
       const fmspc = leaf.getFmspcHex()
-      return { status: "expired", root, chain, fmspc }
+      const pcesvn = leaf.getPcesvn()
+      return { status: "expired", root, chain, fmspc, pcesvn }
     }
   }
 
@@ -102,7 +104,7 @@ export async function verifyPCKChain(
   if (terminal && terminal.subject === terminal.issuer) {
     const valid = await terminal.verify(terminal)
     if (!valid) {
-      return { status: "invalid", root: null, chain: [], fmspc: null }
+      return { status: "invalid", root: null, chain: [], fmspc: null, pcesvn: null }
     }
   }
 
@@ -112,7 +114,7 @@ export async function verifyPCKChain(
     const parent = chain[i + 1]
     const valid = await child.verify(parent)
     if (!valid) {
-      return { status: "invalid", root: null, chain: [], fmspc: null }
+      return { status: "invalid", root: null, chain: [], fmspc: null, pcesvn: null }
     }
   }
 
@@ -131,7 +133,7 @@ export async function verifyPCKChain(
   const leafNode = chain[0]
   const bc = leafNode.getExtension(BasicConstraintsExtension)
   if (bc && bc.ca) {
-    return { status: "invalid", root: null, chain: [], fmspc: null }
+    return { status: "invalid", root: null, chain: [], fmspc: null, pcesvn: null }
   }
 
   // CA and pathLen checks for all issuers in the chain
@@ -140,7 +142,7 @@ export async function verifyPCKChain(
     const bc = issuerNode.getExtension(BasicConstraintsExtension)
 
     if (!bc || !bc.ca) {
-      return { status: "invalid", root: null, chain: [], fmspc: null }
+      return { status: "invalid", root: null, chain: [], fmspc: null, pcesvn: null }
     }
 
     // pathLenConstraint validation: number of subsequent non-self-issued CA certs
@@ -150,12 +152,13 @@ export async function verifyPCKChain(
         if (isCAInChain[j]) subsequentCAs++
       }
       if (subsequentCAs > bc.pathLength) {
-        return { status: "invalid", root: null, chain: [], fmspc: null }
+        return { status: "invalid", root: null, chain: [], fmspc: null, pcesvn: null }
       }
     }
   }
 
   const fmspc = leaf.getFmspcHex()
+  const pcesvn = leaf.getPcesvn()
 
   // CRL: Check all certificates in the PCK chain against revocation lists
   if (crls && crls.length > 0) {
@@ -169,14 +172,14 @@ export async function verifyPCKChain(
         // Node returns colonless/colon-separated uppercase hex; normalize
         const serial = normalizeSerialHex(cert.serialNumber)
         if (revoked.has(serial)) {
-          return { status: "revoked", root: null, chain: [], fmspc }
+          return { status: "revoked", root: null, chain: [], fmspc, pcesvn }
         }
       }
     }
   }
 
   const root = chain[chain.length - 1] ?? null
-  return { status: "valid", root, chain, fmspc }
+  return { status: "valid", root, chain, fmspc, pcesvn }
 }
 
 /**
@@ -364,7 +367,7 @@ export async function _verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
   const parsedQuote = parseTdxQuote(quote)
   const { signature, header } = parsedQuote
   const certs = extractPemCertificates(signature.cert_data)
-  let { status, root, fmspc } = await verifyPCKChain(
+  let { status, root, fmspc, pcesvn } = await verifyPCKChain(
     certs,
     date ?? +new Date(),
     crls,
@@ -383,12 +386,14 @@ export async function _verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
     status = fallback.status
     root = fallback.root
     fmspc = fallback.fmspc
+    pcesvn = fallback.pcesvn
   }
 
   return {
     status,
     root,
     fmspc,
+    pcesvn,
     signature,
     header,
     extraCertdata,
@@ -408,6 +413,7 @@ export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
     status,
     root,
     fmspc,
+    pcesvn,
     signature,
     header,
     extraCertdata,
@@ -460,6 +466,12 @@ export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
   if (fmspc === null) {
     throw new Error("verifyTdx: TCB missing fmspc")
   }
+
+  // Log PCESVN from certificate extension
+  if (pcesvn !== null) {
+    console.log(`[verifyTdx] PCK Certificate PCESVN: ${pcesvn}`)
+  }
+
   if (
     config?.verifyTcb &&
     !(await config.verifyTcb({

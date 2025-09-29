@@ -261,4 +261,78 @@ export class QV_X509Certificate {
       return null
     }
   }
+
+  /**
+   * Extract the PCESVN value from the PCK certificate extension.
+   * Intel SGX/TDX PCK certificates carry PCESVN under OID 1.2.840.113741.1.13.1.2.17
+   * (nested within the TCB sub-extension 1.2.840.113741.1.13.1.2)
+   * Returns the PCESVN as a number, or null if not present.
+   */
+  getPcesvn(): number | null {
+    try {
+      const oid = "1.2.840.113741.1.13.1"
+      const ext = this._cert.extensions?.find((e) => e.extnID === oid)
+      if (!ext) return null
+
+      // Decode the Intel SGX extension, which is a DER-encoded sequence:
+      const outerView = ext.extnValue.valueBlock.valueHexView
+      const inner = new Uint8Array(
+        outerView.buffer,
+        outerView.byteOffset,
+        outerView.byteLength,
+      )
+      const decoded = fromBER(inner)
+      if (decoded.offset === -1) return null
+
+      const seq: any = decoded.result
+      const children = Array.isArray(seq?.valueBlock?.value)
+        ? seq.valueBlock.value
+        : []
+
+      // First find the TCB sub-extension (1.2.840.113741.1.13.1.2)
+      for (const entry of children) {
+        const parts: any[] = Array.isArray(entry?.valueBlock?.value)
+          ? entry.valueBlock.value
+          : []
+        if (parts.length < 2) continue
+
+        const subOid = parts[0]?.valueBlock?.toString?.()
+        if (subOid !== "1.2.840.113741.1.13.1.2") continue
+
+        // The TCB extension is a SEQUENCE containing more sub-extensions
+        const tcbValueNode: any = parts[1]
+        const tcbChildren = Array.isArray(tcbValueNode?.valueBlock?.value)
+          ? tcbValueNode.valueBlock.value
+          : []
+
+        // Now look for PCESVN (1.2.840.113741.1.13.1.2.17)
+        for (const tcbEntry of tcbChildren) {
+          const tcbParts: any[] = Array.isArray(tcbEntry?.valueBlock?.value)
+            ? tcbEntry.valueBlock.value
+            : []
+          if (tcbParts.length < 2) continue
+
+          const tcbOid = tcbParts[0]?.valueBlock?.toString?.()
+          if (tcbOid !== "1.2.840.113741.1.13.1.2.17") continue
+
+          // Extract the value bytes for PCESVN (expected 1 byte for integer value)
+          const pcesvnValueNode: any = tcbParts[1]
+          const pcesvnBytes = pcesvnValueNode?.valueBlock?.valueHex
+          if (pcesvnBytes && pcesvnBytes.byteLength !== undefined) {
+            const bytes = new Uint8Array(pcesvnBytes)
+            if (bytes.length === 1) {
+              return bytes[0]
+            } else if (bytes.length === 2) {
+              // In case it's encoded as 2 bytes
+              return bytes[0] | (bytes[1] << 8)
+            }
+          }
+        }
+      }
+
+      return null
+    } catch {
+      return null
+    }
+  }
 }
