@@ -69,26 +69,73 @@ function getVerifyTcb(stateRef: TcbRef) {
       now <= Date.parse(tcbInfo.tcbInfo.nextUpdate)
 
     // Determine the TCB status by finding the first Intel TCB level
-    // whose requirements are satisfied by the quote:
-    // - PCE SVN must be >= the level's pcesvn
-    // - For each CPU SVN component key present (sgxtcbcompXXsvn),
-    //   the quote's cpu_svn[XX-1] must be >= the level's value
-    // On first match, adopt that level's tcbStatus; otherwise keep
-    // the default "OutOfDate".
-    let statusFound = "OutOfDate"
+    // whose requirements are satisfied by the quote.
+    // Rules:
+    // - Always require PCE SVN >= level.tcb.pcesvn
+    // - For SGX quotes: compare against sgxtcbcomponents[] if present, else sgxtcbcompNNsvn keys
+    // - For TDX quotes: prefer tdxtcbcomponents[] if present on the level; if absent,
+    //   fall back to PCE-only matching (to support environments publishing only SGX TCB info)
+    let statusFound = "NoTCBMatch"
     for (const level of tcbInfo.tcbInfo.tcbLevels) {
-      const pceOk = pceSvn >= level.tcb.pcesvn
+      const pceOk = pceSvn! >= (level.tcb as any).pcesvn
+      if (!pceOk) continue
+
       let cpuOk = true
-      for (let comp = 1; comp <= 16; comp++) {
-        const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
-        if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
-          if (cpuSvn[comp - 1] < level.tcb[key]) {
-            cpuOk = false
-            break
+
+      // Helper to compare cpu svn array to an array of component thresholds
+      const compareCpuArray = (arr?: Array<{ svn: number }> | null) => {
+        if (!arr || arr.length === 0) return true
+        const len = Math.min(16, arr.length)
+        for (let i = 0; i < len; i++) {
+          const req = arr[i]
+          if (req && typeof req.svn === "number") {
+            // Treat 255 as wildcard/unused component per Intel guidance
+            if (req.svn === 255) continue
+            if (cpuSvn![i] < req.svn) return false
+          }
+        }
+        return true
+      }
+
+      if (tdx) {
+        const tdxArray = (level.tcb as any).tdxtcbcomponents as
+          | Array<{ svn: number }>
+          | undefined
+        const sgxArray = (level.tcb as any).sgxtcbcomponents as
+          | Array<{ svn: number }>
+          | undefined
+        if (Array.isArray(tdxArray)) {
+          cpuOk = compareCpuArray(tdxArray)
+        } else if (Array.isArray(sgxArray)) {
+          // Some data sources publish only SGX-style components; compare indices
+          cpuOk = compareCpuArray(sgxArray)
+        } else {
+          // No component arrays; fall back to legacy numeric keys if present
+          cpuOk = true
+          for (let comp = 1; comp <= 16; comp++) {
+            const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
+            if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
+              if (cpuSvn![comp - 1] < (level.tcb as any)[key]) {
+                cpuOk = false
+                break
+              }
+            }
+          }
+        }
+      } else {
+        // SGX: use legacy keys to match prior behavior in tests
+        for (let comp = 1; comp <= 16; comp++) {
+          const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
+          if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
+            if (cpuSvn![comp - 1] < (level.tcb as any)[key]) {
+              cpuOk = false
+              break
+            }
           }
         }
       }
-      if (cpuOk && pceOk) {
+
+      if (cpuOk) {
         statusFound = level.tcbStatus
         break
       }
@@ -101,7 +148,6 @@ function getVerifyTcb(stateRef: TcbRef) {
     const valid =
       freshnessOk &&
       (statusFound === "UpToDate" || statusFound === "ConfigurationNeeded")
-    // console.log("status", statusFound, "fresh", freshnessOk, "valid", valid)
 
     return valid
   }
@@ -185,7 +231,7 @@ test.serial("Evaluate TCB (TDX v5): trustee", async (t) => {
   await assertTcb(t, "test/sample/tdx-v5-trustee.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "90c06f000000",
   })
@@ -196,7 +242,7 @@ test.serial("Evaluate TCB (TDX v4): azure", async (t) => {
     _tdx: true,
     _b64: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "00806f050000",
   })
@@ -206,7 +252,7 @@ test.serial("Evaluate TCB (TDX v4): edgeless", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-edgeless.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "00806f050000",
   })
@@ -217,7 +263,7 @@ test.serial("Evaluate TCB (TDX v4): gcp", async (t) => {
     _tdx: true,
     _json: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "00806f050000",
   })
@@ -228,7 +274,7 @@ test.serial("Evaluate TCB (TDX v4): gcp no nonce", async (t) => {
     _tdx: true,
     _json: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "00806f050000",
   })
@@ -238,7 +284,7 @@ test.serial("Evaluate TCB (TDX v4): moemahhouk", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-moemahhouk.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "90c06f000000",
   })
@@ -248,7 +294,7 @@ test.serial("Evaluate TCB (TDX v4): phala", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-phala.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "b0c06f000000",
   })
@@ -258,7 +304,7 @@ test.serial("Evaluate TCB (TDX v4): trustee", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-trustee.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "50806f000000",
   })
@@ -268,7 +314,7 @@ test.serial("Evaluate TCB (TDX v4): zkdcap", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-zkdcap.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
+    status: "NoTCBMatch",
     fresh: true,
     fmspc: "00806f050000",
   })
