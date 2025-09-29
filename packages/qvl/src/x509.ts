@@ -261,4 +261,66 @@ export class QV_X509Certificate {
       return null
     }
   }
+
+  /**
+   * Extract the Intel PCESVN (unsigned integer) from the PCK certificate extension.
+   * Intel SGX/TDX PCK certificates carry TCB entries under sub-OIDs of
+   * 1.2.840.113741.1.13.1. The PCESVN specifically is under
+   * 1.2.840.113741.1.13.1.2.17
+   */
+  getPceSvn(): number | null {
+    try {
+      const intelOid = "1.2.840.113741.1.13.1"
+      const pcesvnSubOid = "1.2.840.113741.1.13.1.2.17"
+      const ext = this._cert.extensions?.find((e) => e.extnID === intelOid)
+      if (!ext) return null
+
+      const outerView = ext.extnValue.valueBlock.valueHexView
+      const inner = new Uint8Array(
+        outerView.buffer,
+        outerView.byteOffset,
+        outerView.byteLength,
+      )
+      const decoded = fromBER(inner)
+      if (decoded.offset === -1) return null
+
+      const seq: any = decoded.result
+      const children = Array.isArray(seq?.valueBlock?.value)
+        ? seq.valueBlock.value
+        : []
+
+      for (const entry of children) {
+        const parts: any[] = Array.isArray(entry?.valueBlock?.value)
+          ? entry.valueBlock.value
+          : []
+        if (parts.length < 2) continue
+
+        const subOid = parts[0]?.valueBlock?.toString?.()
+        if (subOid !== pcesvnSubOid) continue
+
+        const valueNode: any = parts[1]
+
+        // Prefer decoded decimal value when present (INTEGER)
+        const decVal = valueNode?.valueBlock?.valueDec
+        if (typeof decVal === "number") return decVal >>> 0
+
+        // Fallback: parse big-endian bytes as unsigned integer
+        const hexBuf: ArrayBuffer | undefined = valueNode?.valueBlock?.valueHex
+        if (hexBuf && (hexBuf as any).byteLength !== undefined) {
+          const bytes = new Uint8Array(hexBuf)
+          let val = 0
+          for (let i = 0; i < bytes.length; i++) {
+            val = (val << 8) | (bytes[i] & 0xff)
+            // Keep within JS safe integer range; PCESVN is small (< 2^16)
+            if (val > Number.MAX_SAFE_INTEGER) break
+          }
+          return val >>> 0
+        }
+      }
+
+      return null
+    } catch {
+      return null
+    }
+  }
 }

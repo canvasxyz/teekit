@@ -31,7 +31,7 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
   const quote = Buffer.from(quoteHex.replace(/^0x/, ""), "hex")
 
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
 
   const expectedMRTD =
     "c68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd"
@@ -46,6 +46,7 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "b0c06f000000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -60,7 +61,7 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
   const quote = fs.readFileSync("test/sample/tdx-v4-edgeless.dat")
 
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
 
   const expectedMRTD =
     "b65ea009e424e6f761fdd3d7c8962439453b37ecdf62da04f7bc5d327686bb8bafc8a5d24a9c31cee60e4aba87c2f71b"
@@ -75,6 +76,7 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "00806f050000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -89,7 +91,7 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
   const quote = fs.readFileSync("test/sample/tdx-v4-phala.dat")
 
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
 
   const expectedMRTD =
     "91eb2b44d141d4ece09f0c75c2c53d247a3c68edd7fafe8a3520c942a604a407de03ae6dc5f87f27428b2538873118b7"
@@ -104,6 +106,7 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "b0c06f000000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -119,7 +122,7 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
   const quote = Buffer.from(quoteHex.replace(/^0x/, ""), "hex")
 
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
 
   const expectedMRTD =
     "7ba9e262ce6979087e34632603f354dd8f8a870f5947d116af8114db6c9d0d74c48bec4280e5b4f4a37025a10905bb29"
@@ -134,6 +137,7 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "b0c06f000000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -148,7 +152,7 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
   const quote = fs.readFileSync("test/sample/tdx-v4-moemahhouk.dat")
 
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
 
   const expectedMRTD = reverseHexBytes(
     "18bcec2014a3ff000c46191e960ca4fe949f9adb2d8da557dbacee87f6ef7e2411fd5f09dc2b834506959bf69626ddf2",
@@ -165,6 +169,7 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "90c06f000000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -178,7 +183,7 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
 test.serial("Verify a V4 TDX quote from Azure", async (t) => {
   const quote = fs.readFileSync("test/sample/tdx-v4-azure", "utf-8")
   const { header, body } = parseTdxQuoteBase64(quote)
-  const { fmspc } = await _verifyTdx(scureBase64.decode(quote))
+  const { fmspc, pcesvn } = await _verifyTdx(scureBase64.decode(quote))
 
   const expectedMRTD =
     "fe27b2aa3a05ec56864c308aff03dd13c189a6112d21e417ec1afe626a8cb9d91482d1379ec02fe6308972950a930d0a"
@@ -193,6 +198,7 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
   t.deepEqual(body.mr_owner, new Uint8Array(48))
   t.deepEqual(body.mr_owner_config, new Uint8Array(48))
   t.is(fmspc, "00806f050000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdxBase64(quote, {
@@ -206,7 +212,7 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
 test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
   const quote = fs.readFileSync("test/sample/tdx-v4-trustee.dat")
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
 
   const expectedMRTD =
     "705ee9381b8633a9fbe532b52345e8433343d2868959f57889d84ca377c395b689cac1599ccea1b7d420483a9ce5f031"
@@ -221,6 +227,7 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "50806f000000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -234,7 +241,7 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
 test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
   const quote = fs.readFileSync("test/sample/tdx-v4-zkdcap.dat")
   const { header, body } = parseTdxQuote(quote)
-  const { fmspc } = await _verifyTdx(quote)
+  const { fmspc, pcesvn } = await _verifyTdx(quote)
 
   const expectedMRTD =
     "935be7742dd89c6a4df6dba8353d89041ae0f052beef993b1e7f4524d3bc57650df20e5582158352e1240b3f1fed55d8"
@@ -249,6 +256,7 @@ test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(fmspc, "00806f050000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -294,12 +302,13 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
     fs.readFileSync("test/sample/tdx/intermediateCaCrl.der"),
   ]
 
-  const { fmspc } = await _verifyTdx(quote, {
+  const { fmspc, pcesvn } = await _verifyTdx(quote, {
     extraCertdata: certdata,
     crls,
     verifyTcb: () => true,
   })
   t.is(fmspc, "ed742af8adf5")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdx(quote, {
@@ -318,7 +327,7 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
   )
   const quote: string = data.tdx.quote
   const { header, body } = parseTdxQuoteBase64(quote)
-  const { fmspc } = await _verifyTdx(scureBase64.decode(quote))
+  const { fmspc, pcesvn } = await _verifyTdx(scureBase64.decode(quote))
 
   const expectedMRTD =
     "409c0cd3e63d9ea54d817cf851983a220131262664ac8cd02cc6a2e19fd291d2fdd0cc035d7789b982a43a92a4424c99"
@@ -333,6 +342,7 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
   t.deepEqual(body.mr_owner, new Uint8Array(48))
   t.deepEqual(body.mr_owner_config, new Uint8Array(48))
   t.is(fmspc, "00806f050000")
+  t.log("PCESVN:", pcesvn)
 
   t.true(
     await verifyTdxBase64(quote, {

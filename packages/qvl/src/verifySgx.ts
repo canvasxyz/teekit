@@ -177,7 +177,7 @@ export async function _verifySgx(quote: Uint8Array, config?: VerifyConfig) {
   const parsedQuote = parseSgxQuote(quote)
   const { signature, header } = parsedQuote
   const certs = extractPemCertificates(signature.cert_data)
-  let { status, root, fmspc } = await verifyPCKChain(
+  let { status, root, fmspc, pcesvn } = await verifyPCKChain(
     certs,
     date ?? +new Date(),
     crls,
@@ -196,12 +196,14 @@ export async function _verifySgx(quote: Uint8Array, config?: VerifyConfig) {
     status = fallback.status
     root = fallback.root
     fmspc = fallback.fmspc
+    pcesvn = fallback.pcesvn
   }
 
   return {
     status,
     root,
     fmspc,
+    pcesvn,
     signature,
     header,
     extraCertdata,
