@@ -261,4 +261,95 @@ export class QV_X509Certificate {
       return null
     }
   }
+
+  /**
+   * Extract the Intel PCESVN (PCE Security Version Number) from the PCK certificate extension.
+   * Intel SGX/TDX PCK certificates carry PCESVN under sub-OID 1.2.840.113741.1.13.1.2.17
+   * inside the Intel SGX extension OID 1.2.840.113741.1.13.1.
+   * Returns a number (unsigned) or null if not present.
+   */
+  getPceSvn(): number | null {
+    try {
+      const oid = "1.2.840.113741.1.13.1"
+      const ext = this._cert.extensions?.find((e) => e.extnID === oid)
+      if (!ext) return null
+
+      const outerView = ext.extnValue.valueBlock.valueHexView
+      const inner = new Uint8Array(
+        outerView.buffer,
+        outerView.byteOffset,
+        outerView.byteLength,
+      )
+      const decoded = fromBER(inner)
+      if (decoded.offset === -1) return null
+
+      const seq: any = decoded.result
+      const children = Array.isArray(seq?.valueBlock?.value)
+        ? seq.valueBlock.value
+        : []
+
+      for (const entry of children) {
+        const parts: any[] = Array.isArray(entry?.valueBlock?.value)
+          ? entry.valueBlock.value
+          : []
+        if (parts.length < 2) continue
+
+        const subOid = parts[0]?.valueBlock?.toString?.()
+        if (subOid !== "1.2.840.113741.1.13.1.2.17") continue
+
+        const valueNode: any = parts[1]
+        const direct = valueNode?.valueBlock?.valueHex
+        if (direct && direct.byteLength !== undefined) {
+          let bytes = new Uint8Array(direct)
+
+          // Try to decode the inner bytes as a full DER element in case the
+          // PCESVN is wrapped (e.g., OCTET STRING containing an INTEGER)
+          try {
+            const innerDecoded = fromBER(bytes)
+            if (innerDecoded && innerDecoded.offset !== -1) {
+              const node: any = innerDecoded.result
+              const tagNum = node?.idBlock?.tagNumber
+              // INTEGER tag = 2, OCTET STRING tag = 4
+              if (tagNum === 2) {
+                const dec = node.valueBlock?.valueDec
+                if (typeof dec === "number" && Number.isFinite(dec)) {
+                  return dec >>> 0
+                }
+              } else if (tagNum === 4) {
+                // OCTET STRING: attempt to decode nested INTEGER
+                const innerBytes = new Uint8Array(
+                  node.valueBlock?.valueHex ?? new ArrayBuffer(0),
+                )
+                const nested = fromBER(innerBytes)
+                const nestedNode: any = nested.result
+                if (
+                  nested &&
+                  nested.offset !== -1 &&
+                  nestedNode?.idBlock?.tagNumber === 2
+                ) {
+                  const dec = nestedNode.valueBlock?.valueDec
+                  if (typeof dec === "number" && Number.isFinite(dec)) {
+                    return dec >>> 0
+                  }
+                }
+              }
+            }
+          } catch {
+            // fall through to raw parse
+          }
+
+          // Fallback: parse raw bytes as unsigned big-endian integer
+          while (bytes.length > 0 && bytes[0] === 0) bytes = bytes.subarray(1)
+          if (bytes.length === 0) return 0
+          let v = 0
+          for (let i = 0; i < bytes.length; i++) v = (v << 8) | bytes[i]
+          return v >>> 0
+        }
+      }
+
+      return null
+    } catch {
+      return null
+    }
+  }
 }

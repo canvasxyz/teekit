@@ -51,6 +51,7 @@ function getVerifyTcb(stateRef: TcbRef) {
     pceSvn,
     quote,
   }: VerifyArgs): Promise<boolean> => {
+    console.log(`PCESVN=${pceSvn}`)
     // Fetch TCB info
     const isTdx = isTdxQuote(quote)
     const tcbInfo = await fetchTcbInfo(fmspc, isTdx)

@@ -364,11 +364,12 @@ export async function _verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
   const parsedQuote = parseTdxQuote(quote)
   const { signature, header } = parsedQuote
   const certs = extractPemCertificates(signature.cert_data)
-  let { status, root, fmspc } = await verifyPCKChain(
+  let { status, root, fmspc, chain } = await verifyPCKChain(
     certs,
     date ?? +new Date(),
     crls,
   )
+  let pcesvn: number | null = chain.length > 0 ? chain[0].getPceSvn() : null
 
   // Use fallback certs, only if certdata is not provided
   if (!root && certs.length === 0) {
@@ -383,12 +384,15 @@ export async function _verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
     status = fallback.status
     root = fallback.root
     fmspc = fallback.fmspc
+    chain = fallback.chain
+    pcesvn = chain.length > 0 ? chain[0].getPceSvn() : null
   }
 
   return {
     status,
     root,
     fmspc,
+    pcesvn,
     signature,
     header,
     extraCertdata,
@@ -408,6 +412,7 @@ export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
     status,
     root,
     fmspc,
+    pcesvn,
     signature,
     header,
     extraCertdata,
@@ -466,7 +471,7 @@ export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
       fmspc,
       quote: parsedQuote,
       cpuSvn: Array.from(parsedQuote.body.tee_tcb_svn),
-      pceSvn: parsedQuote.header.pce_svn,
+      pceSvn: pcesvn ?? parsedQuote.header.pce_svn,
     }))
   ) {
     // throw new Error("verifyTdx: TCB invalid fmspc")
