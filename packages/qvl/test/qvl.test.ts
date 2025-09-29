@@ -40,6 +40,7 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -69,6 +70,7 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -98,6 +100,7 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -128,6 +131,7 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -159,6 +163,7 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -187,6 +192,7 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, new Uint8Array(48))
@@ -215,6 +221,7 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -243,6 +250,7 @@ test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -270,6 +278,7 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
@@ -327,6 +336,7 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
 
   t.is(header.version, 4)
   t.is(header.tee_type, 129)
+  t.is(header.pce_svn, 0)
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, new Uint8Array(48))
