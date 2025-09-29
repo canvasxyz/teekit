@@ -16,16 +16,27 @@ import {
 const BASE_TIME = Date.parse("2025-09-28T12:00:00Z")
 const SAMPLE_DIR = "test/sample"
 
-async function fetchTcbInfo(fmspcHex: string): Promise<IntelTcbInfo> {
+async function fetchTcbInfo(fmspcHex: string, isTdx: boolean = false): Promise<IntelTcbInfo> {
   const fmspc = fmspcHex.toLowerCase()
-  const cachePath = path.join(SAMPLE_DIR, `tcbInfo-${fmspc}.json`)
+  
+  // Try type-specific cache file first (sgx-tcbInfo-* or just tcbInfo-*)
+  const specificCachePath = isTdx 
+    ? path.join(SAMPLE_DIR, `tcbInfo-${fmspc}.json`)
+    : path.join(SAMPLE_DIR, `sgx-tcbInfo-${fmspc}.json`)
+  const genericCachePath = path.join(SAMPLE_DIR, `tcbInfo-${fmspc}.json`)
+  
+  // For SGX, try sgx-specific first, then generic
+  // For TDX, only try the generic path
+  const cachePath = fs.existsSync(specificCachePath) ? specificCachePath : genericCachePath
 
   if (fs.existsSync(cachePath)) {
     const raw = fs.readFileSync(cachePath, "utf8")
     return JSON.parse(raw)
   } else {
-    console.log("[unexpected!] getting tcbInfo from API:", fmspcHex)
-    const url = `https://api.trustedservices.intel.com/sgx/certification/v4/tcb?fmspc=${fmspc}`
+    console.log("[unexpected!] getting tcbInfo from API:", fmspcHex, isTdx ? "(TDX)" : "(SGX)")
+    // Use TDX endpoint for TDX quotes, SGX endpoint for SGX quotes
+    const endpoint = isTdx ? "tdx" : "sgx"
+    const url = `https://api.trustedservices.intel.com/${endpoint}/certification/v4/tcb?fmspc=${fmspc}`
     const resp = await fetch(url, { headers: { Accept: "application/json" } })
     if (!resp.ok) {
       throw new Error(
@@ -59,8 +70,8 @@ function getVerifyTcb(stateRef: TcbRef) {
       return false
     }
 
-    // Fetch TCB info
-    const tcbInfo = await fetchTcbInfo(fmspcHex)
+    // Fetch TCB info (use appropriate endpoint for TDX or SGX)
+    const tcbInfo = await fetchTcbInfo(fmspcHex, tdx)
     const now = BASE_TIME
 
     // Check freshness
@@ -71,23 +82,38 @@ function getVerifyTcb(stateRef: TcbRef) {
     // Determine the TCB status by finding the first Intel TCB level
     // whose requirements are satisfied by the quote:
     // - PCE SVN must be >= the level's pcesvn
-    // - For each CPU SVN component key present (sgxtcbcompXXsvn),
+    // - For SGX: For each CPU SVN component key present (sgxtcbcompXXsvn),
     //   the quote's cpu_svn[XX-1] must be >= the level's value
+    // - For TDX: For each TDX TCB component in tdxtcbcomponents array,
+    //   the quote's tee_tcb_svn[index] must be >= the component's svn value
     // On first match, adopt that level's tcbStatus; otherwise keep
-    // the default "OutOfDate".
-    let statusFound = "OutOfDate"
+    // the default "TCB_NOT_MATCHED".
+    let statusFound = "TCB_NOT_MATCHED"
     for (const level of tcbInfo.tcbInfo.tcbLevels) {
       const pceOk = pceSvn >= level.tcb.pcesvn
       let cpuOk = true
-      for (let comp = 1; comp <= 16; comp++) {
-        const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
-        if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
-          if (cpuSvn[comp - 1] < level.tcb[key]) {
+      
+      if (tdx && level.tcb.tdxtcbcomponents) {
+        // TDX matching: use tdxtcbcomponents array
+        for (let i = 0; i < level.tcb.tdxtcbcomponents.length; i++) {
+          if (cpuSvn[i] < level.tcb.tdxtcbcomponents[i].svn) {
             cpuOk = false
             break
           }
         }
+      } else {
+        // SGX matching: use sgxtcbcompXXsvn keys
+        for (let comp = 1; comp <= 16; comp++) {
+          const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
+          if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
+            if (cpuSvn[comp - 1] < level.tcb[key]) {
+              cpuOk = false
+              break
+            }
+          }
+        }
       }
+      
       if (cpuOk && pceOk) {
         statusFound = level.tcbStatus
         break
@@ -102,6 +128,11 @@ function getVerifyTcb(stateRef: TcbRef) {
       freshnessOk &&
       (statusFound === "UpToDate" || statusFound === "ConfigurationNeeded")
     // console.log("status", statusFound, "fresh", freshnessOk, "valid", valid)
+    
+    // If TCB info was not matched, return false to indicate TCB verification failed
+    if (statusFound === "TCB_NOT_MATCHED") {
+      return false
+    }
 
     return valid
   }
@@ -185,8 +216,8 @@ test.serial("Evaluate TCB (TDX v5): trustee", async (t) => {
   await assertTcb(t, "test/sample/tdx-v5-trustee.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "90c06f000000",
   })
 })
@@ -196,8 +227,8 @@ test.serial("Evaluate TCB (TDX v4): azure", async (t) => {
     _tdx: true,
     _b64: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "00806f050000",
   })
 })
@@ -206,8 +237,8 @@ test.serial("Evaluate TCB (TDX v4): edgeless", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-edgeless.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "00806f050000",
   })
 })
@@ -217,8 +248,8 @@ test.serial("Evaluate TCB (TDX v4): gcp", async (t) => {
     _tdx: true,
     _json: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "00806f050000",
   })
 })
@@ -228,8 +259,8 @@ test.serial("Evaluate TCB (TDX v4): gcp no nonce", async (t) => {
     _tdx: true,
     _json: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "00806f050000",
   })
 })
@@ -238,8 +269,8 @@ test.serial("Evaluate TCB (TDX v4): moemahhouk", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-moemahhouk.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "90c06f000000",
   })
 })
@@ -248,8 +279,8 @@ test.serial("Evaluate TCB (TDX v4): phala", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-phala.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "b0c06f000000",
   })
 })
@@ -258,8 +289,8 @@ test.serial("Evaluate TCB (TDX v4): trustee", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-trustee.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "50806f000000",
   })
 })
@@ -268,8 +299,8 @@ test.serial("Evaluate TCB (TDX v4): zkdcap", async (t) => {
   await assertTcb(t, "test/sample/tdx-v4-zkdcap.dat", {
     _tdx: true,
     valid: false,
-    status: "OutOfDate",
-    fresh: true,
+    status: "TCB_NOT_MATCHED",
+    fresh: false,  // TDX tcbInfo has future issue date
     fmspc: "00806f050000",
   })
 })

@@ -1,13 +1,57 @@
 {
   "tcbInfo": {
-    "id": "SGX",
+    "id": "TDX",
     "version": 3,
-    "issueDate": "2025-09-28T05:52:20Z",
-    "nextUpdate": "2025-10-28T05:52:20Z",
+    "issueDate": "2025-09-29T17:27:00Z",
+    "nextUpdate": "2025-10-29T17:27:00Z",
     "fmspc": "90c06f000000",
     "pceId": "0000",
     "tcbType": 0,
     "tcbEvaluationDataNumber": 17,
+    "tdxModule": {
+      "mrsigner": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "attributes": "0000000000000000",
+      "attributesMask": "FFFFFFFFFFFFFFFF"
+    },
+    "tdxModuleIdentities": [
+      {
+        "id": "TDX_03",
+        "mrsigner": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "attributes": "0000000000000000",
+        "attributesMask": "FFFFFFFFFFFFFFFF",
+        "tcbLevels": [
+          {
+            "tcb": {
+              "isvsvn": 3
+            },
+            "tcbDate": "2024-03-13T00:00:00Z",
+            "tcbStatus": "UpToDate"
+          }
+        ]
+      },
+      {
+        "id": "TDX_01",
+        "mrsigner": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "attributes": "0000000000000000",
+        "attributesMask": "FFFFFFFFFFFFFFFF",
+        "tcbLevels": [
+          {
+            "tcb": {
+              "isvsvn": 4
+            },
+            "tcbDate": "2024-03-13T00:00:00Z",
+            "tcbStatus": "UpToDate"
+          },
+          {
+            "tcb": {
+              "isvsvn": 2
+            },
+            "tcbDate": "2023-08-09T00:00:00Z",
+            "tcbStatus": "OutOfDate"
+          }
+        ]
+      }
+    ],
     "tcbLevels": [
       {
         "tcb": {
@@ -43,7 +87,7 @@
               "svn": 0
             },
             {
-              "svn": 3,
+              "svn": 5,
               "category": "OS/VMM",
               "type": "SEAMLDR ACM"
             },
@@ -72,7 +116,63 @@
               "svn": 0
             }
           ],
-          "pcesvn": 13
+          "pcesvn": 13,
+          "tdxtcbcomponents": [
+            {
+              "svn": 5,
+              "category": "OS/VMM",
+              "type": "TDX Module"
+            },
+            {
+              "svn": 0,
+              "category": "OS/VMM",
+              "type": "TDX Module"
+            },
+            {
+              "svn": 2,
+              "category": "OS/VMM",
+              "type": "TDX Late Microcode Update"
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ]
         },
         "tcbDate": "2024-03-13T00:00:00Z",
         "tcbStatus": "UpToDate"
@@ -111,7 +211,7 @@
               "svn": 0
             },
             {
-              "svn": 3,
+              "svn": 5,
               "category": "OS/VMM",
               "type": "SEAMLDR ACM"
             },
@@ -140,7 +240,63 @@
               "svn": 0
             }
           ],
-          "pcesvn": 5
+          "pcesvn": 5,
+          "tdxtcbcomponents": [
+            {
+              "svn": 5,
+              "category": "OS/VMM",
+              "type": "TDX Module"
+            },
+            {
+              "svn": 0,
+              "category": "OS/VMM",
+              "type": "TDX Module"
+            },
+            {
+              "svn": 2,
+              "category": "OS/VMM",
+              "type": "TDX Late Microcode Update"
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            },
+            {
+              "svn": 0
+            }
+          ]
         },
         "tcbDate": "2018-01-04T00:00:00Z",
         "tcbStatus": "OutOfDate",
@@ -163,5 +319,5 @@
       }
     ]
   },
-  "signature": "b2c3ada7794e0a2828cbee556ec379e887d6c9791302b75880a131f559f574ab858486388d7c87283a72654613df7e27857814fce8f9da3b15f79159863fc668"
+  "signature": "50dc50b8dfa04d695fe5496784fcf4476d59274660e4cf286e564a7722ab5d33e51de12f152a72c87a3da062b467a05e5f409b7603d23f41d68381cee443bab0"
 }
