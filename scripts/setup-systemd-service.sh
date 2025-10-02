@@ -2,7 +2,7 @@
 
 # Set up a systemd service to run the `teekit-demo` server on boot.
 set -eu
-[ "$(id -u)" -eq 0 ] || { echo "run as root"; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "must run as root"; exit 1; }
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 WORKDIR=$(cd "$SCRIPT_DIR/.." && pwd)

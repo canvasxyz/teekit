@@ -192,9 +192,9 @@ Request Id: 2d91b0a5-f26d-4348-83a6-c8a4cead1ca7
 eyJhb...
 ```
 
-## Setting up the Demo
+## Setting up networking
 
-First, open ports 80 and 443 for web traffic.
+First, open ports 80 and 443 for web traffic. From outside the container:
 
 ```
 gcloud compute firewall-rules create allow-http-80 \
@@ -218,12 +218,39 @@ gcloud compute firewall-rules create allow-https-443 \
 gcloud compute instances add-tags gcp-tdx-vm --tags gcp-tdx-vm
 ```
 
+## Setting up the demo
+
+These commands should be run as root, since we need root access to the system TDX APIs:
+
+```
+sudo su -
+```
+
+Install node v22:
+
+```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install v22
+nvm alias default v22
+nvm use v22
+```
+
+Clone the teekit repository into /root, and build:
+
+```
+git clone https://github.com/canvasxyz/teekit.git
+cd teekit
+npm install
+npm run build
+```
+
 Now, set up Nginx. This can be done with a domain, or with a
 self-signed certificate (which will produce a warning in browsers and
 may break some features).
 
 To use Let's Encrypt with your domain, configure it with an A record
-to point to your TDX VM's IP, and then run, from this repo's workspace root:
+to point to your TDX VM's IP, and then run, inside the container:
 
 ```
 scripts/setup-nginx-certbot.sh <example.com>
@@ -241,7 +268,16 @@ Now, you can install a systemd service to run our demo server:
 scripts/setup-systemd-service.sh
 ```
 
-Create a Intel TDX CLI config.json inside `packages/demo`, and then restart the service:
+Create a Intel TDX CLI config.json inside `packages/demo`. This should take the form of:
+
+```
+{
+   "trustauthority_api_url": "https://api.trustauthority.intel.com",
+   "trustauthority_api_key": "<base64string>"
+}
+```
+
+Now, restart the service. The Node.js server will start to return attestations:
 
 ```
 systemctl restart teekit-demo
@@ -250,5 +286,25 @@ systemctl restart teekit-demo
 To view logs:
 
 ```
+systemctl status teekit-demo
+```
+
+Logs will be streamed to disk:
+
+```
 journalctl -uf teekit-demo
+```
+
+## FAQs
+
+#### How do I find my IP address from the command line?
+
+You can query any of these external services:
+
+```
+nslookup myip.opendns.com resolver1.opendns.com
+```
+
+```
+curl ifconfig.me
 ```
