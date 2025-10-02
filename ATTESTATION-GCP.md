@@ -48,6 +48,7 @@ We are going to create a VM with these configuration options:
 - Maintenance policy: TERMINATE
 - Image family: ubuntu-2204-lts
 - Image project: ubuntu-os-cloud
+- Disk size: 25GB (instead of default 10GB)
 
 ```
 gcloud compute instances create gcp-tdx-vm \
@@ -56,7 +57,8 @@ gcloud compute instances create gcp-tdx-vm \
       --confidential-compute-type=TDX \
       --maintenance-policy=TERMINATE \
       --image-family=ubuntu-2204-lts \
-      --image-project=ubuntu-os-cloud
+      --image-project=ubuntu-os-cloud \
+      --boot-disk-size=25GB
 ```
 
 This should give you output like:
@@ -307,4 +309,16 @@ nslookup myip.opendns.com resolver1.opendns.com
 
 ```
 curl ifconfig.me
+```
+
+#### How can I increase the disk size?
+
+```
+gcloud compute disks resize gcp-tdx-vm --size=<NEW_SIZE>GB --zone=us-central1-a
+```
+
+```
+gcloud compute ssh gcp-tdx-vm
+sudo growpart /dev/nvme0n1 1
+sudo resize2fs /dev/nvme0n1p1
 ```
