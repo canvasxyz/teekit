@@ -1,0 +1,31 @@
+[package]
+name = "tdx-seal-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Teekit Team"]
+description = "Intel TDX Sealing - Deterministic Private Key Derivation (Rust implementation)"
+license = "MIT"
+repository = "https://github.com/your-org/teekit"
+
+[[bin]]
+name = "tdx-seal-rs"
+path = "src/main.rs"
+
+[dependencies]
+tdx-guest = { git = "https://github.com/intel/tdx-guest.git", optional = true }
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.21"
+anyhow = "1.0"
+thiserror = "1.0"
+clap = { version = "4.0", features = ["derive"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+default = []
+tdx-guest = ["dep:tdx-guest"]
+
+[dev-dependencies]
+criterion = "0.5"
