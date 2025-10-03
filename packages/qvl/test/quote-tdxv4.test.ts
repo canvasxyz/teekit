@@ -283,7 +283,7 @@ test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
 
 test.serial("Verify a V4 TDX quote from Intel", async (t) => {
   const quote = fs.readFileSync("test/sampleQuotes/tdx/quote.dat")
-  const { header, body } = parseTdxQuote(quote)
+  const { header, body, signature } = parseTdxQuote(quote)
 
   const expectedMRTD =
     "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
@@ -298,6 +298,7 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
   t.is(hex(body.tee_tcb_svn), "52c1a38cf7edf30a524b4ebb049f59c7")
+  t.is(signature.body_type, null)
 
   // Intel sample is missing certdata, reconstruct it from provided PEM files instead
   const root = extractPemCertificates(

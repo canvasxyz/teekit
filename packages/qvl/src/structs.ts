@@ -197,6 +197,7 @@ export function parseSgxSignature(quote: Uint8Array) {
     cert_data_type: tailHeader.cert_data_type,
     cert_data_len: tailHeader.cert_data_len,
     cert_data,
+    body_type: null,
   }
 }
 
@@ -207,6 +208,7 @@ export function parseSgxSignature(quote: Uint8Array) {
  */
 export function parseTdxSignature(quote: Uint8Array, v5?: boolean) {
   let sig_data
+  let body_type = null
   if (!v5) {
     const headerLen = QuoteHeader.size()
     const bodyLen = TdxQuoteBody_1_0.size()
@@ -217,7 +219,7 @@ export function parseTdxSignature(quote: Uint8Array, v5?: boolean) {
   } else {
     const headerLen = QuoteHeader.size()
     const descOffset = headerLen
-    // body_type is at descOffset, but we only need body_size here
+    body_type = readUInt16LE(quote, descOffset)
     const body_size = readUInt32LE(quote, descOffset + 2)
     const sigDescStart = descOffset + 2 + 4 + body_size
     const sigLen = readUInt32LE(quote, sigDescStart)
@@ -267,6 +269,7 @@ export function parseTdxSignature(quote: Uint8Array, v5?: boolean) {
     cert_data_type: tailHeader.cert_data_type,
     cert_data_len: tailHeader.cert_data_len,
     cert_data,
+    body_type,
   }
 }
 
