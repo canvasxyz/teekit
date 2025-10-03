@@ -30,6 +30,7 @@ test.serial("Verify a V5 TDX quote from Trustee", async (t) => {
 
   t.is(header.version, 5)
   t.is(header.tee_type, 129)
+  t.is(hex(body.tee_tcb_svn), "05010200000000000000000000000000")
   t.is(hex(body.mr_td), expectedMRTD)
   t.is(hex(body.report_data), expectedReportData)
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
