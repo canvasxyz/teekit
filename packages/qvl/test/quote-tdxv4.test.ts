@@ -48,6 +48,7 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "05010200000000000000000000000000")
   t.is(fmspc, "b0c06f000000")
   t.is(pcesvn, 11)
 
@@ -78,6 +79,7 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "03000500000000000000000000000000")
   t.is(fmspc, "00806f050000")
   t.is(pcesvn, 11)
 
@@ -108,6 +110,7 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "06010300000000000000000000000000")
   t.is(fmspc, "b0c06f000000")
   t.is(pcesvn, 11)
 
@@ -142,6 +145,7 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "05010200000000000000000000000000")
   t.is(fmspc, "b0c06f000000")
   t.is(pcesvn, 11)
 
@@ -174,6 +178,7 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "04010200000000000000000000000000")
   t.is(fmspc, "90c06f000000")
   t.is(pcesvn, 13)
 
@@ -203,6 +208,7 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
   t.deepEqual(body.mr_config_id, new Uint8Array(48))
   t.deepEqual(body.mr_owner, new Uint8Array(48))
   t.deepEqual(body.mr_owner_config, new Uint8Array(48))
+  t.is(hex(body.tee_tcb_svn), "04010700000000000000000000000000")
   t.is(fmspc, "00806f050000")
   t.is(pcesvn, 11)
 
@@ -232,6 +238,7 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "03000500000000000000000000000000")
   t.is(fmspc, "50806f000000")
   t.is(pcesvn, 11)
 
@@ -261,6 +268,7 @@ test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "04010700000000000000000000000000")
   t.is(fmspc, "00806f050000")
   t.is(pcesvn, 11)
 
@@ -289,6 +297,7 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "52c1a38cf7edf30a524b4ebb049f59c7")
 
   // Intel sample is missing certdata, reconstruct it from provided PEM files instead
   const root = extractPemCertificates(
@@ -347,6 +356,7 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
   t.deepEqual(body.mr_config_id, new Uint8Array(48))
   t.deepEqual(body.mr_owner, new Uint8Array(48))
   t.deepEqual(body.mr_owner_config, new Uint8Array(48))
+  t.is(hex(body.tee_tcb_svn), "08010800000000000000000000000000")
   t.is(fmspc, "00806f050000")
   t.is(pcesvn, 11)
 

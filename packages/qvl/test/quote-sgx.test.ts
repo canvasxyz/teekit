@@ -34,6 +34,7 @@ test.serial("Verify an SGX quote from Intel, no quote signature", async (t) => {
   t.deepEqual(body.mr_signer, Buffer.alloc(32))
   t.deepEqual(body.attributes, Buffer.alloc(16))
   t.deepEqual(body.cpu_svn, Buffer.alloc(16))
+  t.is(hex(body.cpu_svn), "00000000000000000000000000000000")
 
   t.is(
     hex(signature.ecdsa_signature),
@@ -91,6 +92,7 @@ test.serial("Verify an SGX quote from Occlum", async (t) => {
   t.is(header.tee_type, 0)
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
+  t.is(hex(body.cpu_svn), "0505090affff00000000000000000000")
   t.is(fmspc, "30606a000000")
   t.is(pcesvn, 11)
 
@@ -117,6 +119,7 @@ test.serial("Verify an SGX quote from chinenyeokafor", async (t) => {
   t.is(header.tee_type, 0)
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
+  t.is(hex(body.cpu_svn), "0202191b03ff00060000000000000000")
   t.is(fmspc, "90c06f000000")
   t.is(pcesvn, 13)
 
@@ -143,6 +146,7 @@ test.serial("Verify an SGX quote from TLSN, quote9", async (t) => {
   t.is(header.tee_type, 0)
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
+  t.is(hex(body.cpu_svn), "15150b07ff800e000000000000000000")
   t.is(fmspc, "00906ed50000")
   t.is(pcesvn, 13)
 
@@ -169,6 +173,7 @@ test.serial("Verify an SGX quote from TLSN, quote_dev", async (t) => {
   t.is(header.tee_type, 0)
   t.is(hex(body.mr_enclave), expectedMrEnclave)
   t.is(hex(body.report_data), expectedReportData)
+  t.is(hex(body.cpu_svn), "15150b07ff800e000000000000000000")
   t.is(fmspc, "00906ed50000")
   t.is(pcesvn, 13)
 
