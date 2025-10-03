@@ -35,6 +35,7 @@ test.serial("Verify a V5 TDX quote from Trustee", async (t) => {
   t.deepEqual(body.mr_config_id, Buffer.alloc(48))
   t.deepEqual(body.mr_owner, Buffer.alloc(48))
   t.deepEqual(body.mr_owner_config, Buffer.alloc(48))
+  t.is(hex(body.tee_tcb_svn), "05010200000000000000000000000000")
   t.is(fmspc, "90c06f000000")
   t.is(pcesvn, 13)
 
