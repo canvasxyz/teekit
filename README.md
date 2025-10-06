@@ -1,30 +1,31 @@
-# teekit
+# TEEKit
 
 [![tests](https://github.com/canvasxyz/teekit/actions/workflows/ci.yml/badge.svg)](https://github.com/canvasxyz/teekit/actions/workflows/ci.yml)
 [![node](https://img.shields.io/node/v/@teekit/qvl.svg)](https://www.npmjs.com/package/@teekit/qvl)
 [![npm](https://img.shields.io/npm/v/@teekit/tunnel?color=33cd56&logo=npm)](https://www.npmjs.com/package/@teekit/tunnel)
 
-A minimal, end-to-end verifiable TEE stack.
+A set of building blocks for end-to-end verifiable TEE applications.
+_Note: Under active development, has not been audited._
 
 ## Background
 
-Trusted execution environments make it possible to build private and
+Trusted execution environments make it possible to build private,
 verifiable web services, but one issue that makes this harder is that
 web pages cannot natively verify that they're connected to a TEE.
 Browsers don't expose X.509 certificate extensions that can be used to
-prove a connection terminates inside the secured environment, so
-proxies like Cloudflare can trivially see and modify traffic to TEEs
-forwarded through them. Anyone hosting a TEE app can easily insert
-their own TLS proxy in front of it, breaking privacy and extracting
-session data that lets them impersonate the user.
+prove a connection terminates inside the secured environment. This
+means proxies like Cloudflare can trivially see and modify traffic to
+TEEs forwarded through them. Anyone hosting a TEE app can easily
+insert their own TLS proxy in front of it, and extract session data
+that lets them impersonate users.
 
-To work around this, some TEE application hosts implement their own
+To work around this, TEE application hosts may implement their own
 proxy in front of the TEE, but this reintroduces trust assumptions
 around the proxy. Hosts can also use certificate log monitoring to
 boost security, but this happens out-of-band and doesn't directly
 protect the connection between the user and the TEE.
 
-This repository implements protocols for remotely-attested HTTPS and
+@teekit/tunnel implements protocols for remotely-attested HTTPS and
 WSS channels, which web pages can use to establish secure connections
 that verifiably terminate inside trusted execution environments
 (currently Intel TDX/SGX).
