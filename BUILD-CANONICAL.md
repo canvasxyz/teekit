@@ -108,5 +108,13 @@ gcloud compute instances create gcp-tdx-vm2 \
       --zone=us-central1-a \
       --confidential-compute-type=TDX \
       --maintenance-policy=TERMINATE \
-      --boot-disk-size=200GB
+      --boot-disk-size=25GB
 ```
+
+SSH into the machine:
+
+```
+gcloud compute ssh root@gcp-tdx-vm2
+```
+
+Enter the password that you provided earlier.
