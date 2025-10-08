@@ -160,7 +160,7 @@ touch config.json
 cat <<EOF> config.json
 {
    "trustauthority_api_url": "https://api.trustauthority.intel.com",
-   "trustauthority_api_key": "<attestation api key>"
+   "trustauthority_api_key": "djE6...nRHI="
 }
 EOF
 ```
@@ -270,12 +270,12 @@ Now, you can install a systemd service to run our demo server:
 scripts/setup-systemd-service.sh
 ```
 
-Create a Intel TDX CLI config.json inside `packages/demo`. This should take the form of:
+Create a Intel TDX CLI config.json inside `packages/demo`. You can copy it from the config.json you created earlier. It should take the form of:
 
 ```
 {
    "trustauthority_api_url": "https://api.trustauthority.intel.com",
-   "trustauthority_api_key": "<base64string>"
+   "trustauthority_api_key": "djE6...nRHI"
 }
 ```
 

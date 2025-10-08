@@ -79,7 +79,7 @@ touch config.json
 cat <<EOF> config.json
 {
    "trustauthority_api_url": "https://api.trustauthority.intel.com",
-   "trustauthority_api_key": "djE6OWU0YTAyOTktZTcxMC00NDZjLTg3ZjAtMzU4Njc5YTU1YmNkOnN5UzEyTGRwTlkxU3N0d2c3Z0JmOTkwSnJJdElpSktCMkZ6alBnRHI="
+   "trustauthority_api_key": "djE6...nRHI="
 }
 EOF
 curl -sL https://raw.githubusercontent.com/intel/trustauthority-client-for-go/main/release/install-tdx-cli-azure.sh | sudo bash -
@@ -136,7 +136,7 @@ touch config.json
 cat <<EOF> config.json
 {
    "trustauthority_api_url": "https://api.trustauthority.intel.com",
-   "trustauthority_api_key": "<attestation api key>"
+   "trustauthority_api_key": "djE6...nRHI"
 }
 EOF
 ```
