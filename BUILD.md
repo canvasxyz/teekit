@@ -97,7 +97,7 @@ Validate the checksum:
 
 ```
 user@gcp-builder:~/flashbots-images$ sha256sum build/tdx-debian
-d57a99ba68597673ea4f831f39793a07f958547e359107f0d31b56c186a06354  build/tdx-debian
+f4b96560ef02922d8135940f94c2a7b4c72d33eccd4117235013236e770e58f4  build/tdx-debian  build/tdx-debian
 ```
 
 You can also try running the build again to verify determinism.
