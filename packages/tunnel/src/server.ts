@@ -1,11 +1,12 @@
 import http from "http"
 import { WebSocketServer, WebSocket } from "ws"
-import { Express } from "express"
 import httpMocks, { RequestMethod } from "node-mocks-http"
 import { EventEmitter } from "events"
 import sodium from "libsodium-wrappers"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
+import type { Express } from "express"
+import type { Hono } from "hono"
 
 import {
   RAEncryptedHTTPRequest,
@@ -18,6 +19,7 @@ import {
   QuoteData,
   VerifierData,
   ControlChannelKXAnnounce,
+  TunnelApp,
 } from "./types.js"
 import {
   isControlChannelKXConfirm,
@@ -26,6 +28,7 @@ import {
   isRAEncryptedClientConnectEvent,
   isRAEncryptedWSMessage,
   isRAEncryptedClientCloseEvent,
+  isHonoApp,
 } from "./typeguards.js"
 import {
   isTextData,
@@ -107,7 +110,7 @@ export class TunnelServer {
   private heartbeatTimeout: number
 
   private constructor(
-    private app: Express,
+    private app: TunnelApp,
     quoteData: QuoteData,
     publicKey: Uint8Array,
     privateKey: Uint8Array,
@@ -129,7 +132,15 @@ export class TunnelServer {
 
     this.x25519PublicKey = publicKey
     this.x25519PrivateKey = privateKey
-    this.server = http.createServer(app)
+
+    // If this looks like a Hono app (has a fetch handler), do not bind the app
+    // to the Node HTTP server, since tunneled HTTP is handled internally.
+    // We still need to create an HTTP server to host the control WebSocket channel.
+    if (isHonoApp(app)) {
+      this.server = http.createServer()
+    } else {
+      this.server = http.createServer(app)
+    }
 
     this.heartbeatInterval = config?.heartbeatInterval || 30000
     this.heartbeatTimeout = config?.heartbeatTimeout || 60000
@@ -171,7 +182,7 @@ export class TunnelServer {
   }
 
   static async initialize(
-    app: Express,
+    app: TunnelApp,
     getQuote: (x25519PublicKey: Uint8Array) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ): Promise<TunnelServer> {
@@ -359,93 +370,18 @@ export class TunnelServer {
     })
   }
 
-  // Handle tunnel requests by synthesizing `fetch` events and passing to Express
+  // Handle tunnel requests by synthesizing requests, and routing to Express or Hono
   async #handleTunnelHttpRequest(
     controlWs: WebSocket,
     tunnelReq: RAEncryptedHTTPRequest,
   ): Promise<void> {
     try {
-      // Parse URL to extract pathname and query
-      const urlObj = new URL(tunnelReq.url, "http://localhost")
-      const query: Record<string, string> = {}
-      urlObj.searchParams.forEach((value, key) => {
-        query[key] = value
-      })
-
-      const req = httpMocks.createRequest({
-        method: tunnelReq.method as RequestMethod,
-        url: tunnelReq.url,
-        path: urlObj.pathname,
-        headers: tunnelReq.headers,
-        query: query,
-      })
-
-      // Override createRequest's default behavior for empty strings,
-      // so `req.body` is set exactly to the parsed body.
-      req.body =
-        tunnelReq.body !== undefined
-          ? parseBody(tunnelReq.body, tunnelReq.headers["content-type"])
-          : undefined
-
-      // Patch req.unpipe() and req.resume() because they may be called
-      // by Express's finalHandler during cleanup.
-      try {
-        req.unpipe = (_dest?: any) => {
-          debug("req.unpipe called")
-          return req
-        }
-        req.resume = () => {
-          debug("req.resume called")
-          return req
-        }
-      } catch {}
-
-      const res = httpMocks.createResponse({
-        eventEmitter: EventEmitter,
-      })
-
-      // Pass responses back through the tunnel
-      res.on("end", () => {
-        const response: RAEncryptedHTTPResponse = {
-          type: "http_response",
-          requestId: tunnelReq.requestId,
-          status: res.statusCode,
-          statusText: res.statusMessage || getStatusText(res.statusCode),
-          headers: sanitizeHeaders(res.getHeaders()),
-          body: res._getData(),
-        }
-
-        try {
-          this.sendEncrypted(controlWs, response)
-        } catch (e) {
-          console.error("Failed to send encrypted http_response:", e)
-        }
-      })
-
-      // Handle errors generically. TODO: better error handling.
-      res.on("error", (error) => {
-        const errorResponse: RAEncryptedHTTPResponse = {
-          type: "http_response",
-          requestId: tunnelReq.requestId,
-          status: 500,
-          statusText: "Internal Server Error",
-          headers: {},
-          body: "",
-          error: error.message,
-        }
-
-        try {
-          this.sendEncrypted(controlWs, errorResponse)
-        } catch (e) {
-          console.error("Failed to send encrypted error http_response:", e)
-        }
-      })
-
-      // Mark this synthetic request as arriving via the encrypted tunnel
-      markRequestAsEncrypted(req)
-
-      // Execute the request against the Express app
-      this.app(req, res)
+      const app = this.app
+      if (isHonoApp(app)) {
+        await this.#handleTunnelHttpRequestHono(controlWs, tunnelReq, app)
+      } else {
+        await this.#handleTunnelHttpRequestExpress(controlWs, tunnelReq, app)
+      }
     } catch (error) {
       const errorResponse: RAEncryptedHTTPResponse = {
         type: "http_response",
@@ -456,13 +392,132 @@ export class TunnelServer {
         body: "",
         error: error instanceof Error ? error.message : "Unknown error",
       }
-
       try {
         this.sendEncrypted(controlWs, errorResponse)
       } catch (e) {
         console.error("Failed to send encrypted catch http_response:", e)
       }
     }
+  }
+
+  async #handleTunnelHttpRequestHono(
+    controlWs: WebSocket,
+    tunnelReq: RAEncryptedHTTPRequest,
+    app: Hono,
+  ): Promise<void> {
+    const urlObj = new URL(tunnelReq.url, "http://localhost")
+    const init: RequestInit = {
+      method: tunnelReq.method,
+      headers: new Headers(tunnelReq.headers || {}),
+    }
+    if (
+      tunnelReq.body !== undefined &&
+      tunnelReq.method !== "GET" &&
+      tunnelReq.method !== "HEAD"
+    ) {
+      init.body = tunnelReq.body
+    }
+    const request = new Request(urlObj, init)
+    const response = await app.fetch(request)
+
+    const respHeaders: Record<string, string> = {}
+    response.headers.forEach((value: string, key: string) => {
+      respHeaders[key] = value
+    })
+
+    let body: string | Uint8Array<ArrayBuffer>
+    try {
+      const ab = await response.arrayBuffer()
+      body = new Uint8Array(ab)
+    } catch {
+      body = await response.text()
+    }
+
+    const resp: RAEncryptedHTTPResponse = {
+      type: "http_response",
+      requestId: tunnelReq.requestId,
+      status: response.status,
+      statusText: response.statusText || getStatusText(response.status),
+      headers: respHeaders,
+      body,
+    }
+    this.sendEncrypted(controlWs, resp)
+  }
+
+  async #handleTunnelHttpRequestExpress(
+    controlWs: WebSocket,
+    tunnelReq: RAEncryptedHTTPRequest,
+    app: Express,
+  ): Promise<void> {
+    const urlObj = new URL(tunnelReq.url, "http://localhost")
+    const query: Record<string, string> = {}
+    urlObj.searchParams.forEach((value, key) => {
+      query[key] = value
+    })
+
+    const req = httpMocks.createRequest({
+      method: tunnelReq.method as RequestMethod,
+      url: tunnelReq.url,
+      path: urlObj.pathname,
+      headers: tunnelReq.headers,
+      query: query,
+    })
+
+    req.body =
+      tunnelReq.body !== undefined
+        ? parseBody(tunnelReq.body, tunnelReq.headers["content-type"])
+        : undefined
+
+    try {
+      req.unpipe = (_dest?: any) => {
+        debug("req.unpipe called")
+        return req
+      }
+      req.resume = () => {
+        debug("req.resume called")
+        return req
+      }
+    } catch {}
+
+    const res = httpMocks.createResponse({
+      eventEmitter: EventEmitter,
+    })
+
+    res.on("end", () => {
+      const response: RAEncryptedHTTPResponse = {
+        type: "http_response",
+        requestId: tunnelReq.requestId,
+        status: res.statusCode,
+        statusText: res.statusMessage || getStatusText(res.statusCode),
+        headers: sanitizeHeaders(res.getHeaders()),
+        body: res._getData(),
+      }
+      try {
+        this.sendEncrypted(controlWs, response)
+      } catch (e) {
+        console.error("Failed to send encrypted http_response:", e)
+      }
+    })
+
+    res.on("error", (error) => {
+      const errorResponse: RAEncryptedHTTPResponse = {
+        type: "http_response",
+        requestId: tunnelReq.requestId,
+        status: 500,
+        statusText: "Internal Server Error",
+        headers: {},
+        body: "",
+        error: error.message,
+      }
+      try {
+        this.sendEncrypted(controlWs, errorResponse)
+      } catch (e) {
+        console.error("Failed to send encrypted error http_response:", e)
+      }
+    })
+
+    markRequestAsEncrypted(req)
+    app(req, res)
   }
 
   async #handleTunnelWebSocketConnect(
@@ -491,6 +546,7 @@ export class TunnelServer {
             messageData = String(payload)
             dataType = "string"
           }
+
           const message: RAEncryptedWSMessage = {
             type: "ws_message",
             connectionId: connectReq.connectionId,

@@ -1,4 +1,5 @@
-import {
+import type { Hono } from "hono"
+import type {
   RAEncryptedClientCloseEvent,
   RAEncryptedClientConnectEvent,
   RAEncryptedHTTPRequest,
@@ -8,7 +9,12 @@ import {
   ControlChannelEncryptedMessage,
   ControlChannelKXAnnounce,
   ControlChannelKXConfirm,
+  TunnelApp,
 } from "./types.js"
+
+export function isHonoApp(app: TunnelApp): app is Hono {
+  return "fetch" in app && typeof app.fetch === "function"
+}
 
 export function isRAEncryptedHTTPRequest(
   message: unknown,

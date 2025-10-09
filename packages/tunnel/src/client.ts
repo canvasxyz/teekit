@@ -427,7 +427,11 @@ export class TunnelClient {
     }
 
     const syntheticResponse = new Response(
-      response.status === 204 ? null : response.body,
+      response.status === 204
+        ? null
+        : response.body instanceof Uint8Array
+        ? Buffer.from(response.body)
+        : response.body,
       {
         status: response.status,
         statusText: response.statusText,

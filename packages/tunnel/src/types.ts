@@ -1,3 +1,8 @@
+import type { Express } from "express"
+import type { Hono } from "hono"
+
+export type TunnelApp = Express | Hono
+
 /** Used by trustauthority-cli to bind the public keys we provide to report_data. */
 export type VerifierData = {
   val: Uint8Array
@@ -32,7 +37,7 @@ export type RAEncryptedHTTPResponse = {
   status: number
   statusText: string
   headers: Record<string, string>
-  body: string
+  body: string | Uint8Array
   error?: string
 }
 
