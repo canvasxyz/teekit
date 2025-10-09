@@ -21,7 +21,7 @@ import {
 
 export const baseUrl =
   document.location.hostname === "localhost"
-    ? "https://ra-https.canvas.xyz"
+    ? "https://localhost:3001"
     : document.location.hostname.endsWith(".vercel.app")
       ? "https://ra-https.canvas.xyz"
       : `${document.location.protocol}//${document.location.hostname}`
