@@ -8,7 +8,7 @@
     "build": "vite build",
     "server": "tsx server.ts",
     "start": "concurrently \"npm run server\" \"npm run dev\"",
-    "test": "echo 'No tests'"
+    "test": "ava --serial"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.3",
@@ -39,5 +39,16 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.50.1"
+  },
+  "ava": {
+    "extensions": [
+      "ts"
+    ],
+    "nodeArguments": [
+      "--import=tsx"
+    ],
+    "files": [
+      "test/**/*.test.ts"
+    ]
   }
 }

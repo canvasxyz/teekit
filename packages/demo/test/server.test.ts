@@ -20,18 +20,6 @@ async function waitForServer(port: number, timeout = 10000): Promise<void> {
   throw new Error(`Server did not start within ${timeout}ms`)
 }
 
-async function killProcessByPort(port: number): Promise<void> {
-  try {
-    // Find and kill process using the port
-    const { execSync } = await import("child_process")
-    execSync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`, {
-      stdio: "ignore",
-    })
-  } catch {
-    // Ignore errors
-  }
-}
-
 function killProcess(proc: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
     if (!proc.pid) {
@@ -52,11 +40,8 @@ test.serial("Node.js server: GET /uptime returns uptime data", async (t) => {
   let serverProcess: ChildProcess | null = null
 
   try {
-    // Ensure no process is using the port
-    await killProcessByPort(PORT)
-
     // Start the server
-    serverProcess = spawn("npx", ["tsx", "server/server-node.ts"], {
+    serverProcess = spawn("npx", ["tsx", "server.ts"], {
       cwd: process.cwd(),
       env: { ...process.env, PORT: PORT.toString() },
       stdio: "ignore",
@@ -77,8 +62,6 @@ test.serial("Node.js server: GET /uptime returns uptime data", async (t) => {
     if (serverProcess) {
       await killProcess(serverProcess)
     }
-    // Also kill by port to be sure
-    await killProcessByPort(PORT)
     // Wait a bit for cleanup
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
@@ -89,11 +72,8 @@ test.serial("Node.js server: POST /increment increments counter", async (t) => {
   let serverProcess: ChildProcess | null = null
 
   try {
-    // Ensure no process is using the port
-    await killProcessByPort(PORT)
-
     // Start the server
-    serverProcess = spawn("npx", ["tsx", "server/server-node.ts"], {
+    serverProcess = spawn("npx", ["tsx", "server.ts"], {
       cwd: process.cwd(),
       env: { ...process.env, PORT: PORT.toString() },
       stdio: "ignore",
@@ -123,8 +103,6 @@ test.serial("Node.js server: POST /increment increments counter", async (t) => {
     if (serverProcess) {
       await killProcess(serverProcess)
     }
-    // Also kill by port to be sure
-    await killProcessByPort(PORT)
     // Wait a bit for cleanup
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
@@ -135,11 +113,8 @@ test.serial("Node.js server: WebSocket connection works", async (t) => {
   let serverProcess: ChildProcess | null = null
 
   try {
-    // Ensure no process is using the port
-    await killProcessByPort(PORT)
-
     // Start the server
-    serverProcess = spawn("npx", ["tsx", "server/server-node.ts"], {
+    serverProcess = spawn("npx", ["tsx", "server.ts"], {
       cwd: process.cwd(),
       env: { ...process.env, PORT: PORT.toString() },
       stdio: "ignore",
@@ -186,7 +161,7 @@ test.serial("Node.js server: WebSocket connection works", async (t) => {
         } else {
           // For other RawData types (Buffer, string, Buffer[]),
           // assume the 'length' property is the intended way to check for content.
-          t.true(data.length > 0)
+          t.true((data as any).length > 0)
         }
         resolve(true)
       })
@@ -199,8 +174,6 @@ test.serial("Node.js server: WebSocket connection works", async (t) => {
     if (serverProcess) {
       await killProcess(serverProcess)
     }
-    // Also kill by port to be sure
-    await killProcessByPort(PORT)
     // Wait a bit for cleanup
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
