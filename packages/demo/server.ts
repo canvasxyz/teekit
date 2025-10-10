@@ -1,5 +1,6 @@
-import express from "express"
-import cors from "cors"
+import { Hono } from "hono"
+import { cors } from "hono/cors"
+import { serveStatic } from "@hono/node-server/serve-static"
 import { WebSocket } from "ws"
 
 import {
@@ -12,12 +13,7 @@ import {
 /* ********************************************************************************
  * Begin teekit tunnel code.
  * ******************************************************************************** */
-import {
-  TunnelServer,
-  ServerRAMockWebSocket,
-  encryptedOnly,
-  QuoteData,
-} from "@teekit/tunnel"
+import { TunnelServer, ServerRAMockWebSocket, QuoteData } from "@teekit/tunnel"
 import fs from "node:fs"
 import { exec } from "node:child_process"
 import { base64 } from "@scure/base"
@@ -64,15 +60,14 @@ async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
   })
 }
 
-const app = express()
+const app = new Hono()
 const { server, wss } = await TunnelServer.initialize(app, getQuote)
 
 /* ********************************************************************************
  * End teekit tunnel code.
  * ******************************************************************************** */
 
-app.use(cors())
-app.use(express.json())
+app.use("/*", cors())
 
 let messages: Message[] = []
 let totalMessageCount = 0
@@ -81,7 +76,7 @@ const startTime = Date.now()
 let counter = 0
 
 // API Routes
-app.get("/uptime", encryptedOnly(), (_req, res) => {
+app.get("/uptime", (c) => {
   const uptimeMs = Date.now() - startTime
   const uptimeSeconds = Math.floor(uptimeMs) / 1000
   const uptimeMinutes = Math.floor(uptimeSeconds / 60)
@@ -90,7 +85,7 @@ app.get("/uptime", encryptedOnly(), (_req, res) => {
   const minutes = (uptimeMinutes % 60).toString()
   const seconds = (uptimeSeconds % 60).toString().slice(0, 4)
 
-  res.json({
+  return c.json({
     uptime: {
       formatted: `${
         uptimeHours ? uptimeHours + "h" : ""
@@ -99,13 +94,9 @@ app.get("/uptime", encryptedOnly(), (_req, res) => {
   })
 })
 
-/* ********************************************************************************
- * The encryptedOnly() middleware blocks direct requests from the Express server.
- * ******************************************************************************** */
-
-app.post("/increment", encryptedOnly(), (_req, res) => {
+app.post("/increment", async (c) => {
   counter += 1
-  res.json({ counter })
+  return c.json({ counter })
 })
 
 wss.on("connection", (ws: WebSocket) => {
@@ -163,12 +154,7 @@ wss.on("connection", (ws: WebSocket) => {
   })
 })
 
-app.use(express.static("dist"))
+// Serve static files
+app.use("/*", serveStatic({ root: "./dist" }))
 
-const PORT = process.env.PORT || 3001
-
-server.listen(PORT, () => {
-  console.log(
-    `[teekit-demo] WebSocket server running on http://localhost:${PORT}`,
-  )
-})
+export { app, server }
