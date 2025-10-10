@@ -117,7 +117,7 @@ type TunnelServerConfig = {
  * ```
  */
 export class TunnelServer {
-  public readonly server: http.Server
+  public readonly server?: http.Server
   public readonly quote: Uint8Array
   public readonly verifierData: VerifierData | null
   public readonly runtimeData: Uint8Array | null
@@ -170,6 +170,7 @@ export class TunnelServer {
     // control WebSocket channel using Hono's upgradeWebSocket helper when provided.
     // Otherwise, create an HTTP server to host the control WebSocket channel.
     if (isHonoApp(app)) {
+      // Call upgradeWebSocket on the existing Hono server
       if (!config?.upgradeWebSocket) {
         throw new Error("Hono apps must provide { upgradeWebSocket } argument")
       }
@@ -189,11 +190,8 @@ export class TunnelServer {
         console.error("Failed to attach Hono upgradeWebSocket control channel")
         throw e
       }
-
-      // Create a minimal HTTP server instance to satisfy the class API; it is not used
-      // for control channel handling when upgradeWebSocket is provided.
-      this.server = http.createServer()
     } else {
+      // Create http.Server for Express apps
       this.server = http.createServer(app)
     }
 
@@ -207,18 +205,20 @@ export class TunnelServer {
     if (!config?.upgradeWebSocket) {
       this.controlWss = new WebSocketServer({ noServer: true })
       this.#setupControlChannel()
-      this.server.on("upgrade", (req, socket, head) => {
-        const url = req.url || ""
-        if (url.startsWith("/__ra__")) {
-          this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
-            this.controlWss!.emit("connection", controlWs, req)
-          })
-        } else {
-          // Don't allow other WebSocket servers to bind to the server;
-          // all WebSocket connections go to the encrypted channel.
-          socket.destroy()
-        }
-      })
+      if (this.server) {
+        this.server.on("upgrade", (req, socket, head) => {
+          const url = req.url || ""
+          if (url.startsWith("/__ra__")) {
+            this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
+              this.controlWss!.emit("connection", controlWs, req)
+            })
+          } else {
+            // Don't allow other WebSocket servers to bind to the server;
+            // all WebSocket connections go to the encrypted channel.
+            socket.destroy()
+          }
+        })
+      }
     }
 
     // Heartbeat to detect dead control sockets and cleanup
@@ -230,12 +230,14 @@ export class TunnelServer {
       this.heartbeatTimer.unref()
     }
 
-    this.server.on("close", () => {
-      if (this.heartbeatTimer) {
-        clearInterval(this.heartbeatTimer)
-        this.heartbeatTimer = undefined
-      }
-    })
+    if (this.server) {
+      this.server.on("close", () => {
+        if (this.heartbeatTimer) {
+          clearInterval(this.heartbeatTimer)
+          this.heartbeatTimer = undefined
+        }
+      })
+    }
   }
 
   static async initialize(

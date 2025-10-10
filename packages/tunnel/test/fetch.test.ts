@@ -88,9 +88,9 @@ async function startTunnelFetchApp() {
   }))
 
   await new Promise<void>((resolve) => {
-    tunnelServer.server.listen(0, "127.0.0.1", () => resolve())
+    tunnelServer.server!.listen(0, "127.0.0.1", () => resolve())
   })
-  const address = tunnelServer.server.address() as AddressInfo
+  const address = tunnelServer.server!.address() as AddressInfo
   const origin = `http://127.0.0.1:${address.port}`
 
   const quoteBodyParsed = parseTdxQuote(quote).body
@@ -118,7 +118,7 @@ async function stopTunnel(
     tunnelServer.wss.close(() => resolve())
   })
   await new Promise<void>((resolve) => {
-    tunnelServer.server.close(() => resolve())
+    tunnelServer.server!.close(() => resolve())
   })
 }
 

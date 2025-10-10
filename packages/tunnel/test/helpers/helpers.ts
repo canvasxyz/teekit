@@ -72,9 +72,9 @@ export async function startExpressTunnelApp() {
   }))
 
   await new Promise<void>((resolve) => {
-    tunnelServer.server.listen(0, "127.0.0.1", () => resolve())
+    tunnelServer.server!.listen(0, "127.0.0.1", () => resolve())
   })
-  const address = tunnelServer.server.address() as AddressInfo
+  const address = tunnelServer.server!.address() as AddressInfo
   const origin = `http://127.0.0.1:${address.port}`
 
   const quoteBodyParsed = parseTdxQuote(quote).body
@@ -253,7 +253,10 @@ export async function stopTunnel(
     }
   } catch {}
 
-  await new Promise<void>((resolve) => {
-    tunnelServer.server.close(() => resolve())
-  })
+  // Close tunnelServer.server if it exists (Express mode)
+  if (tunnelServer.server) {
+    await new Promise<void>((resolve) => {
+      tunnelServer.server!.close(() => resolve())
+    })
+  }
 }

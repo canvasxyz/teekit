@@ -82,9 +82,9 @@ test.serial(
       quote,
     }))
     await new Promise<void>((resolve) => {
-      tunnelServer.server.listen(0, "127.0.0.1", () => resolve())
+      tunnelServer.server!.listen(0, "127.0.0.1", () => resolve())
     })
-    const address = tunnelServer.server.address() as AddressInfo
+    const address = tunnelServer.server!.address() as AddressInfo
     const wsUrl = `ws://127.0.0.1:${address.port}/__ra__`
 
     const ws = new WebSocket(wsUrl)
@@ -191,7 +191,7 @@ test.serial(
         tunnelServer.wss.close(() => resolve()),
       )
       await new Promise<void>((resolve) =>
-        tunnelServer.server.close(() => resolve()),
+        tunnelServer.server!.close(() => resolve()),
       )
     }
   },
@@ -227,9 +227,9 @@ test.serial(
       quote,
     }))
     await new Promise<void>((resolve) => {
-      tunnelServer.server.listen(0, "127.0.0.1", () => resolve())
+      tunnelServer.server!.listen(0, "127.0.0.1", () => resolve())
     })
-    const address = tunnelServer.server.address() as AddressInfo
+    const address = tunnelServer.server!.address() as AddressInfo
     const origin = `http://127.0.0.1:${address.port}`
 
     // Direct HTTP should be forbidden
@@ -254,7 +254,7 @@ test.serial(
       tunnelServer.wss.close(() => resolve())
     })
     await new Promise<void>((resolve) => {
-      tunnelServer.server.close(() => resolve())
+      tunnelServer.server!.close(() => resolve())
     })
   },
 )
