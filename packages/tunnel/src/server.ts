@@ -1,5 +1,5 @@
 import http from "http"
-import { WebSocketServer, WebSocket } from "ws"
+import type { WebSocketServer, WebSocket } from "ws"
 import sodium from "libsodium-wrappers"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
@@ -200,26 +200,6 @@ export class TunnelServer {
     // Expose a mock WebSocketServer to application code
     this.wss = new ServerRAMockWebSocketServer()
 
-    // Route upgrades to the control channel WebSocketServer when not using Hono upgradeWebSocket
-    if (!config?.upgradeWebSocket) {
-      this.controlWss = new WebSocketServer({ noServer: true })
-      this.#setupControlChannel()
-      if (this.server) {
-        this.server.on("upgrade", (req, socket, head) => {
-          const url = req.url || ""
-          if (url.startsWith("/__ra__")) {
-            this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
-              this.controlWss!.emit("connection", controlWs, req)
-            })
-          } else {
-            // Don't allow other WebSocket servers to bind to the server;
-            // all WebSocket connections go to the encrypted channel.
-            socket.destroy()
-          }
-        })
-      }
-    }
-
     // Heartbeat to detect dead control sockets and cleanup
     this.heartbeatTimer = setInterval(
       () => this.#heartbeatSweep(),
@@ -247,7 +227,46 @@ export class TunnelServer {
     await sodium.ready
     const { publicKey, privateKey } = sodium.crypto_box_keypair()
     const quote = await Promise.resolve(getQuote(publicKey))
-    return new TunnelServer(app, quote, publicKey, privateKey, config)
+    const server = new TunnelServer(app, quote, publicKey, privateKey, config)
+
+    // Setup WebSocketServer for Express apps (requires dynamic import)
+    if (!config?.upgradeWebSocket) {
+      await server.#setupWebSocketServer()
+    }
+
+    return server
+  }
+
+  /**
+   * Setup WebSocketServer for Express apps (requires dynamic import of 'ws')
+   */
+  async #setupWebSocketServer(): Promise<void> {
+    try {
+      const wsModule = await import("ws")
+      const WebSocketServer = wsModule.WebSocketServer
+      ;(this as any).controlWss = new WebSocketServer({ noServer: true })
+      this.#setupControlChannel()
+
+      if (this.server) {
+        this.server.on("upgrade", (req, socket, head) => {
+          const url = req.url || ""
+          if (url.startsWith("/__ra__")) {
+            this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
+              this.controlWss!.emit("connection", controlWs, req)
+            })
+          } else {
+            // Don't allow other WebSocket servers to bind to the server;
+            // all WebSocket connections go to the encrypted channel.
+            socket.destroy()
+          }
+        })
+      }
+    } catch (error) {
+      throw new Error(
+        "ws module is required for Express support but could not be loaded. " +
+          "Install it with: npm install ws",
+      )
+    }
   }
 
   /**
@@ -854,7 +873,7 @@ export class TunnelServer {
       const strayKeys = Array.from(this.symmetricKeyBySocket.keys()).filter(
         (controlWs) =>
           !trackedSockets.has(controlWs) &&
-          controlWs.readyState !== WebSocket.OPEN,
+          controlWs.readyState !== 1, // WebSocket.OPEN
       )
       if (strayKeys.length > 0) {
         console.warn(
@@ -907,7 +926,8 @@ export class TunnelServer {
         const known = this.controlWss
           ? this.controlWss.clients.has(controlWs)
           : this.controlClients.has(controlWs)
-        if (controlWs.readyState === WebSocket.CLOSED || !known) {
+        if (controlWs.readyState === 3 || !known) {
+          // WebSocket.CLOSED
           this.symmetricKeyBySocket.delete(controlWs)
           this.livenessBySocket.delete(controlWs)
         }
