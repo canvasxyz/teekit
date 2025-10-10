@@ -32,12 +32,7 @@ import {
   isRAEncryptedClientCloseEvent,
   isHonoApp,
 } from "./typeguards.js"
-import {
-  isTextData,
-  parseBody,
-  sanitizeHeaders,
-  getStatusText,
-} from "./utils/server.js"
+import { parseBody, sanitizeHeaders, getStatusText } from "./utils/server.js"
 import { ENCRYPTED_REQUEST, markRequestAsEncrypted } from "./encryptedOnly.js"
 import {
   ServerRAMockWebSocket,
@@ -674,13 +669,8 @@ export class TunnelServer {
             messageData = payload
             dataType = "string"
           } else if (payload instanceof Uint8Array) {
-            if (isTextData(payload)) {
-              messageData = new TextDecoder().decode(payload)
-              dataType = "string"
-            } else {
-              messageData = payload
-              dataType = "arraybuffer"
-            }
+            messageData = payload
+            dataType = "arraybuffer"
           } else {
             messageData = String(payload)
             dataType = "string"

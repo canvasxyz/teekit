@@ -343,7 +343,7 @@ test.serial(
       const m1 = await m1P
       t.is(String(m1.data), "hello")
 
-      // 2) ASCII bytes should come back as text
+      // 2) ASCII bytes should come back as binary
       const ascii = new TextEncoder().encode("ascii-bytes")
       const m2P = withTimeout(
         new Promise<any>((resolve) =>
@@ -354,8 +354,8 @@ test.serial(
       )
       ws.send(ascii)
       const m2 = await m2P
-      t.is(typeof m2.data, "string")
-      t.is(m2.data, "ascii-bytes")
+      t.true(m2.data instanceof ArrayBuffer)
+      t.is(new TextDecoder().decode(m2.data), "ascii-bytes")
 
       // 3) Non-text bytes should come back as binary
       const bin = new Uint8Array([0, 255, 1, 2, 3])
