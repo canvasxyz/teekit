@@ -15,4 +15,7 @@ export {
   ENCRYPTED_REQUEST,
 } from "./encryptedOnly.js"
 
+// Hono middleware for enforcing encryption
+export { encryptedOnlyHono } from "./encryptedOnlyHono.js"
+
 export type { QuoteData, VerifierData } from "./types.js"

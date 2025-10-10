@@ -38,7 +38,7 @@ import {
   sanitizeHeaders,
   getStatusText,
 } from "./utils/server.js"
-import { markRequestAsEncrypted } from "./encryptedOnly.js"
+import { ENCRYPTED_REQUEST, markRequestAsEncrypted } from "./encryptedOnly.js"
 import {
   ServerRAMockWebSocket,
   ServerRAMockWebSocketServer,
@@ -491,6 +491,10 @@ export class TunnelServer {
       init.body = tunnelReq.body
     }
     const request = new Request(urlObj, init)
+    // Mark request as arriving via encrypted tunnel for Hono middleware
+    try {
+      ;(request as any)[ENCRYPTED_REQUEST] = true
+    } catch {}
     const response = await app.fetch(request)
 
     const respHeaders: Record<string, string | string[]> = {}
