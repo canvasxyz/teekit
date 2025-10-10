@@ -1,7 +1,14 @@
-import { EventEmitter } from "events"
+import { SimpleEventEmitter } from "./SimpleEventEmitter.js"
+
+// Event types for ServerRAMockWebSocket
+interface ServerRAMockWebSocketEvents {
+  message: [data: string | Buffer]
+  close: [code: number, reason: string]
+  [event: string]: any[] // Allow additional events
+}
 
 // Mock WebSocket exposed to applications
-export class ServerRAMockWebSocket extends EventEmitter {
+export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSocketEvents> {
   public readonly CONNECTING = 0
   public readonly OPEN = 1
   public readonly CLOSING = 2
@@ -54,8 +61,14 @@ export class ServerRAMockWebSocket extends EventEmitter {
   }
 }
 
+// Event types for ServerRAMockWebSocketServer
+interface ServerRAMockWebSocketServerEvents {
+  connection: [ws: ServerRAMockWebSocket]
+  [event: string]: any[] // Allow additional events
+}
+
 // Mock WebSocketServer exposed to application code
-export class ServerRAMockWebSocketServer extends EventEmitter {
+export class ServerRAMockWebSocketServer extends SimpleEventEmitter<ServerRAMockWebSocketServerEvents> {
   public clients: Set<ServerRAMockWebSocket> = new Set()
 
   addClient(ws: ServerRAMockWebSocket): void {

@@ -1,6 +1,5 @@
 import http from "http"
 import { WebSocketServer, WebSocket } from "ws"
-import { EventEmitter } from "events"
 import sodium from "libsodium-wrappers"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
@@ -551,14 +550,23 @@ export class TunnelServer {
       createResponse: typeof createResponse
     }
     let httpMocks: HttpMocksType
+    let EventEmitter: any
 
-    // Dynamically import node-mocks-http if we're using Express
+    // Dynamically import node-mocks-http and events if we're using Express
     try {
       httpMocks = (await import("node-mocks-http")).default
     } catch (error) {
       throw new Error(
-        "node-mocks-http is required for Express support but could not be loaded. " +
-          "Install it with: npm install node-mocks-http",
+        "node-mocks-http is required for Express support but could not be loaded",
+      )
+    }
+
+    try {
+      const eventsModule = await import("events")
+      EventEmitter = eventsModule.EventEmitter
+    } catch (error) {
+      throw new Error(
+        "events module is required for Express support but could not be loaded",
       )
     }
 
