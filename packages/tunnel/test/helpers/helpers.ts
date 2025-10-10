@@ -145,7 +145,11 @@ export async function startHonoTunnelApp() {
   app.get("/set-headers", () => {
     const headers = new Headers()
     headers.set("X-Custom-A", "A")
-    headers.set("X-Custom-B", "B1, B2")
+    headers.append("X-Custom-B", "B1")
+    headers.append("X-Custom-B", "B2")
+    // Also set multiple cookies to exercise multi-value special-case
+    headers.append("set-cookie", "a=1; Path=/; HttpOnly")
+    headers.append("set-cookie", "b=2; Path=/; HttpOnly")
     return new Response("ok", { status: 200, headers })
   })
   app.get("/bytes/:size", (c) => {

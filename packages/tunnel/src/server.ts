@@ -52,6 +52,18 @@ type TunnelServerConfig = {
 /**
  * Virtual server for remote-attested encrypted channels.
  *
+ * ## Hono instructions:
+ *
+ * ```
+ * const app = new Hono()
+ * app.get('/', (c) => c.text("Hello world!"))
+ * export default app
+ * ```
+ *
+ * TODO
+ *
+ * ## Express instructions:
+ *
  * For HTTP requests, the virtual server binds to an Express server,
  * and decrypts and forwards requests to it.
  *
@@ -406,9 +418,22 @@ export class TunnelServer {
     app: Hono,
   ): Promise<void> {
     const urlObj = new URL(tunnelReq.url, "http://localhost")
+    const headers = new Headers(tunnelReq.headers || {})
+
+    // Inject pseudo-headers commonly provided by proxies
+    if (!headers.has("x-forwarded-proto")) {
+      headers.set("x-forwarded-proto", urlObj.protocol.replace(":", ""))
+    }
+    if (!headers.has("x-forwarded-host")) {
+      headers.set("x-forwarded-host", urlObj.host)
+    }
+    if (!headers.has("x-forwarded-port") && urlObj.port) {
+      headers.set("x-forwarded-port", urlObj.port)
+    }
+
     const init: RequestInit = {
       method: tunnelReq.method,
-      headers: new Headers(tunnelReq.headers || {}),
+      headers,
     }
     if (
       tunnelReq.body !== undefined &&
@@ -420,10 +445,28 @@ export class TunnelServer {
     const request = new Request(urlObj, init)
     const response = await app.fetch(request)
 
-    const respHeaders: Record<string, string> = {}
+    const respHeaders: Record<string, string | string[]> = {}
     response.headers.forEach((value: string, key: string) => {
-      respHeaders[key] = value
+      const existing = respHeaders[key]
+      if (existing === undefined) {
+        respHeaders[key] = value
+      } else if (Array.isArray(existing)) {
+        existing.push(value)
+      } else {
+        respHeaders[key] = [existing, value]
+      }
     })
+
+    // Preserve multiple Set-Cookie values if supported by the runtime
+    try {
+      const getSetCookie = response.headers.getSetCookie
+      if (typeof getSetCookie === "function") {
+        const setCookies = getSetCookie.call(response.headers)
+        if (Array.isArray(setCookies) && setCookies.length > 0) {
+          respHeaders["set-cookie"] = setCookies as string[]
+        }
+      }
+    } catch {}
 
     let body: string | Uint8Array<ArrayBuffer>
     try {

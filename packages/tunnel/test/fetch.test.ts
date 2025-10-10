@@ -305,6 +305,25 @@ test.serial("Response headers and arrayBuffer() for binary", async (t) => {
   }
 })
 
+test.serial("Express preserves multi-value headers", async (t) => {
+  const { tunnelServer, tunnelClient } = await startTunnelFetchApp()
+  try {
+    const res = await tunnelClient.fetch("/set-headers")
+    t.is(res.status, 200)
+
+    // Single header
+    t.is(res.headers.get("x-custom-a"), "A")
+
+    // Multi-value header should include both values when joined by Fetch.get()
+    const headerB = res.headers.get("x-custom-b")
+    t.truthy(headerB)
+    t.true((headerB as string).includes("B1"))
+    t.true((headerB as string).includes("B2"))
+  } finally {
+    await stopTunnel(tunnelServer, tunnelClient)
+  }
+})
+
 test.serial(
   "Server-side streamed response is concatenated in body",
   async (t) => {

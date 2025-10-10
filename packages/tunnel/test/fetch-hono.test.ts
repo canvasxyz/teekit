@@ -228,6 +228,36 @@ test.serial("Response headers and arrayBuffer() for binary", async (t) => {
 })
 
 test.serial(
+  "Hono preserves multi-value headers (including Set-Cookie)",
+  async (t) => {
+    const { tunnelServer, tunnelClient } = await startHonoTunnelApp()
+    try {
+      const res = await tunnelClient.fetch("/set-headers")
+      t.is(res.status, 200)
+
+      // X-Custom-A is a single header
+      t.is(res.headers.get("x-custom-a"), "A")
+
+      // X-Custom-B should include both values; Headers.get joins with ','
+      // and Headers.getAll (deprecated) is not available in Fetch standard.
+      const allB = res.headers.get("x-custom-b")
+      t.truthy(allB)
+      t.true((allB as string).includes("B1"))
+      t.true((allB as string).includes("B2"))
+
+      // Multiple Set-Cookie values survive; Fetch exposes only get().
+      // We rely on the tunnel client reconstruction that appended both values.
+      const cookiesJoined = res.headers.get("set-cookie")
+      t.truthy(cookiesJoined)
+      t.true((cookiesJoined as string).includes("a=1"))
+      t.true((cookiesJoined as string).includes("b=2"))
+    } finally {
+      await stopTunnel(tunnelServer, tunnelClient)
+    }
+  },
+)
+
+test.serial(
   "Server-side streamed response is concatenated in body",
   async (t) => {
     const { tunnelServer, tunnelClient } = await startHonoTunnelApp()

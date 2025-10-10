@@ -426,6 +426,16 @@ export class TunnelClient {
       return
     }
 
+    // Reconstruct Headers, preserving multi-value arrays
+    const headers = new Headers()
+    for (const [k, v] of Object.entries(response.headers)) {
+      if (Array.isArray(v)) {
+        for (const vv of v) headers.append(k, vv)
+      } else {
+        headers.set(k, v)
+      }
+    }
+
     const syntheticResponse = new Response(
       response.status === 204
         ? null
@@ -435,7 +445,7 @@ export class TunnelClient {
       {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers,
+        headers,
       },
     )
 

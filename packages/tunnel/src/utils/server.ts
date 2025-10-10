@@ -21,15 +21,18 @@ export function parseBody(body: string, contentType?: string): any {
   return body
 }
 
-export function sanitizeHeaders(headers: any): Record<string, string> {
-  const sanitized: Record<string, string> = {}
+export function sanitizeHeaders(
+  headers: any,
+): Record<string, string | string[]> {
+  const sanitized: Record<string, string | string[]> = {}
 
   for (const [key, value] of Object.entries(headers)) {
     if (typeof value === "string") {
       sanitized[key] = value
     } else if (Array.isArray(value)) {
-      sanitized[key] = value.join(", ")
-    } else {
+      // Preserve multi-value headers (e.g., multiple Set-Cookie)
+      sanitized[key] = value.map((v) => String(v))
+    } else if (value !== undefined && value !== null) {
       sanitized[key] = String(value)
     }
   }

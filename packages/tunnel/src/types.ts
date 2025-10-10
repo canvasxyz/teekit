@@ -36,7 +36,7 @@ export type RAEncryptedHTTPResponse = {
   requestId: string
   status: number
   statusText: string
-  headers: Record<string, string>
+  headers: Record<string, string | string[]>
   body: string | Uint8Array
   error?: string
 }

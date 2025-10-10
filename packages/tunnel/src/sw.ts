@@ -22,7 +22,7 @@ type RAEncryptedHTTPResponse = {
   requestId: string
   status: number
   statusText: string
-  headers: Record<string, string>
+  headers: Record<string, string | string[]>
   body?: string | Uint8Array
   error?: string
 }
@@ -144,11 +144,19 @@ async function ensureConnection(): Promise<void> {
               return
             }
 
-            const body = res.status === 204 ? null : (res.body ?? null)
+            const body = res.status === 204 ? null : res.body ?? null
+            const hdrs = new Headers()
+            for (const [k, v] of Object.entries(res.headers)) {
+              if (Array.isArray(v)) {
+                for (const vv of v) hdrs.append(k, vv)
+              } else {
+                hdrs.set(k, v)
+              }
+            }
             const response = new Response(body as any, {
               status: res.status,
               statusText: res.statusText,
-              headers: res.headers,
+              headers: hdrs,
             })
             pending.resolve(response)
             return
