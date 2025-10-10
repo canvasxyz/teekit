@@ -3,6 +3,7 @@
 	"exclude": ["**/vite.config.ts"],
 	"references": [
 		{ "path": "./packages/demo" },
+		{ "path": "./packages/runtime" },
 		{ "path": "./packages/qvl" },
 		{ "path": "./packages/qvl/test" },
 		{ "path": "./packages/tunnel" },
