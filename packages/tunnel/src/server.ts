@@ -1,4 +1,5 @@
-import http from "http"
+import type { Server as HttpServer, IncomingMessage } from "http"
+import type { Socket } from "net"
 import type { WebSocketServer, WebSocket } from "ws"
 import sodium from "libsodium-wrappers"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
@@ -112,7 +113,7 @@ type TunnelServerConfig = {
  * ```
  */
 export class TunnelServer {
-  public readonly server?: http.Server
+  public readonly server?: HttpServer
   public readonly quote: Uint8Array
   public readonly verifierData: VerifierData | null
   public readonly runtimeData: Uint8Array | null
@@ -186,8 +187,7 @@ export class TunnelServer {
         throw e
       }
     } else {
-      // Create http.Server for Express apps
-      this.server = http.createServer(app)
+      // Express apps will have the http server created during initialize()
     }
 
     this.heartbeatInterval = config?.heartbeatInterval || 30000
@@ -205,14 +205,7 @@ export class TunnelServer {
       this.heartbeatTimer.unref()
     }
 
-    if (this.server) {
-      this.server.on("close", () => {
-        if (this.heartbeatTimer) {
-          clearInterval(this.heartbeatTimer)
-          this.heartbeatTimer = undefined
-        }
-      })
-    }
+    // http server close handler is attached when server is created
   }
 
   static async initialize(
@@ -225,8 +218,9 @@ export class TunnelServer {
     const quote = await Promise.resolve(getQuote(publicKey))
     const server = new TunnelServer(app, quote, publicKey, privateKey, config)
 
-    // Setup WebSocketServer for Express apps (requires dynamic import)
+    // Setup http and WebSocketServer for Express apps (requires dynamic import)
     if (!config?.upgradeWebSocket) {
+      await server.#setupHttpServer()
       await server.#setupWebSocketServer()
     }
 
@@ -244,23 +238,48 @@ export class TunnelServer {
       this.#setupControlChannel()
 
       if (this.server) {
-        this.server.on("upgrade", (req, socket, head) => {
-          const url = req.url || ""
-          if (url.startsWith("/__ra__")) {
-            this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
-              this.controlWss!.emit("connection", controlWs, req)
-            })
-          } else {
-            // Don't allow other WebSocket servers to bind to the server;
-            // all WebSocket connections go to the encrypted channel.
-            socket.destroy()
-          }
-        })
+        this.server.on(
+          "upgrade",
+          (req: IncomingMessage, socket: Socket, head: Buffer) => {
+            const url = req.url || ""
+            if (url.startsWith("/__ra__")) {
+              this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
+                this.controlWss!.emit("connection", controlWs, req)
+              })
+            } else {
+              // Don't allow other WebSocket servers to bind to the server;
+              // all WebSocket connections go to the encrypted channel.
+              socket.destroy()
+            }
+          },
+        )
       }
     } catch (error) {
       throw new Error(
         "ws module is required for Express support but could not be loaded. " +
           "Install it with: npm install ws",
+      )
+    }
+  }
+
+  /**
+   * Setup http.Server for Express apps (dynamic import to avoid bundling for Hono)
+   */
+  async #setupHttpServer(): Promise<void> {
+    try {
+      const httpModule = await import("http")
+      ;(this as any).server = httpModule.createServer(this.app as any)
+      if (this.server) {
+        this.server.on("close", () => {
+          if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer)
+            this.heartbeatTimer = undefined
+          }
+        })
+      }
+    } catch (error) {
+      throw new Error(
+        "http module is required for Express support but could not be loaded",
       )
     }
   }
