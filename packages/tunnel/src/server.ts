@@ -1,10 +1,10 @@
 import http from "http"
 import { WebSocketServer, WebSocket } from "ws"
-import httpMocks, { RequestMethod } from "node-mocks-http"
 import { EventEmitter } from "events"
 import sodium from "libsodium-wrappers"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
+import type { createRequest, createResponse } from "node-mocks-http"
 import type { Express } from "express"
 import type { Hono } from "hono"
 import type { NodeWebSocket } from "@hono/node-ws"
@@ -546,6 +546,22 @@ export class TunnelServer {
     tunnelReq: RAEncryptedHTTPRequest,
     app: Express,
   ): Promise<void> {
+    type HttpMocksType = {
+      createRequest: typeof createRequest
+      createResponse: typeof createResponse
+    }
+    let httpMocks: HttpMocksType
+
+    // Dynamically import node-mocks-http if we're using Express
+    try {
+      httpMocks = (await import("node-mocks-http")).default
+    } catch (error) {
+      throw new Error(
+        "node-mocks-http is required for Express support but could not be loaded. " +
+          "Install it with: npm install node-mocks-http",
+      )
+    }
+
     const urlObj = new URL(tunnelReq.url, "http://localhost")
     const query: Record<string, string> = {}
     urlObj.searchParams.forEach((value, key) => {
@@ -553,7 +569,7 @@ export class TunnelServer {
     })
 
     const req = httpMocks.createRequest({
-      method: tunnelReq.method as RequestMethod,
+      method: tunnelReq.method as any,
       url: tunnelReq.url,
       path: urlObj.pathname,
       headers: tunnelReq.headers,
