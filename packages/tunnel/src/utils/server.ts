@@ -59,7 +59,7 @@ export function getStatusText(statusCode: number): string {
   return statusTexts[statusCode] || "Unknown"
 }
 
-export function isTextData(data: Buffer): boolean {
+export function isTextData(data: Uint8Array): boolean {
   // Simple heuristic to detect if data is likely text
   // Check for null bytes and high-bit characters
   for (let i = 0; i < Math.min(data.length, 1024); i++) {

@@ -2,7 +2,7 @@ import { SimpleEventEmitter } from "./SimpleEventEmitter.js"
 
 // Event types for ServerRAMockWebSocket
 interface ServerRAMockWebSocketEvents {
-  message: [data: string | Buffer]
+  message: [data: string | Uint8Array]
   close: [code: number, reason: string]
   [event: string]: any[] // Allow additional events
 }
@@ -16,11 +16,11 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
 
   public readyState = this.OPEN
 
-  private onSendToClient: (data: string | Buffer) => void
+  private onSendToClient: (data: string | Uint8Array) => void
   private onCloseToClient: (code?: number, reason?: string) => void
 
   constructor(
-    onSendToClient: (data: string | Buffer) => void,
+    onSendToClient: (data: string | Uint8Array) => void,
     onCloseToClient: (code?: number, reason?: string) => void,
   ) {
     super()
@@ -28,7 +28,7 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
     this.onCloseToClient = onCloseToClient
   }
 
-  send(data: string | Buffer): void {
+  send(data: string | Uint8Array): void {
     if (this.readyState !== this.OPEN) return
     this.onSendToClient(data)
   }
@@ -44,9 +44,9 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
   }
 
   // Methods used by RA to inject events from client
-  emitMessage(data: string | Buffer): void {
+  emitMessage(data: string | Uint8Array): void {
     if (this.readyState !== this.OPEN) return
-    const payload = typeof data === "string" ? data : Buffer.from(data)
+    const payload = typeof data === "string" ? data : data
     this.emit("message", payload as any)
   }
 

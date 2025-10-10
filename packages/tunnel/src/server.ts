@@ -3,6 +3,7 @@ import type { WebSocketServer, WebSocket } from "ws"
 import sodium from "libsodium-wrappers"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
+import { base64 } from "@scure/base"
 import type { createRequest, createResponse } from "node-mocks-http"
 import type { Express } from "express"
 import type { Hono } from "hono"
@@ -97,7 +98,7 @@ type TunnelServerConfig = {
  *
  * wss.on("connection", (ws: WebSocket) => {
  *   // Handle incoming messages
- *   ws.on("message", (data: Buffer) => { ... })
+ *   ws.on("message", (data: Uint8Array) => { ... })
  *
  *   // Send an initial message
  *   ws.send(...)
@@ -305,13 +306,11 @@ export class TunnelServer {
     try {
       const serverKxMessage: ControlChannelKXAnnounce = {
         type: "server_kx",
-        x25519PublicKey: Buffer.from(this.x25519PublicKey).toString("base64"),
-        quote: Buffer.from(this.quote).toString("base64"),
-        runtime_data: this.runtimeData
-          ? Buffer.from(this.runtimeData).toString("base64")
-          : null,
+        x25519PublicKey: base64.encode(this.x25519PublicKey),
+        quote: base64.encode(this.quote),
+        runtime_data: this.runtimeData ? base64.encode(this.runtimeData) : null,
         verifier_data: this.verifierData
-          ? encodeCbor(this.verifierData).toString("base64")
+          ? base64.encode(encodeCbor(this.verifierData))
           : null,
       }
       controlWs.send(encodeCbor(serverKxMessage))
@@ -352,8 +351,8 @@ export class TunnelServer {
         // Decode incoming message from client
         let message
         try {
-          const data = args[0] as Buffer
-          message = decodeCbor(new Uint8Array(data))
+          const data = args[0] as Uint8Array
+          message = decodeCbor(data)
         } catch (error: any) {
           console.error("Received invalid CBOR message")
           return true
@@ -674,12 +673,12 @@ export class TunnelServer {
           if (typeof payload === "string") {
             messageData = payload
             dataType = "string"
-          } else if (Buffer.isBuffer(payload)) {
+          } else if (payload instanceof Uint8Array) {
             if (isTextData(payload)) {
-              messageData = payload.toString()
+              messageData = new TextDecoder().decode(payload)
               dataType = "string"
             } else {
-              messageData = new Uint8Array(payload)
+              messageData = payload
               dataType = "arraybuffer"
             }
           } else {
@@ -754,21 +753,18 @@ export class TunnelServer {
 
   #handleTunnelWebSocketMessage(messageReq: RAEncryptedWSMessage): void {
     const connection = this.sockets.get(messageReq.connectionId)
-    if (connection) {
-      try {
-        let dataToSend: string | Buffer
-        if (messageReq.dataType === "arraybuffer") {
-          dataToSend = Buffer.from(messageReq.data as Uint8Array)
-        } else {
-          dataToSend = messageReq.data as string
-        }
-        connection.mockWs.emitMessage(dataToSend)
-      } catch (error) {
-        console.error(
-          `Error sending message to WebSocket ${messageReq.connectionId}:`,
-          error,
-        )
-      }
+    if (!connection) {
+      console.error("Failed to handle tunnel websocket message")
+      return
+    }
+
+    try {
+      connection.mockWs.emitMessage(messageReq.data)
+    } catch (error) {
+      console.error(
+        `Error sending message to WebSocket ${messageReq.connectionId}:`,
+        error,
+      )
     }
   }
 
@@ -872,8 +868,7 @@ export class TunnelServer {
       const trackedSockets = new Set(entries.map(([, v]) => v.controlWs))
       const strayKeys = Array.from(this.symmetricKeyBySocket.keys()).filter(
         (controlWs) =>
-          !trackedSockets.has(controlWs) &&
-          controlWs.readyState !== 1, // WebSocket.OPEN
+          !trackedSockets.has(controlWs) && controlWs.readyState !== 1, // WebSocket.OPEN
       )
       if (strayKeys.length > 0) {
         console.warn(
