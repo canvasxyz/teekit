@@ -1,4 +1,6 @@
 import { Hono } from "hono"
+import { createNodeWebSocket } from "@hono/node-ws"
+import { serve } from "@hono/node-server"
 import { cors } from "hono/cors"
 import { serveStatic } from "@hono/node-server/serve-static"
 import { WebSocket } from "ws"
@@ -61,7 +63,12 @@ async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
 }
 
 const app = new Hono()
-const { server, wss } = await TunnelServer.initialize(app, getQuote)
+
+// Bind the tunnel control channel to the Hono app via upgradeWebSocket
+const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
+const { wss } = await TunnelServer.initialize(app, getQuote, {
+  upgradeWebSocket,
+})
 
 /* ********************************************************************************
  * End teekit tunnel code.
@@ -156,5 +163,13 @@ wss.on("connection", (ws: WebSocket) => {
 
 // Serve static files
 app.use("/*", serveStatic({ root: "./dist" }))
+
+// Start the Hono server and attach Node WS
+const server = serve({
+  fetch: app.fetch,
+  port: process.env.PORT ? Number(process.env.PORT) : 3001,
+  hostname: "0.0.0.0",
+})
+injectWebSocket(server)
 
 export { app, server }

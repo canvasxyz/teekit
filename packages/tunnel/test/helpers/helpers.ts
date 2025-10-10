@@ -1,5 +1,7 @@
 import express, { type Request, type Response } from "express"
 import { Context, Hono } from "hono"
+import { createNodeWebSocket } from "@hono/node-ws"
+import { serve } from "@hono/node-server"
 import type { AddressInfo } from "node:net"
 import sodium from "libsodium-wrappers"
 
@@ -180,15 +182,27 @@ export async function startHonoTunnelApp() {
     return new Response(stream, { status: 200, headers })
   })
 
+  const nodeWS = createNodeWebSocket({ app })
+  const { injectWebSocket, upgradeWebSocket } = nodeWS
   const quote = loadQuote({ tdxv4: true })
-  const tunnelServer = await TunnelServer.initialize(app, async () => ({
-    quote,
-  }))
+  const tunnelServer = await TunnelServer.initialize(
+    app,
+    async () => ({
+      quote,
+    }),
+    { upgradeWebSocket },
+  )
 
-  await new Promise<void>((resolve) => {
-    tunnelServer.server.listen(0, "127.0.0.1", () => resolve())
+  const server = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" })
+  injectWebSocket(server)
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", resolve)
+    server.once("error", reject)
   })
-  const address = tunnelServer.server.address() as AddressInfo
+
+  const address = server.address()
+  if (typeof address === "string" || address === null) throw new Error()
   const origin = `http://127.0.0.1:${address.port}`
 
   const quoteBodyParsed = parseTdxQuote(quote).body
@@ -197,6 +211,10 @@ export async function startHonoTunnelApp() {
     report_data: hex(quoteBodyParsed.report_data),
     customVerifyX25519Binding: () => true,
   })
+
+  // Attach underlying Hono server and ws server for proper shutdown
+  ;(tunnelServer as any).__honoServer = server
+  ;(tunnelServer as any).__honoWss = nodeWS.wss
 
   return { tunnelServer, tunnelClient, origin }
 }
@@ -218,6 +236,23 @@ export async function stopTunnel(
   await new Promise<void>((resolve) => {
     tunnelServer.wss.close(() => resolve())
   })
+
+  // Close Hono ws server if present (Node adapter)
+  try {
+    const honoWss: any = (tunnelServer as any).__honoWss
+    if (honoWss && typeof honoWss.close === "function") {
+      await new Promise<void>((resolve) => honoWss.close(() => resolve()))
+    }
+  } catch {}
+
+  // Close underlying server that may have been created by helpers (Hono)
+  try {
+    const honoServer: any = (tunnelServer as any).__honoServer
+    if (honoServer && typeof honoServer.close === "function") {
+      await new Promise<void>((resolve) => honoServer.close(() => resolve()))
+    }
+  } catch {}
+
   await new Promise<void>((resolve) => {
     tunnelServer.server.close(() => resolve())
   })

@@ -7,6 +7,8 @@ import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
 import type { Express } from "express"
 import type { Hono } from "hono"
+import type { NodeWebSocket } from "@hono/node-ws"
+import type { UpgradeWebSocket } from "hono/ws"
 
 import {
   RAEncryptedHTTPRequest,
@@ -47,6 +49,12 @@ const debug = createDebug("teekit:TunnelServer")
 type TunnelServerConfig = {
   heartbeatInterval?: number
   heartbeatTimeout?: number
+
+  // Required for Hono: Provide an `upgradeWebSocket` handler
+  // from hono/deno, hono/cloudflare-workers, etc.
+  upgradeWebSocket?:
+    | NodeWebSocket["upgradeWebSocket"]
+    | UpgradeWebSocket<any, any, any>
 }
 
 /**
@@ -55,12 +63,24 @@ type TunnelServerConfig = {
  * ## Hono instructions:
  *
  * ```
+ * import { Hono } from 'hono'
+ * import { upgradeWebSocket } from 'hono/ws'
+ *
  * const app = new Hono()
  * app.get('/', (c) => c.text("Hello world!"))
+ *
+ * const { wss } = await TunnelServer.initialize(
+ *   app,
+ *   async (x25519PublicKey) => {
+ *     // return a Uint8Array quote bound to x25519PublicKey
+ *     return myQuote
+ *   },
+ *   { upgradeWebSocket },
+ * )
+ *
+ * // No need to call server.listen for Hono — your platform/router hosts the app.
  * export default app
  * ```
- *
- * TODO
  *
  * ## Express instructions:
  *
@@ -102,7 +122,8 @@ export class TunnelServer {
   public readonly verifierData: VerifierData | null
   public readonly runtimeData: Uint8Array | null
   public readonly wss: ServerRAMockWebSocketServer
-  private readonly controlWss: WebSocketServer
+  private readonly controlWss?: WebSocketServer // for express
+  private controlClients = new Set<WebSocket>() // for hono
 
   public readonly x25519PublicKey: Uint8Array
   private readonly x25519PrivateKey: Uint8Array
@@ -145,10 +166,32 @@ export class TunnelServer {
     this.x25519PublicKey = publicKey
     this.x25519PrivateKey = privateKey
 
-    // If this looks like a Hono app (has a fetch handler), do not bind the app
-    // to the Node HTTP server, since tunneled HTTP is handled internally.
-    // We still need to create an HTTP server to host the control WebSocket channel.
+    // If this looks like a Hono app (has a fetch handler), optionally bind the
+    // control WebSocket channel using Hono's upgradeWebSocket helper when provided.
+    // Otherwise, create an HTTP server to host the control WebSocket channel.
     if (isHonoApp(app)) {
+      if (!config?.upgradeWebSocket) {
+        throw new Error("Hono apps must provide { upgradeWebSocket } argument")
+      }
+      try {
+        app.get(
+          "/__ra__",
+          config.upgradeWebSocket(() => ({
+            onOpen: (_event, context) => {
+              if (context.raw === undefined) {
+                throw new Error("incompatible upgradeWebSocket adapter")
+              }
+              this.#onControlConnection(context.raw)
+            },
+          })),
+        )
+      } catch (e) {
+        console.error("Failed to attach Hono upgradeWebSocket control channel")
+        throw e
+      }
+
+      // Create a minimal HTTP server instance to satisfy the class API; it is not used
+      // for control channel handling when upgradeWebSocket is provided.
       this.server = http.createServer()
     } else {
       this.server = http.createServer(app)
@@ -160,21 +203,23 @@ export class TunnelServer {
     // Expose a mock WebSocketServer to application code
     this.wss = new ServerRAMockWebSocketServer()
 
-    // Route upgrades to the control channel WebSocketServer
-    this.controlWss = new WebSocketServer({ noServer: true })
-    this.#setupControlChannel()
-    this.server.on("upgrade", (req, socket, head) => {
-      const url = req.url || ""
-      if (url.startsWith("/__ra__")) {
-        this.controlWss.handleUpgrade(req, socket, head, (controlWs) => {
-          this.controlWss.emit("connection", controlWs, req)
-        })
-      } else {
-        // Don't allow other WebSocket servers to bind to the server;
-        // all WebSocket connections go to the encrypted channel.
-        socket.destroy()
-      }
-    })
+    // Route upgrades to the control channel WebSocketServer when not using Hono upgradeWebSocket
+    if (!config?.upgradeWebSocket) {
+      this.controlWss = new WebSocketServer({ noServer: true })
+      this.#setupControlChannel()
+      this.server.on("upgrade", (req, socket, head) => {
+        const url = req.url || ""
+        if (url.startsWith("/__ra__")) {
+          this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
+            this.controlWss!.emit("connection", controlWs, req)
+          })
+        } else {
+          // Don't allow other WebSocket servers to bind to the server;
+          // all WebSocket connections go to the encrypted channel.
+          socket.destroy()
+        }
+      })
+    }
 
     // Heartbeat to detect dead control sockets and cleanup
     this.heartbeatTimer = setInterval(
@@ -208,178 +253,181 @@ export class TunnelServer {
    * Intercept incoming WebSocket messages on `this.wss`.
    */
   #setupControlChannel(): void {
-    this.controlWss.on("connection", (controlWs: WebSocket) => {
+    this.controlWss!.on("connection", (controlWs: WebSocket) => {
       debug("New WebSocket connection, setting up control channel")
-
-      // Intercept messages before they reach application handlers
-      const originalEmit = controlWs.emit.bind(controlWs)
-
-      // Initialize liveness tracking
-      this.livenessBySocket.set(controlWs, {
-        isAlive: true,
-        lastActivityMs: Date.now(),
-      })
-      try {
-        controlWs.on("pong", () => {
-          const l = this.livenessBySocket.get(controlWs)
-          if (l) {
-            l.isAlive = true
-            l.lastActivityMs = Date.now()
-          }
-        })
-      } catch {}
-
-      // Immediately announce server key-exchange public key to the client
-      try {
-        const serverKxMessage: ControlChannelKXAnnounce = {
-          type: "server_kx",
-          x25519PublicKey: Buffer.from(this.x25519PublicKey).toString("base64"),
-          quote: Buffer.from(this.quote).toString("base64"),
-          runtime_data: this.runtimeData
-            ? Buffer.from(this.runtimeData).toString("base64")
-            : null,
-          verifier_data: this.verifierData
-            ? encodeCbor(this.verifierData).toString("base64")
-            : null,
-        }
-        controlWs.send(encodeCbor(serverKxMessage))
-      } catch (e) {
-        console.error("Failed to send server_kx message:", e)
-      }
-
-      // Cleanup on close
-      controlWs.on("close", () => {
-        this.symmetricKeyBySocket.delete(controlWs)
-        this.livenessBySocket.delete(controlWs)
-
-        const toRemove: string[] = []
-        for (const [connId, conn] of this.sockets.entries()) {
-          if (conn.controlWs === controlWs) {
-            try {
-              conn.mockWs.emitClose(1006, "tunnel closed")
-              this.wss.deleteClient(conn.mockWs)
-              this.symmetricKeyBySocket.delete(conn.controlWs)
-              toRemove.push(connId)
-            } catch (e) {
-              console.error("Unexpected error cleaning up control ws:", e)
-            }
-          }
-        }
-        for (const id of toRemove) {
-          this.sockets.delete(id)
-        }
-      })
-
-      controlWs.emit = function (event: string, ...args: any[]): boolean {
-        if (event === "message") {
-          const ra = (this as any).ra as TunnelServer
-
-          const live = ra.livenessBySocket.get(controlWs)
-          if (live) live.lastActivityMs = Date.now()
-          // Decode incoming message from client
-          let message
-          try {
-            const data = args[0] as Buffer
-            message = decodeCbor(new Uint8Array(data))
-          } catch (error: any) {
-            console.error("Received invalid CBOR message")
-            return true
-          }
-
-          // Handle client key exchange
-          if (isControlChannelKXConfirm(message)) {
-            try {
-              // Only accept a single symmetric key per WebSocket
-              if (!ra.symmetricKeyBySocket.has(controlWs)) {
-                const sealed = sodium.from_base64(
-                  message.sealedSymmetricKey,
-                  sodium.base64_variants.ORIGINAL,
-                )
-                const opened = sodium.crypto_box_seal_open(
-                  sealed,
-                  ra.x25519PublicKey,
-                  ra.x25519PrivateKey,
-                )
-                ra.symmetricKeyBySocket.set(controlWs, opened)
-              } else {
-                console.warn(
-                  "client_kx received after key already set; ignoring",
-                )
-              }
-            } catch (e) {
-              console.error("Failed to process client_kx:", e)
-            }
-            return true
-          }
-
-          // If handshake not complete yet, ignore any other messages
-          if (!ra.symmetricKeyBySocket.has(controlWs)) {
-            console.warn("Dropping message before handshake completion")
-            return true
-          }
-
-          // Require encryption post-handshake
-          if (!isControlChannelEncryptedMessage(message)) {
-            console.warn("Dropping non-encrypted message post-handshake")
-            return true
-          }
-
-          // Decrypt envelope messages post-handshake
-          if (isControlChannelEncryptedMessage(message)) {
-            try {
-              message = ra.#decryptEnvelopeForSocket(
-                controlWs,
-                message as ControlChannelEncryptedMessage,
-              )
-            } catch (e) {
-              console.error("Failed to decrypt envelope:", e)
-              return true
-            }
-          }
-
-          if (isRAEncryptedHTTPRequest(message)) {
-            ra.logWebSocketConnections()
-            debug(
-              `Encrypted HTTP request (${message.requestId}): ${message.url}`,
-            )
-            ra.#handleTunnelHttpRequest(controlWs, message).catch(
-              (error: Error) => {
-                console.error("Error handling encrypted request:", error)
-
-                // Send 500 error response back to client
-                try {
-                  ra.sendEncrypted(controlWs, {
-                    type: "http_response",
-                    requestId: message.requestId,
-                    status: 500,
-                    statusText: "Internal Server Error",
-                    headers: {},
-                    body: "",
-                    error: error.message,
-                  } as RAEncryptedHTTPResponse)
-                } catch (sendError) {
-                  console.error("Failed to send error response:", sendError)
-                }
-              },
-            )
-            return true
-          } else if (isRAEncryptedClientConnectEvent(message)) {
-            ra.#handleTunnelWebSocketConnect(controlWs, message)
-            return true
-          } else if (isRAEncryptedWSMessage(message)) {
-            ra.#handleTunnelWebSocketMessage(message)
-            return true
-          } else if (isRAEncryptedClientCloseEvent(message)) {
-            ra.#handleTunnelWebSocketClose(message)
-            return true
-          }
-        }
-
-        // Forward all non-message events to the original emitter
-        return originalEmit(event, ...args)
-      }
-      ;(controlWs as any).ra = this
+      this.#onControlConnection(controlWs)
     })
+  }
+
+  // Shared setup for a new control channel connection (Hono or ws server)
+  #onControlConnection(controlWs: WebSocket): void {
+    this.controlClients.add(controlWs)
+
+    // Intercept messages before they reach application handlers
+    const originalEmit = controlWs.emit.bind(controlWs)
+
+    // Initialize liveness tracking
+    this.livenessBySocket.set(controlWs, {
+      isAlive: true,
+      lastActivityMs: Date.now(),
+    })
+    try {
+      controlWs.on("pong", () => {
+        const l = this.livenessBySocket.get(controlWs)
+        if (l) {
+          l.isAlive = true
+          l.lastActivityMs = Date.now()
+        }
+      })
+    } catch {}
+
+    // Immediately announce server key-exchange public key to the client
+    try {
+      const serverKxMessage: ControlChannelKXAnnounce = {
+        type: "server_kx",
+        x25519PublicKey: Buffer.from(this.x25519PublicKey).toString("base64"),
+        quote: Buffer.from(this.quote).toString("base64"),
+        runtime_data: this.runtimeData
+          ? Buffer.from(this.runtimeData).toString("base64")
+          : null,
+        verifier_data: this.verifierData
+          ? encodeCbor(this.verifierData).toString("base64")
+          : null,
+      }
+      controlWs.send(encodeCbor(serverKxMessage))
+    } catch (e) {
+      console.error("Failed to send server_kx message:", e)
+    }
+
+    // Cleanup on close
+    controlWs.on("close", () => {
+      this.controlClients.delete(controlWs)
+      this.symmetricKeyBySocket.delete(controlWs)
+      this.livenessBySocket.delete(controlWs)
+
+      const toRemove: string[] = []
+      for (const [connId, conn] of this.sockets.entries()) {
+        if (conn.controlWs === controlWs) {
+          try {
+            conn.mockWs.emitClose(1006, "tunnel closed")
+            this.wss.deleteClient(conn.mockWs)
+            this.symmetricKeyBySocket.delete(conn.controlWs)
+            toRemove.push(connId)
+          } catch (e) {
+            console.error("Unexpected error cleaning up control ws:", e)
+          }
+        }
+      }
+      for (const id of toRemove) {
+        this.sockets.delete(id)
+      }
+    })
+
+    controlWs.emit = function (event: string, ...args: any[]): boolean {
+      if (event === "message") {
+        const ra = (this as any).ra as TunnelServer
+
+        const live = ra.livenessBySocket.get(controlWs)
+        if (live) live.lastActivityMs = Date.now()
+        // Decode incoming message from client
+        let message
+        try {
+          const data = args[0] as Buffer
+          message = decodeCbor(new Uint8Array(data))
+        } catch (error: any) {
+          console.error("Received invalid CBOR message")
+          return true
+        }
+
+        // Handle client key exchange
+        if (isControlChannelKXConfirm(message)) {
+          try {
+            // Only accept a single symmetric key per WebSocket
+            if (!ra.symmetricKeyBySocket.has(controlWs)) {
+              const sealed = sodium.from_base64(
+                message.sealedSymmetricKey,
+                sodium.base64_variants.ORIGINAL,
+              )
+              const opened = sodium.crypto_box_seal_open(
+                sealed,
+                ra.x25519PublicKey,
+                ra.x25519PrivateKey,
+              )
+              ra.symmetricKeyBySocket.set(controlWs, opened)
+            } else {
+              console.warn("client_kx received after key already set; ignoring")
+            }
+          } catch (e) {
+            console.error("Failed to process client_kx:", e)
+          }
+          return true
+        }
+
+        // If handshake not complete yet, ignore any other messages
+        if (!ra.symmetricKeyBySocket.has(controlWs)) {
+          console.warn("Dropping message before handshake completion")
+          return true
+        }
+
+        // Require encryption post-handshake
+        if (!isControlChannelEncryptedMessage(message)) {
+          console.warn("Dropping non-encrypted message post-handshake")
+          return true
+        }
+
+        // Decrypt envelope messages post-handshake
+        if (isControlChannelEncryptedMessage(message)) {
+          try {
+            message = ra.#decryptEnvelopeForSocket(
+              controlWs,
+              message as ControlChannelEncryptedMessage,
+            )
+          } catch (e) {
+            console.error("Failed to decrypt envelope:", e)
+            return true
+          }
+        }
+
+        if (isRAEncryptedHTTPRequest(message)) {
+          ra.logWebSocketConnections()
+          debug(`Encrypted HTTP request (${message.requestId}): ${message.url}`)
+          ra.#handleTunnelHttpRequest(controlWs, message).catch(
+            (error: Error) => {
+              console.error("Error handling encrypted request:", error)
+
+              // Send 500 error response back to client
+              try {
+                ra.sendEncrypted(controlWs, {
+                  type: "http_response",
+                  requestId: message.requestId,
+                  status: 500,
+                  statusText: "Internal Server Error",
+                  headers: {},
+                  body: "",
+                  error: error.message,
+                } as RAEncryptedHTTPResponse)
+              } catch (sendError) {
+                console.error("Failed to send error response:", sendError)
+              }
+            },
+          )
+          return true
+        } else if (isRAEncryptedClientConnectEvent(message)) {
+          ra.#handleTunnelWebSocketConnect(controlWs, message)
+          return true
+        } else if (isRAEncryptedWSMessage(message)) {
+          ra.#handleTunnelWebSocketMessage(message)
+          return true
+        } else if (isRAEncryptedClientCloseEvent(message)) {
+          ra.#handleTunnelWebSocketClose(message)
+          return true
+        }
+      }
+
+      // Forward all non-message events to the original emitter
+      return originalEmit(event, ...args)
+    }
+    ;(controlWs as any).ra = this
   }
 
   // Handle tunnel requests by synthesizing requests, and routing to Express or Hono
@@ -793,7 +841,10 @@ export class TunnelServer {
     try {
       const now = Date.now()
 
-      for (const ws of this.controlWss.clients) {
+      const iterableClients = this.controlWss
+        ? Array.from(this.controlWss.clients.values())
+        : Array.from(this.controlClients.values())
+      for (const ws of iterableClients) {
         const l = this.livenessBySocket.get(ws)
         if (!l) {
           this.livenessBySocket.set(ws, { isAlive: true, lastActivityMs: now })
@@ -823,10 +874,10 @@ export class TunnelServer {
 
       // Proactively remove keys for sockets that are CLOSED or no longer tracked by ws server
       for (const controlWs of Array.from(this.symmetricKeyBySocket.keys())) {
-        if (
-          controlWs.readyState === WebSocket.CLOSED ||
-          !this.controlWss.clients.has(controlWs)
-        ) {
+        const known = this.controlWss
+          ? this.controlWss.clients.has(controlWs)
+          : this.controlClients.has(controlWs)
+        if (controlWs.readyState === WebSocket.CLOSED || !known) {
           this.symmetricKeyBySocket.delete(controlWs)
           this.livenessBySocket.delete(controlWs)
         }
