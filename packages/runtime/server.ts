@@ -77,23 +77,26 @@ app.post("/quote", async (c) => {
       return c.json({ error: "publicKey must be an array of numbers" }, 400)
     }
 
-    // TODO: Implement proper QUOTE binding
-    // For now, return sample quote data (same as the binding would do when config.json is missing)
-    const { tappdV4Base64 } = await import("./shared/samples.js")
+    // Convert to Uint8Array
+    const publicKey = new Uint8Array(publicKeyArray)
 
-    // Decode base64
-    const base64ToBytes = (base64: string) => {
-      const binaryString = atob(base64)
-      const bytes = new Uint8Array(binaryString.length)
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i)
-      }
-      return bytes
-    }
+    // Use QUOTE binding provided by workerd env
+    const env = c.env as Env
+    const quoteData = await env.QUOTE.getQuote(publicKey)
 
-    const quoteBytes = base64ToBytes(tappdV4Base64)
+    // Convert Uint8Array fields to arrays for JSON response
     const response = {
-      quote: Array.from(quoteBytes),
+      quote: Array.from(quoteData.quote),
+      verifier_data: quoteData.verifier_data
+        ? {
+            iat: Array.from(quoteData.verifier_data.iat),
+            val: Array.from(quoteData.verifier_data.val),
+            signature: Array.from(quoteData.verifier_data.signature),
+          }
+        : undefined,
+      runtime_data: quoteData.runtime_data
+        ? Array.from(quoteData.runtime_data)
+        : undefined,
     }
 
     return c.json(response)
