@@ -6,28 +6,26 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "server": "tsx server.ts",
-    "start": "concurrently \"npm run server\" \"npm run dev\"",
+    "build:workerd": "esbuild server.ts --bundle --format=esm --platform=browser --outfile=dist/server.js && esbuild bindings/quote.ts --bundle --format=esm --platform=node --outfile=dist/bindings/quote.js --external:node:*",
+    "server": "npm run build:workerd && workerd serve workerd.config.capnp",
+    "start": "npm run server",
     "test": "ava --serial"
   },
   "dependencies": {
-    "@hono/node-server": "^1.14.3",
     "@scure/base": "^2.0.0",
     "hono": "^4.7.5",
     "@teekit/qvl": "0.0.1",
     "@teekit/tunnel": "0.0.1",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "ws": "^8.18.3"
+    "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
     "@types/node": "^24.3.1",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
-    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.0",
-    "concurrently": "^9.2.1",
+    "ava": "^6.2.0",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
@@ -35,7 +33,10 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vite": "^7.1.2",
-    "vite-plugin-node-polyfills": "^0.24.0"
+    "vite-plugin-node-polyfills": "^0.24.0",
+    "workerd": "^1.20250107.0",
+    "ws": "^8.18.3",
+    "@types/ws": "^8.18.1"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.50.1"

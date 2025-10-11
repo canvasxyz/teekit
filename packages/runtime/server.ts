@@ -1,9 +1,5 @@
 import { Hono } from "hono"
-import { createNodeWebSocket } from "@hono/node-ws"
-import { serve } from "@hono/node-server"
 import { cors } from "hono/cors"
-import { serveStatic } from "@hono/node-server/serve-static"
-import { WebSocket } from "ws"
 
 import {
   Message,
@@ -15,60 +11,25 @@ import {
 /* ********************************************************************************
  * Begin teekit tunnel code.
  * ******************************************************************************** */
-import { TunnelServer, ServerRAMockWebSocket, QuoteData } from "@teekit/tunnel"
-import fs from "node:fs"
-import { exec } from "node:child_process"
-import { base64 } from "@scure/base"
-import { hex } from "@teekit/qvl"
+// TODO: TunnelServer integration commented out until workerd WebSocket adapter is implemented
+// import { TunnelServer } from "@teekit/tunnel"
 
-async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
-  return await new Promise<QuoteData>(async (resolve, reject) => {
-    // If config.json isn't set up, return a sample quote
-    if (!fs.existsSync("config.json")) {
-      console.log(
-        "[teekit-runtime] TDX config.json not found, serving sample quote",
-      )
-      const { tappdV4Base64 } = await import("./shared/samples.js")
-      resolve({
-        quote: base64.decode(tappdV4Base64),
-      })
-      return
-    }
-
-    // Otherwise, get a quote from the SEAM (requires root)
-    console.log("[teekit-runtime] Getting a quote for " + hex(x25519PublicKey))
-    const userDataB64 = base64.encode(x25519PublicKey)
-    const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
-    exec(cmd, (err, stdout) => {
-      if (err) {
-        return reject(err)
+// Workerd environment bindings
+interface Env {
+  QUOTE: {
+    getQuote(x25519PublicKey: Uint8Array): Promise<{
+      quote: Uint8Array
+      verifier_data?: {
+        iat: Uint8Array
+        val: Uint8Array
+        signature: Uint8Array
       }
-
-      try {
-        const response = JSON.parse(stdout)
-        resolve({
-          quote: base64.decode(response.tdx.quote),
-          verifier_data: {
-            iat: base64.decode(response.tdx.verifier_nonce.iat),
-            val: base64.decode(response.tdx.verifier_nonce.val),
-            signature: base64.decode(response.tdx.verifier_nonce.signature),
-          },
-          runtime_data: base64.decode(response.tdx.runtime_data),
-        })
-      } catch (err) {
-        reject(err)
-      }
-    })
-  })
+      runtime_data?: Uint8Array
+    }>
+  }
 }
 
-const app = new Hono()
-
-// Bind the tunnel control channel to the Hono app via upgradeWebSocket
-const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
-const { wss } = await TunnelServer.initialize(app, getQuote, {
-  upgradeWebSocket,
-})
+const app = new Hono<{ Bindings: Env }>()
 
 /* ********************************************************************************
  * End teekit tunnel code.
@@ -106,70 +67,49 @@ app.post("/increment", async (c) => {
   return c.json({ counter })
 })
 
-wss.on("connection", (ws: WebSocket) => {
-  console.log("[teekit-runtime] Client connected")
+app.post("/quote", async (c) => {
+  try {
+    // Parse the request body to get the public key
+    const body = await c.req.json()
+    const publicKeyArray = body.publicKey
 
-  // Send message backlog to new client
-  const hiddenCount = Math.max(0, totalMessageCount - messages.length)
-  const backlogMessage: BacklogMessage = {
-    type: "backlog",
-    messages: messages,
-    hiddenCount: hiddenCount,
-  }
-  ws.send(JSON.stringify(backlogMessage))
-
-  ws.on("message", (data: Buffer) => {
-    try {
-      const message: IncomingChatMessage = JSON.parse(data.toString())
-
-      if (message.type === "chat") {
-        const chatMessage: Message = {
-          id: Date.now().toString(),
-          username: message.username,
-          text: message.text,
-          timestamp: new Date().toISOString(),
-        }
-
-        // Add to message history
-        messages.push(chatMessage)
-        totalMessageCount++
-
-        // Keep only last 30 messages
-        if (messages.length > MAX_MESSAGES) {
-          messages = messages.slice(-MAX_MESSAGES)
-        }
-
-        // Broadcast to all connected clients
-        const broadcastMessage: BroadcastMessage = {
-          type: "message",
-          message: chatMessage,
-        }
-
-        wss.clients.forEach((client: ServerRAMockWebSocket) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(broadcastMessage))
-          }
-        })
-      }
-    } catch (error) {
-      console.error("[teekit-runtime] Error parsing message:", error)
+    if (!publicKeyArray || !Array.isArray(publicKeyArray)) {
+      return c.json({ error: "publicKey must be an array of numbers" }, 400)
     }
-  })
 
-  ws.on("close", () => {
-    console.log("[teekit-runtime] Client disconnected")
-  })
+    // TODO: Implement proper QUOTE binding
+    // For now, return sample quote data (same as the binding would do when config.json is missing)
+    const { tappdV4Base64 } = await import("./shared/samples.js")
+
+    // Decode base64
+    const base64ToBytes = (base64: string) => {
+      const binaryString = atob(base64)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
+      return bytes
+    }
+
+    const quoteBytes = base64ToBytes(tappdV4Base64)
+    const response = {
+      quote: Array.from(quoteBytes),
+    }
+
+    return c.json(response)
+  } catch (error) {
+    console.error("[teekit-runtime] Error getting quote:", error)
+    return c.json({ error: String(error) }, 500)
+  }
 })
 
-// Serve static files
-app.use("/*", serveStatic({ root: "./dist" }))
+// Note: WebSocket handling in workerd is different from Node.js
+// The TunnelServer integration will need to be adapted for workerd's WebSocket API
+// For now, the HTTP endpoints above will work
 
-// Start the Hono server and attach Node WS
-const server = serve({
-  fetch: app.fetch,
-  port: process.env.PORT ? Number(process.env.PORT) : 3001,
-  hostname: "0.0.0.0",
-})
-injectWebSocket(server)
+// Static file serving
+// Note: In workerd, static files should be served via Assets binding configured in workerd.config.capnp
+// For now, we'll just serve the API routes
 
-export { app, server }
+// Export the fetch handler for workerd
+export default app
