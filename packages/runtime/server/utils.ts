@@ -1,5 +1,6 @@
 import net from "net"
 import { existsSync } from "fs"
+import { ChildProcess } from "child_process"
 
 export function randomToken(len = 48): string {
   const bytes = crypto.getRandomValues(new Uint8Array(len))
@@ -78,4 +79,16 @@ export async function findFreePortNear(basePort: number): Promise<number> {
     })
   })
   return free
+}
+
+export function shutdown(child: ChildProcess, timeoutMs = 1500): void {
+  const killTimer = setTimeout(() => {
+    try {
+      child.kill("SIGKILL")
+    } catch {}
+  }, timeoutMs)
+  child.once("exit", () => {
+    clearTimeout(killTimer)
+  })
+  child.kill("SIGTERM")
 }

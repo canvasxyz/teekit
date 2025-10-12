@@ -1,20 +1,21 @@
 import { spawn, ChildProcess } from "child_process"
 import chalk from "chalk"
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
-import { tmpdir } from "os"
 import { join } from "path"
 import { pathToFileURL } from "url"
 import {
   findFreePortNear,
   randomToken,
   resolveSqldBinary,
+  shutdown,
   waitForPortOpen,
 } from "./utils.js"
 
 export interface WorkerConfig {
-  baseDir?: string
-  workerPort?: number
-  sqldPort?: number
+  dbPath: string
+  workerPort: number
+  sqldPort: number
+  replicaDbPath?: string
 }
 
 export interface WorkerResult {
@@ -23,30 +24,41 @@ export interface WorkerResult {
   dbToken: string
   workerd: ChildProcess
   sqld: ChildProcess
+  replicaSqld: ChildProcess | null
+  replicaDbPath: string | null
+  replicaDbUrl: string | null
   stop: () => Promise<any>
 }
 
 export async function startWorker(
-  options: WorkerConfig = {},
+  options: WorkerConfig,
 ): Promise<WorkerResult> {
-  const baseDir = options.baseDir
-    ? options.baseDir
-    : mkdtempSync(join(tmpdir(), "teekit-runtime-"))
-  if (!existsSync(baseDir)) mkdirSync(baseDir, { recursive: true })
-
-  const dbPath = join(baseDir, "app.sqlite")
+  const { dbPath, sqldPort, workerPort, replicaDbPath } = options
   const dbToken = randomToken()
-
-  const sqldPort = options.sqldPort ?? (await findFreePortNear(8088))
-  const workerPort = options.workerPort ?? (await findFreePortNear(3001))
-
   const dbUrl = `http://127.0.0.1:${sqldPort}`
+
+  // Enable replication if replicaDbPath is provided
+  const enableReplication = !!replicaDbPath
+  const grpcPort = enableReplication ? await findFreePortNear(5001) : undefined
+
+  let replicaSqld: ChildProcess | null = null
+  let replicaHttpPort: number | null = null
 
   console.log(
     chalk.yellowBright(
       `Starting sqld on port ${sqldPort}, workerd on port ${workerPort}`,
     ),
   )
+  if (enableReplication) {
+    replicaHttpPort = await findFreePortNear(8180)
+    console.log(
+      chalk.yellowBright(
+        `Starting sqld replica on port ${replicaHttpPort}, gRPC on port ${grpcPort}`,
+      ),
+    )
+  }
+
+  // Start main sqld
   const sqldArgs = [
     "--no-welcome",
     "--http-listen-addr",
@@ -54,6 +66,12 @@ export async function startWorker(
     "--db-path",
     dbPath,
   ]
+
+  // Add gRPC listener for replication
+  if (enableReplication && grpcPort) {
+    sqldArgs.push("--grpc-listen-addr", `127.0.0.1:${grpcPort}`)
+  }
+
   const sqldBin = resolveSqldBinary()
   const sqld = spawn(sqldBin, sqldArgs, { stdio: ["ignore", "pipe", "pipe"] })
 
@@ -71,6 +89,40 @@ export async function startWorker(
 
   await waitForPortOpen(sqldPort, 15000)
 
+  // Start replica sqld if enabled
+  if (enableReplication && replicaHttpPort && grpcPort && replicaDbPath) {
+    const replicaArgs = [
+      "--no-welcome",
+      "--http-listen-addr",
+      `127.0.0.1:${replicaHttpPort}`,
+      "--db-path",
+      replicaDbPath,
+      "--primary-grpc-url",
+      `http://127.0.0.1:${grpcPort}`,
+    ]
+
+    replicaSqld = spawn(sqldBin, replicaArgs, {
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    replicaSqld.stdout?.on("data", (d) => {
+      process.stdout.write(chalk.blueBright(`[replica] ${String(d).trim()}`))
+    })
+    replicaSqld.stderr?.on("data", (d) => {
+      process.stderr.write(chalk.magentaBright(`[replica] ${String(d).trim()}`))
+    })
+
+    // log if replica exits early with an error
+    replicaSqld.on("exit", (code) => {
+      if (code !== 0) console.error(`[replica sqld] exited with code ${code}`)
+    })
+
+    // Give replica additional time to connect and start syncing
+    await waitForPortOpen(replicaHttpPort, 10000)
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+
+  // Start workerd
   const cwd = process.cwd()
   const CONTRACT_JS = "dist/worker.js"
   const QUOTE_JS = "dist/bindings/quote.js"
@@ -150,25 +202,22 @@ const config :Workerd.Config = (
     process.stderr.write(chalk.greenBright(String(d)))
   })
 
-  function shutdown(child: ChildProcess, timeoutMs = 1500): void {
-    const killTimer = setTimeout(() => {
-      try {
-        child.kill("SIGKILL")
-      } catch {}
-    }, timeoutMs)
-    child.once("exit", () => {
-      clearTimeout(killTimer)
-    })
-    child.kill("SIGTERM")
-  }
-
   const result: WorkerResult = {
     workerPort,
     dbUrl,
     dbToken,
     workerd,
     sqld,
-    stop: () => Promise.all([shutdown(workerd), shutdown(sqld)]),
+    replicaSqld,
+    replicaDbPath: replicaDbPath ?? null,
+    replicaDbUrl: replicaHttpPort
+      ? `http://127.0.0.1:${replicaHttpPort}`
+      : null,
+    stop: () => {
+      const stopPromises = [shutdown(workerd), shutdown(sqld)]
+      if (replicaSqld) stopPromises.push(shutdown(replicaSqld))
+      return Promise.all(stopPromises)
+    },
   }
 
   return result
@@ -182,7 +231,13 @@ async function main() {
     mkdirSync(baseDir, { recursive: true })
   }
 
-  const { stop } = await startWorker({ baseDir })
+  const dbPath = join(baseDir, "app.sqlite")
+
+  const { stop } = await startWorker({
+    dbPath,
+    sqldPort: await findFreePortNear(8088),
+    workerPort: await findFreePortNear(3001),
+  })
 
   process.on("SIGINT", () => stop())
   process.on("SIGTERM", () => stop())

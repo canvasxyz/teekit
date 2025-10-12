@@ -3,7 +3,7 @@ import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker } from "../server/server.js"
-import { waitForPortOpen } from "../server/utils.js"
+import { findFreePortNear, waitForPortOpen } from "../server/utils.js"
 
 test.serial("sqlite: create, update, persist between runs", async (t) => {
   let demo1: { stop: () => Promise<void>; workerPort: number } | null = null
@@ -15,8 +15,13 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
   })
 
   const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
+  const dbPath = join(baseDir, "app.sqlite")
 
-  const runtime1 = await startWorker({ baseDir })
+  const runtime1 = await startWorker({
+    dbPath,
+    sqldPort: await findFreePortNear(8088),
+    workerPort: await findFreePortNear(3001),
+  })
   await new Promise((resolve) => setTimeout(resolve, 1000))
   demo1 = { stop: runtime1.stop, workerPort: runtime1.workerPort }
   const port = runtime1.workerPort
@@ -57,7 +62,11 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 1000))
 
   // Second run to verify persistence of previous key
-  const runtime2 = await startWorker({ baseDir })
+  const runtime2 = await startWorker({
+    dbPath,
+    sqldPort: await findFreePortNear(8089),
+    workerPort: await findFreePortNear(3002),
+  })
   demo2 = { stop: runtime2.stop, workerPort: runtime2.workerPort }
   const port2 = runtime2.workerPort
   await waitForPortOpen(port2)
