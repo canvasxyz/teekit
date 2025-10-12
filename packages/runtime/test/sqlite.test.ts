@@ -1,145 +1,64 @@
 import test from "ava"
-import chalk from "chalk"
-import { spawn, ChildProcess } from "child_process"
-import { waitForPortOpen } from "../server/utils.js"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-
-// use shared waitForPortOpen from server/utils
-
-function kill(proc: ChildProcess | null) {
-  return new Promise<void>((resolve) => {
-    if (!proc) return resolve()
-    try {
-      // Kill entire process group if possible to ensure sqld/workerd children exit
-      if (proc.pid) {
-        try {
-          process.kill(-proc.pid, "SIGKILL" as any)
-        } catch {}
-      }
-      proc.kill("SIGKILL")
-    } catch {}
-    setTimeout(() => resolve(), 300)
-  })
-}
-
-function parseEnvFromStdout(buf: string): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const line of buf.split(/\r?\n/)) {
-    const m = line.match(/^(WORKERD_PORT|DB_URL|DB_TOKEN)=(.+)$/)
-    if (m) env[m[1]] = m[2]
-  }
-  return env
-}
+import { startWorker } from "../server/start.js"
+import { waitForPortOpen } from "../server/utils.js"
 
 test.serial("sqlite: create, update, persist between runs", async (t) => {
-  let demo1: ChildProcess | null = null
-  let demo2: ChildProcess | null = null
-  let logs = ""
+  let demo1: { stop: () => void; workerPort: number } | null = null
+  let demo2: { stop: () => void; workerPort: number } | null = null
 
-  try {
-    const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
+  t.teardown(() => {
+    if (demo1) demo1.stop()
+    if (demo2) demo2.stop()
+  })
 
-    demo1 = spawn("npm", ["run", "server"], {
-      cwd: process.cwd(),
-      stdio: ["ignore", "pipe", "inherit"],
-      detached: true,
-      env: { ...process.env, RUNTIME_DB_DIR: baseDir },
-    })
-    demo1.stdout!.on("data", (d) => {
-      console.log(chalk.greenBright(String(d).trim()))
-      logs += String(d)
-    })
+  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
 
-    // Wait until we see WORKERD_PORT and DB_*
-    const env1 = await new Promise<Record<string, string>>(
-      (resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("timeout")), 20000)
-        const check = () => {
-          const e = parseEnvFromStdout(logs)
-          if (e.WORKERD_PORT && e.DB_URL && e.DB_TOKEN) {
-            clearTimeout(timeout)
-            resolve(e)
-          } else setTimeout(check, 100)
-        }
-        check()
-      },
-    )
+  const runtime1 = await startWorker({ baseDir, logEnv: true })
+  demo1 = { stop: runtime1.stop, workerPort: runtime1.workerPort }
+  const port = runtime1.workerPort
+  await waitForPortOpen(port)
 
-    const port = Number(env1.WORKERD_PORT)
-    await waitForPortOpen(port)
+  // test other requests
+  let resp = await fetch(`http://localhost:${port}/increment`, {
+    method: "POST",
+  })
+  t.is(resp.status, 200)
 
-    // test other requests
-    let resp = await fetch(`http://localhost:${port}/increment`, {
-      method: "POST",
-    })
-    t.is(resp.status, 200)
+  resp = await fetch(`http://localhost:${port}/db/init`, {
+    method: "POST",
+  })
+  t.is(resp.status, 200)
 
-    // init
-    resp = await fetch(`http://localhost:${port}/db/init`, {
-      method: "POST",
-    })
-    t.is(resp.status, 200)
+  resp = await fetch(`http://localhost:${port}/db/put`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key: "foo", value: "bar" }),
+  })
+  t.is(resp.status, 200)
 
-    // put value
-    resp = await fetch(`http://localhost:${port}/db/put`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: "foo", value: "bar" }),
-    })
-    t.is(resp.status, 200)
+  resp = await fetch(`http://localhost:${port}/db/get?key=foo`)
+  t.is(resp.status, 200)
+  let data: any = await resp.json()
+  t.is(data.value, "bar")
 
-    // get value
-    resp = await fetch(`http://localhost:${port}/db/get?key=foo`)
-    t.is(resp.status, 200)
-    let data: any = await resp.json()
-    t.is(data.value, "bar")
+  if (demo1) demo1.stop()
+  demo1 = null
 
-    // Shutdown first run
-    await kill(demo1)
-    demo1 = null
+  // Second run to verify persistence of previous key
+  const runtime2 = await startWorker({ baseDir, logEnv: true })
+  demo2 = { stop: runtime2.stop, workerPort: runtime2.workerPort }
+  const port2 = runtime2.workerPort
+  await waitForPortOpen(port2)
 
-    // Start second run (new temp DB path); validate DB usable again
-    demo2 = spawn("npm", ["run", "server"], {
-      cwd: process.cwd(),
-      stdio: ["ignore", "pipe", "inherit"],
-      detached: true,
-      env: { ...process.env, RUNTIME_DB_DIR: baseDir },
-    })
-
-    let logs2 = ""
-    demo2.stdout!.on("data", (d) => {
-      console.log(chalk.greenBright(String(d).trim()))
-      logs2 += String(d)
-    })
-    const env2 = await new Promise<Record<string, string>>(
-      (resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("timeout2")), 20000)
-        const check = () => {
-          const e = parseEnvFromStdout(logs2)
-          if (e.WORKERD_PORT && e.DB_URL && e.DB_TOKEN) {
-            clearTimeout(timeout)
-            resolve(e)
-          } else setTimeout(check, 100)
-        }
-        check()
-      },
-    )
-    const port2 = Number(env2.WORKERD_PORT)
-    await waitForPortOpen(port2)
-
-    // DB init on new run (idempotent) and verify persistence of previous key
-    resp = await fetch(`http://localhost:${port2}/db/init`, {
-      method: "POST",
-    })
-    t.is(resp.status, 200)
-    resp = await fetch(`http://localhost:${port2}/db/get?key=foo`)
-    t.is(resp.status, 200)
-    data = await resp.json()
-    t.is(data.value, "bar")
-  } finally {
-    await kill(demo1)
-    await kill(demo2)
-  }
+  resp = await fetch(`http://localhost:${port2}/db/init`, {
+    method: "POST",
+  })
+  t.is(resp.status, 200)
+  resp = await fetch(`http://localhost:${port2}/db/get?key=foo`)
+  t.is(resp.status, 200)
+  data = await resp.json()
+  t.is(data.value, "bar")
 })
