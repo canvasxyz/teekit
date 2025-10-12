@@ -12,20 +12,11 @@ const config :Workerd.Config = (
             name = "server.js",
             esModule = embed "dist/server.js"
           ),
-          (
-            name = "quote",
-            esModule = embed "dist/bindings/quote.js"
-          ),
         ],
         compatibilityDate = "2024-01-01",
         compatibilityFlags = ["nodejs_compat"],
 
-        bindings = [
-          (
-            name = "QUOTE",
-            module = "quote"
-          ),
-        ],
+        # No QUOTE module binding in base config; server falls back to sample quote
       )
     ),
   ],

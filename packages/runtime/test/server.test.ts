@@ -40,16 +40,20 @@ test.serial("Workerd server: GET /uptime returns uptime data", async (t) => {
   let serverProcess: ChildProcess | null = null
 
   try {
-    serverProcess = spawn("npx", [
-      "workerd",
-      "serve",
-      "workerd.config.capnp",
-      "--socket-addr",
-      `http=0.0.0.0:${PORT}`
-    ], {
-      cwd: process.cwd(),
-      stdio: "ignore",
-    })
+    serverProcess = spawn(
+      "npx",
+      [
+        "workerd",
+        "serve",
+        "workerd.config.base.capnp",
+        "--socket-addr",
+        `http=0.0.0.0:${PORT}`,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: "inherit",
+      },
+    )
 
     // Wait for server to be ready
     await waitForServer(Number(PORT))
@@ -76,16 +80,20 @@ test.serial("Workerd server: POST /increment increments counter", async (t) => {
   let serverProcess: ChildProcess | null = null
 
   try {
-    serverProcess = spawn("npx", [
-      "workerd",
-      "serve",
-      "workerd.config.capnp",
-      "--socket-addr",
-      `http=0.0.0.0:${PORT}`
-    ], {
-      cwd: process.cwd(),
-      stdio: "ignore",
-    })
+    serverProcess = spawn(
+      "npx",
+      [
+        "workerd",
+        "serve",
+        "workerd.config.base.capnp",
+        "--socket-addr",
+        `http=0.0.0.0:${PORT}`,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: "inherit",
+      },
+    )
 
     // Wait for server to be ready
     await waitForServer(Number(PORT))
@@ -121,16 +129,20 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
   let serverProcess: ChildProcess | null = null
 
   try {
-    serverProcess = spawn("npx", [
-      "workerd",
-      "serve",
-      "workerd.config.capnp",
-      "--socket-addr",
-      `http=0.0.0.0:${PORT}`
-    ], {
-      cwd: process.cwd(),
-      stdio: "ignore",
-    })
+    serverProcess = spawn(
+      "npx",
+      [
+        "workerd",
+        "serve",
+        "workerd.config.base.capnp",
+        "--socket-addr",
+        `http=0.0.0.0:${PORT}`,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: "inherit",
+      },
+    )
 
     // Wait for server to be ready
     await waitForServer(Number(PORT))

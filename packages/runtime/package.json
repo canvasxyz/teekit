@@ -7,15 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "build:workerd": "esbuild server.ts --bundle --format=esm --platform=browser --outfile=dist/server.js && esbuild bindings/quote.ts --bundle --format=esm --platform=node --outfile=dist/bindings/quote.js --external:node:*",
-    "server": "npm run build:workerd && workerd serve workerd.config.capnp",
-    "start": "npm run server",
+    "demo": "npm run build:workerd && tsx scripts/demo.ts",
+    "start": "npm run demo",
     "test": "ava --serial"
   },
   "dependencies": {
+    "@libsql/client": "^0.11.0",
     "@scure/base": "^2.0.0",
-    "hono": "^4.7.5",
     "@teekit/qvl": "0.0.1",
     "@teekit/tunnel": "0.0.1",
+    "chalk": "^4.1.2",
+    "hono": "^4.7.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
@@ -24,6 +26,8 @@
     "@types/node": "^24.3.1",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.24.0",
     "@vitejs/plugin-react": "^5.0.0",
     "ava": "^6.2.0",
     "eslint": "^9.33.0",
@@ -35,8 +39,7 @@
     "vite": "^7.1.2",
     "vite-plugin-node-polyfills": "^0.24.0",
     "workerd": "^1.20250107.0",
-    "ws": "^8.18.3",
-    "@types/ws": "^8.18.1"
+    "ws": "^8.18.3"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.50.1"

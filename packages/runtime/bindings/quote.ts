@@ -8,7 +8,12 @@
 import fs from "node:fs"
 import { exec } from "node:child_process"
 import { base64 } from "@scure/base"
-import { hex } from "@teekit/qvl"
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
 
 export interface VerifierData {
   iat: Uint8Array
@@ -39,7 +44,7 @@ export class QuoteBinding {
 
       // Otherwise, get a quote from the SEAM (requires root)
       console.log(
-        "[teekit-runtime] Getting a quote for " + hex(x25519PublicKey),
+        "[teekit-runtime] Getting a quote for " + toHex(x25519PublicKey),
       )
       const userDataB64 = base64.encode(x25519PublicKey)
       const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
