@@ -36,7 +36,7 @@ token, and injects `DB_URL`/`DB_TOKEN` bindings so
 `@libsql/client-web`.
 
 ```
-npm run build:workerd
+npm run build:server
 npm run demo
 ```
 

@@ -1,21 +1,12 @@
 import test from "ava"
 import chalk from "chalk"
 import { spawn, ChildProcess } from "child_process"
+import { waitForPortOpen } from "../server/utils.js"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 
-async function waitForServer(port: number, timeout = 15000): Promise<void> {
-  const start = Date.now()
-  while (Date.now() - start < timeout) {
-    try {
-      const response = await fetch(`http://localhost:${port}/uptime`)
-      if (response.ok) return
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100))
-  }
-  throw new Error("server did not start")
-}
+// use shared waitForPortOpen from server/utils
 
 function kill(proc: ChildProcess | null) {
   return new Promise<void>((resolve) => {
@@ -50,14 +41,14 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
   try {
     const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
 
-    demo1 = spawn("npm", ["run", "demo"], {
+    demo1 = spawn("npm", ["run", "server"], {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "inherit"],
       detached: true,
       env: { ...process.env, RUNTIME_DB_DIR: baseDir },
     })
     demo1.stdout!.on("data", (d) => {
-      process.stdout.write(chalk.greenBright(String(d)))
+      console.log(chalk.greenBright(String(d).trim()))
       logs += String(d)
     })
 
@@ -77,7 +68,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
     )
 
     const port = Number(env1.WORKERD_PORT)
-    await waitForServer(port)
+    await waitForPortOpen(port)
 
     // test other requests
     let resp = await fetch(`http://localhost:${port}/increment`, {
@@ -110,7 +101,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
     demo1 = null
 
     // Start second run (new temp DB path); validate DB usable again
-    demo2 = spawn("npm", ["run", "demo"], {
+    demo2 = spawn("npm", ["run", "server"], {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "inherit"],
       detached: true,
@@ -119,7 +110,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
 
     let logs2 = ""
     demo2.stdout!.on("data", (d) => {
-      process.stdout.write(chalk.greenBright(String(d)))
+      console.log(chalk.greenBright(String(d).trim()))
       logs2 += String(d)
     })
     const env2 = await new Promise<Record<string, string>>(
@@ -136,7 +127,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
       },
     )
     const port2 = Number(env2.WORKERD_PORT)
-    await waitForServer(port2)
+    await waitForPortOpen(port2)
 
     // DB init on new run (idempotent) and verify persistence of previous key
     resp = await fetch(`http://localhost:${port2}/db/init`, {

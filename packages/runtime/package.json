@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:workerd": "esbuild server.ts --bundle --format=esm --platform=browser --outfile=dist/server.js && esbuild bindings/quote.ts --bundle --format=esm --platform=node --outfile=dist/bindings/quote.js --external:node:*",
-    "demo": "npm run build:workerd && tsx scripts/demo.ts",
+    "build:server": "esbuild worker.ts --bundle --format=esm --platform=browser --outfile=dist/worker.js && esbuild bindings/quote.ts --bundle --format=esm --platform=node --outfile=dist/bindings/quote.js --external:node:*",
+    "server": "npm run build:server && tsx server/server.ts",
     "start": "npm run demo",
     "test": "ava --serial"
   },
@@ -45,6 +45,7 @@
     "@rollup/rollup-linux-x64-gnu": "^4.50.1"
   },
   "ava": {
+    "timeout": "30s",
     "extensions": [
       "ts"
     ],

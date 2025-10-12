@@ -1,24 +1,8 @@
 import test from "ava"
 import { spawn, ChildProcess } from "child_process"
-import { WebSocket } from "ws"
+import { waitForPortOpen } from "../server/utils.js"
 
 let portCounter = 3030
-
-async function waitForServer(port: number, timeout = 10000): Promise<void> {
-  const start = Date.now()
-  while (Date.now() - start < timeout) {
-    try {
-      const response = await fetch(`http://localhost:${port}/uptime`)
-      if (response.ok) {
-        return
-      }
-    } catch {
-      // Server not ready yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error(`Server did not start within ${timeout}ms`)
-}
 
 function killProcess(proc: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
@@ -55,8 +39,8 @@ test.serial("Workerd server: GET /uptime returns uptime data", async (t) => {
       },
     )
 
-    // Wait for server to be ready
-    await waitForServer(Number(PORT))
+    // Wait for server port to be open
+    await waitForPortOpen(Number(PORT))
 
     // Test the /uptime endpoint
     const response = await fetch(`http://localhost:${PORT}/uptime`)
@@ -95,8 +79,8 @@ test.serial("Workerd server: POST /increment increments counter", async (t) => {
       },
     )
 
-    // Wait for server to be ready
-    await waitForServer(Number(PORT))
+    // Wait for server port to be open
+    await waitForPortOpen(Number(PORT))
 
     // Test the /increment endpoint
     const response1 = await fetch(`http://localhost:${PORT}/increment`, {
@@ -144,8 +128,8 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
       },
     )
 
-    // Wait for server to be ready
-    await waitForServer(Number(PORT))
+    // Wait for server port to be open
+    await waitForPortOpen(Number(PORT))
 
     // Create a test public key (32 bytes for x25519)
     const testPublicKey = new Array(32).fill(0).map((_, i) => i)
