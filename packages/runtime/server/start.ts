@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from "child_process"
+import chalk from "chalk"
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -42,13 +43,21 @@ export async function startWorker(
   const dbUrl = `http://127.0.0.1:${sqldPort}`
 
   const sqldArgs = [
+    "--no-welcome",
     "--http-listen-addr",
     `127.0.0.1:${sqldPort}`,
     "--db-path",
     dbPath,
   ]
   const sqldBin = resolveSqldBinary()
-  const sqld = spawn(sqldBin, sqldArgs, { stdio: "inherit" })
+  const sqld = spawn(sqldBin, sqldArgs, { stdio: ["ignore", "pipe", "pipe"] })
+
+  sqld.stdout.on("data", (d) => {
+    process.stdout.write(chalk.greenBright(String(d).trim()))
+  })
+  sqld.stderr.on("data", (d) => {
+    process.stderr.write(chalk.yellowBright(String(d).trim()))
+  })
 
   // make sure we attempt cleanup if sqld exits early
   sqld.on("exit", (code) => {
@@ -126,8 +135,19 @@ const config :Workerd.Config = (
       "--socket-addr",
       `http=0.0.0.0:${workerPort}`,
     ],
-    { stdio: ["ignore", "inherit", "inherit"] },
+    { stdio: ["ignore", "pipe", "pipe"] },
   )
+
+  if (workerd.stdout) {
+    workerd.stdout.on("data", (d) => {
+      process.stdout.write(chalk.greenBright(String(d)))
+    })
+  }
+  if (workerd.stderr) {
+    workerd.stderr.on("data", (d) => {
+      process.stderr.write(chalk.greenBright(String(d)))
+    })
+  }
 
   const result: WorkerResult = {
     workerPort,
