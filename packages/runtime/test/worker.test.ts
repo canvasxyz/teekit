@@ -1,11 +1,11 @@
 import test from "ava"
-import { startWorker } from "../server/start.js"
+import { startWorker } from "../server/server.js"
 import { waitForPortOpen } from "../server/utils.js"
 
 test.serial("Workerd server: GET /uptime returns uptime data", async (t) => {
   const runtime = await startWorker()
   t.teardown(async () => {
-    runtime.stop()
+    await runtime.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
   })
 
@@ -21,7 +21,7 @@ test.serial("Workerd server: GET /uptime returns uptime data", async (t) => {
 test.serial("Workerd server: POST /increment increments counter", async (t) => {
   const runtime = await startWorker()
   t.teardown(async () => {
-    runtime.stop()
+    await runtime.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
   })
 
@@ -46,7 +46,7 @@ test.serial("Workerd server: POST /increment increments counter", async (t) => {
 test.serial("Workerd server: POST /quote returns quote data", async (t) => {
   const runtime = await startWorker()
   t.teardown(async () => {
-    runtime.stop()
+    await runtime.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
   })
 
@@ -69,7 +69,7 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
 // test.serial("Workerd server: WebSocket connection works", async (t) => {
 //   const runtime = await startWorker()
 //   t.teardown(async () => {
-//     runtime.stop()
+//     await runtime.stop()
 //     await new Promise((resolve) => setTimeout(resolve, 500))
 //   })
 

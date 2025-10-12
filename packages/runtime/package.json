@@ -45,6 +45,7 @@
     "@rollup/rollup-linux-x64-gnu": "^4.50.1"
   },
   "ava": {
+    "concurrency": 1,
     "extensions": [
       "ts"
     ],
