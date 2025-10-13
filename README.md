@@ -5,6 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@teekit/tunnel?color=33cd56&logo=npm)](https://www.npmjs.com/package/@teekit/tunnel)
 
 A set of building blocks for end-to-end verifiable TEE applications.
+
 _Note: Under active development, has not been audited._
 
 ## Background
@@ -54,9 +55,9 @@ of the same application on IPFS or other immutable cloud services.
   - A [demo application](https://teekit.vercel.app/) that supports
     HTTPS and WSS requests over the encrypted channel, both with and without
     the embedded ServiceWorker.
-- @teekit/kettle:
+- 🚧 @teekit/kettle:
   - A workerd-based runtime that supports arbitrary JS applications,
-    executed inside sandboxed V8 containers.
+    executed inside V8 isolates.
 
 ## Usage
 
@@ -227,3 +228,7 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher
 - Our `WebSocket.send` does not accept `Blob`. Convert blobs to `ArrayBuffer` or `Uint8Array` first.
 - The default client request timeout is 30 seconds, and this is not configurable at this time.
 - WebSocket messages queued before `open` are automatically flushed once the socket opens.
+
+## License
+
+MIT (C) 2025
