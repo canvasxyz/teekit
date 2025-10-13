@@ -81,14 +81,25 @@ export async function findFreePortNear(basePort: number): Promise<number> {
   return free
 }
 
-export function shutdown(child: ChildProcess, timeoutMs = 1500): void {
-  const killTimer = setTimeout(() => {
+export function shutdown(child: ChildProcess, timeoutMs = 1500): Promise<void> {
+  return new Promise((resolve) => {
+    const killTimer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL")
+      } catch {}
+    }, timeoutMs)
+
+    child.once("exit", () => {
+      clearTimeout(killTimer)
+      resolve()
+    })
+
     try {
-      child.kill("SIGKILL")
-    } catch {}
-  }, timeoutMs)
-  child.once("exit", () => {
-    clearTimeout(killTimer)
+      child.kill("SIGTERM")
+    } catch {
+      // Process might already be dead
+      clearTimeout(killTimer)
+      resolve()
+    }
   })
-  child.kill("SIGTERM")
 }

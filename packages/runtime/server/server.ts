@@ -202,6 +202,11 @@ const config :Workerd.Config = (
     process.stderr.write(chalk.greenBright(String(d)))
   })
 
+  // Wait for workerd to be ready before returning
+  await waitForPortOpen(workerPort, 15000)
+  // Give workerd additional time to fully initialize
+  await new Promise((r) => setTimeout(r, 1000))
+
   const result: WorkerResult = {
     workerPort,
     dbUrl,

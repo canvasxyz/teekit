@@ -1,6 +1,8 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { createClient, type Client as LibsqlClient } from "@libsql/client"
+import { upgradeWebSocket } from "hono/cloudflare-workers"
+import { WSEvents } from "hono/ws"
 
 // TODO: TunnelServer integration commented out until workerd WebSocket adapter is implemented
 // import { TunnelServer } from "@teekit/tunnel"
@@ -265,8 +267,52 @@ app.get("/db/get", async (c) => {
   }
 })
 
-// TODO: WebSocket handling in workerd
-// The TunnelServer WebSockest/chat will need to be adapted for workerd's WebSocket API
+// Echo the message back to the client; normalize binary data to Uint8Array
+app.get(
+  "/ws",
+  upgradeWebSocket(() => {
+    return {
+      onMessage(event, ws) {
+        try {
+          if (event.data instanceof Blob) {
+            // Handle Blob data asynchronously
+            event.data.arrayBuffer().then((buf) => ws.send(new Uint8Array(buf)))
+          } else if (event.data instanceof ArrayBuffer) {
+            // Convert ArrayBuffer to Uint8Array for consistent handling
+            ws.send(new Uint8Array(event.data))
+          } else if (event.data instanceof Uint8Array) {
+            // Send Uint8Array directly
+            ws.send(event.data)
+          } else if (event.data instanceof SharedArrayBuffer) {
+            // Clone SharedArrayBuffer to avoid cross-context issues
+            const src = new Uint8Array(event.data)
+            const clone = new Uint8Array(src.length)
+            clone.set(src)
+            ws.send(clone)
+          } else {
+            ws.send(String(event.data))
+          }
+        } catch (err) {
+          console.error("[teekit-runtime] Error echoing message:", err)
+        }
+      },
+      onOpen(_event, _ws) {
+        console.log("[teekit-runtime] WebSocket connection opened")
+      },
+      onClose(event, _ws) {
+        console.log(
+          `[teekit-runtime] WebSocket connection closed - code: ${event.code}, reason: ${event.reason}`,
+        )
+      },
+      onError(event, _ws) {
+        console.error("[teekit-runtime] WebSocket error:", event)
+      },
+    } as WSEvents
+  }),
+)
+
+// TODO: TunnelServer WebSocket integration
+// The TunnelServer WebSocket/chat will need to be adapted for workerd's WebSocket API
 
 // TODO: Static file serving
 // Note: In workerd, static files should be served via Assets binding configured in workerd.config.capnp
