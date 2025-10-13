@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:server": "esbuild worker.ts --bundle --format=esm --platform=browser --outfile=dist/worker.js && esbuild bindings/quote.ts --bundle --format=esm --platform=node --outfile=dist/bindings/quote.js --external:node:*",
-    "server": "npm run build:server && tsx server/server.ts",
+    "build:worker": "esbuild worker.ts --bundle --format=esm --platform=browser --outfile=dist/worker.js && esbuild bindings/quote.ts --bundle --format=esm --platform=node --outfile=dist/bindings/quote.js --external:node:*",
+    "server": "npm run build:worker && tsx server/server.ts",
     "start": "npm run demo",
     "test": "ava --serial"
   },
