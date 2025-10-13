@@ -7,6 +7,7 @@ import {
   findFreePort,
   randomToken,
   resolveSqldBinary,
+  resolveWorkerdBinary,
   shutdown,
   waitForPortOpen,
 } from "./utils.js"
@@ -183,15 +184,10 @@ const config :Workerd.Config = (
 `
   writeFileSync(tmpConfigPath, configText, "utf-8")
 
+  const workerdBin = resolveWorkerdBinary()
   const workerd = spawn(
-    "npx",
-    [
-      "workerd",
-      "serve",
-      tmpConfigPath,
-      "--socket-addr",
-      `http=0.0.0.0:${workerPort}`,
-    ],
+    workerdBin,
+    ["serve", tmpConfigPath, "--socket-addr", `http=0.0.0.0:${workerPort}`],
     { stdio: ["ignore", "pipe", "pipe"] },
   )
 
@@ -219,7 +215,7 @@ const config :Workerd.Config = (
       ? `http://127.0.0.1:${replicaHttpPort}`
       : null,
     stop: () => {
-      const stopPromises = [shutdown(workerd), shutdown(sqld)]
+      const stopPromises: Promise<any>[] = [shutdown(workerd), shutdown(sqld)]
       if (replicaSqld) stopPromises.push(shutdown(replicaSqld))
       return Promise.all(stopPromises)
     },

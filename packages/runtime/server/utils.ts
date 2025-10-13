@@ -108,3 +108,24 @@ export function shutdown(child: ChildProcess, timeoutMs = 3000): Promise<void> {
     }
   })
 }
+
+export function resolveWorkerdBinary(): string {
+  const cwd = process.cwd()
+  const candidates = [
+    process.env.WORKERD_BIN,
+    // Prefer local project bin if available
+    `${cwd}/node_modules/.bin/workerd`,
+    // Monorepo root fallback
+    `${cwd}/../node_modules/.bin/workerd`,
+    `${cwd}/../../node_modules/.bin/workerd`,
+    `/workspace/node_modules/.bin/workerd`,
+    // Global PATH resolution
+    "workerd",
+  ].filter(Boolean) as string[]
+  for (const bin of candidates) {
+    try {
+      if (existsSync(bin)) return bin
+    } catch {}
+  }
+  return candidates[0]!
+}
