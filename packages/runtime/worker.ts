@@ -207,11 +207,9 @@ function getDb(env: Env): LibsqlClient {
 app.post("/db/init", async (c) => {
   try {
     const db = getDb(c.env)
-    await withDbRetry(async () => {
-      await db.execute(
-        "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
-      )
-    })
+    await db.execute(
+      "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
+    )
     return c.json({ ok: true })
   } catch (e: any) {
     console.error("[teekit-runtime] /db/init error:", e)
@@ -231,11 +229,9 @@ app.post("/db/put", async (c) => {
       return c.json({ error: "key and value must be strings" }, 400)
     }
     const db = getDb(c.env)
-    await withDbRetry(async () => {
-      await db.execute({
-        sql: "INSERT INTO kv(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-        args: [key, value],
-      })
+    await db.execute({
+      sql: "INSERT INTO kv(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      args: [key, value],
     })
     return c.json({ ok: true })
   } catch (e: any) {
@@ -252,11 +248,9 @@ app.get("/db/get", async (c) => {
     const key = c.req.query("key")
     if (!key) return c.json({ error: "key is required" }, 400)
     const db = getDb(c.env)
-    const rs = await withDbRetry(async () => {
-      return await db.execute({
-        sql: "SELECT value FROM kv WHERE key = ?1",
-        args: [key],
-      })
+    const rs = await db.execute({
+      sql: "SELECT value FROM kv WHERE key = ?1",
+      args: [key],
     })
     const row = rs.rows?.[0]
     if (!row) return c.json({ error: "not found" }, 404)
@@ -279,21 +273,3 @@ app.get("/db/get", async (c) => {
 // For now, we'll just serve the API routes
 
 export default app
-
-async function withDbRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
-  let lastErr: any
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn()
-    } catch (e: any) {
-      const msg = String(e?.message || e)
-      const retryable =
-        Boolean(e?.retryable) || /network|ECONN|EPIPE|reset/i.test(msg)
-      lastErr = e
-      if (!retryable || i === attempts - 1) throw e
-      const delayMs = 100 * (i + 1)
-      await new Promise((r) => setTimeout(r, delayMs))
-    }
-  }
-  throw lastErr
-}
