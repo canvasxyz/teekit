@@ -4,7 +4,11 @@ import { tmpdir } from "os"
 import { join } from "path"
 import { WebSocket } from "ws"
 import { startWorker } from "../server/server.js"
-import { findFreePortNear, waitForPortOpen } from "../server/utils.js"
+import {
+  findFreePortNear,
+  waitForPortOpen,
+  waitForPortClosed,
+} from "../server/utils.js"
 
 // Helper function to create a WebSocket connection with timeout
 async function connectWebSocket(
@@ -42,8 +46,15 @@ test.serial("WebSocket connection: echo message", async (t) => {
     workerPort: await findFreePortNear(3005),
   })
   t.teardown(async () => {
+    const port = runtime.workerPort
     await runtime.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Wait for the port to actually close, but don't block forever
+    try {
+      await waitForPortClosed(port)
+    } catch (err) {
+      // Port didn't close cleanly, force a delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
   })
 
   await waitForPortOpen(runtime.workerPort)
@@ -70,8 +81,11 @@ test.serial("WebSocket connection: echo message", async (t) => {
 
   t.is(echoReceived, testMessage, "Server should echo the message back")
 
-  ws.close()
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // Wait for WebSocket to fully close before test cleanup
+  await new Promise<void>((resolve) => {
+    ws.on("close", () => resolve())
+    ws.close()
+  })
 })
 
 test.serial("WebSocket connection: binary message echo", async (t) => {
@@ -83,8 +97,15 @@ test.serial("WebSocket connection: binary message echo", async (t) => {
     workerPort: await findFreePortNear(3006),
   })
   t.teardown(async () => {
+    const port = runtime.workerPort
     await runtime.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Wait for the port to actually close, but don't block forever
+    try {
+      await waitForPortClosed(port)
+    } catch (err) {
+      // Port didn't close cleanly, force a delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
   })
 
   await waitForPortOpen(runtime.workerPort)
@@ -114,8 +135,11 @@ test.serial("WebSocket connection: binary message echo", async (t) => {
     "Server should echo binary data correctly",
   )
 
-  ws.close()
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // Wait for WebSocket to fully close before test cleanup
+  await new Promise<void>((resolve) => {
+    ws.on("close", () => resolve())
+    ws.close()
+  })
 })
 
 test.serial("WebSocket connection: multiple messages", async (t) => {
@@ -127,8 +151,15 @@ test.serial("WebSocket connection: multiple messages", async (t) => {
     workerPort: await findFreePortNear(3007),
   })
   t.teardown(async () => {
+    const port = runtime.workerPort
     await runtime.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Wait for the port to actually close, but don't block forever
+    try {
+      await waitForPortClosed(port)
+    } catch (err) {
+      // Port didn't close cleanly, force a delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
   })
 
   await waitForPortOpen(runtime.workerPort)
@@ -165,8 +196,11 @@ test.serial("WebSocket connection: multiple messages", async (t) => {
     "All messages should be echoed in order",
   )
 
-  ws.close()
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // Wait for WebSocket to fully close before test cleanup
+  await new Promise<void>((resolve) => {
+    ws.on("close", () => resolve())
+    ws.close()
+  })
 })
 
 test.serial("WebSocket connection: concurrent connections", async (t) => {
@@ -178,8 +212,15 @@ test.serial("WebSocket connection: concurrent connections", async (t) => {
     workerPort: await findFreePortNear(3008),
   })
   t.teardown(async () => {
+    const port = runtime.workerPort
     await runtime.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Wait for the port to actually close, but don't block forever
+    try {
+      await waitForPortClosed(port)
+    } catch (err) {
+      // Port didn't close cleanly, force a delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
   })
 
   await waitForPortOpen(runtime.workerPort)
@@ -215,10 +256,21 @@ test.serial("WebSocket connection: concurrent connections", async (t) => {
   t.is(echo2, "connection2", "Second connection should work")
   t.is(echo3, "connection3", "Third connection should work")
 
-  ws1.close()
-  ws2.close()
-  ws3.close()
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // Wait for all WebSockets to fully close before test cleanup
+  await Promise.all([
+    new Promise<void>((resolve) => {
+      ws1.on("close", () => resolve())
+      ws1.close()
+    }),
+    new Promise<void>((resolve) => {
+      ws2.on("close", () => resolve())
+      ws2.close()
+    }),
+    new Promise<void>((resolve) => {
+      ws3.on("close", () => resolve())
+      ws3.close()
+    }),
+  ])
 })
 
 test.serial("WebSocket connection: close event handling", async (t) => {
@@ -230,8 +282,15 @@ test.serial("WebSocket connection: close event handling", async (t) => {
     workerPort: await findFreePortNear(3009),
   })
   t.teardown(async () => {
+    const port = runtime.workerPort
     await runtime.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Wait for the port to actually close, but don't block forever
+    try {
+      await waitForPortClosed(port)
+    } catch (err) {
+      // Port didn't close cleanly, force a delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
   })
 
   await waitForPortOpen(runtime.workerPort)
@@ -272,8 +331,15 @@ test.serial("WebSocket connection: large message handling", async (t) => {
     workerPort: await findFreePortNear(3010),
   })
   t.teardown(async () => {
+    const port = runtime.workerPort
     await runtime.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Wait for the port to actually close, but don't block forever
+    try {
+      await waitForPortClosed(port)
+    } catch (err) {
+      // Port didn't close cleanly, force a delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
   })
 
   await waitForPortOpen(runtime.workerPort)
@@ -298,6 +364,9 @@ test.serial("WebSocket connection: large message handling", async (t) => {
   t.is(echo.length, largeMessage.length, "Large message should be echoed")
   t.is(echo, largeMessage, "Large message content should match")
 
-  ws.close()
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // Wait for WebSocket to fully close before test cleanup
+  await new Promise<void>((resolve) => {
+    ws.on("close", () => resolve())
+    ws.close()
+  })
 })

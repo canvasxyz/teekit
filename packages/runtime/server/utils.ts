@@ -47,6 +47,29 @@ export async function waitForPortOpen(
   throw new Error(`Port ${port} did not open in ${timeoutMs}ms`)
 }
 
+export async function waitForPortClosed(
+  port: number,
+  timeoutMs = 5000,
+): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const isOpen = await new Promise<boolean>((resolve) => {
+      const socket = net.connect({ host: "127.0.0.1", port }, () => {
+        socket.end()
+        resolve(true)
+      })
+      socket.once("error", () => resolve(false))
+      setTimeout(() => {
+        socket.destroy()
+        resolve(false)
+      }, 200)
+    })
+    if (!isOpen) return
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  throw new Error(`Port ${port} did not close in ${timeoutMs}ms`)
+}
+
 export async function findFreePortNear(basePort: number): Promise<number> {
   const tried = new Set<number>()
   const maxAttempts = 50
@@ -81,7 +104,7 @@ export async function findFreePortNear(basePort: number): Promise<number> {
   return free
 }
 
-export function shutdown(child: ChildProcess, timeoutMs = 1500): Promise<void> {
+export function shutdown(child: ChildProcess, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve) => {
     const killTimer = setTimeout(() => {
       try {
