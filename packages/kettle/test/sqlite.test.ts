@@ -14,17 +14,17 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
     if (demo2) await demo2.stop()
   })
 
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-sqlite-test-"))
   const dbPath = join(baseDir, "app.sqlite")
 
-  const runtime1 = await startWorker({
+  const kettle1 = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   await new Promise((resolve) => setTimeout(resolve, 1000))
-  demo1 = { stop: runtime1.stop, workerPort: runtime1.workerPort }
-  const port = runtime1.workerPort
+  demo1 = { stop: kettle1.stop, workerPort: kettle1.workerPort }
+  const port = kettle1.workerPort
   await waitForPortOpen(port)
   // Probe readiness of worker + DB
   for (let i = 0; i < 10; i++) {
@@ -62,13 +62,13 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 1000))
 
   // Second run to verify persistence of previous key
-  const runtime2 = await startWorker({
+  const kettle2 = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
-  demo2 = { stop: runtime2.stop, workerPort: runtime2.workerPort }
-  const port2 = runtime2.workerPort
+  demo2 = { stop: kettle2.stop, workerPort: kettle2.workerPort }
+  const port2 = kettle2.workerPort
   await waitForPortOpen(port2)
   for (let i = 0; i < 10; i++) {
     const r = await fetch(`http://localhost:${port2}/healthz`)

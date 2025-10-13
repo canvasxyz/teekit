@@ -4,8 +4,8 @@
 	"references": [
 		{ "path": "./packages/demo" },
 		{ "path": "./packages/demo/test" },
-		{ "path": "./packages/runtime" },
-		{ "path": "./packages/runtime/test" },
+		{ "path": "./packages/kettle" },
+		{ "path": "./packages/kettle/test" },
 		{ "path": "./packages/qvl" },
 		{ "path": "./packages/qvl/test" },
 		{ "path": "./packages/tunnel" },

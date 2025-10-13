@@ -54,9 +54,9 @@ of the same application on IPFS or other immutable cloud services.
   - A [demo application](https://teekit.vercel.app/) that supports
     HTTPS and WSS requests over the encrypted channel, both with and without
     the embedded ServiceWorker.
-- @teekit/runtime:
-  - A worker runtime that supports arbitrary JS applications, executed
-    inside sandboxed V8 containers.
+- @teekit/kettle:
+  - A workerd-based runtime that supports arbitrary JS applications,
+    executed inside sandboxed V8 containers.
 
 ## Usage
 

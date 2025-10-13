@@ -38,16 +38,16 @@ async function connectWebSocket(
 }
 
 test.serial("WebSocket connection: echo message", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-ws-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    const port = runtime.workerPort
-    await runtime.stop()
+    const port = kettle.workerPort
+    await kettle.stop()
     // Wait for the port to actually close, but don't block forever
     try {
       await waitForPortClosed(port)
@@ -57,11 +57,11 @@ test.serial("WebSocket connection: echo message", async (t) => {
     }
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
   await new Promise((resolve) => setTimeout(resolve, 100))
 
   // Connect using helper function
-  const ws = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
+  const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
   // Send a test message and verify it's echoed back
   const testMessage = "Hello, WebSocket!"
@@ -89,16 +89,16 @@ test.serial("WebSocket connection: echo message", async (t) => {
 })
 
 test.serial("WebSocket connection: binary message echo", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-ws-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    const port = runtime.workerPort
-    await runtime.stop()
+    const port = kettle.workerPort
+    await kettle.stop()
     // Wait for the port to actually close, but don't block forever
     try {
       await waitForPortClosed(port)
@@ -108,10 +108,10 @@ test.serial("WebSocket connection: binary message echo", async (t) => {
     }
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
   await new Promise((resolve) => setTimeout(resolve, 100))
 
-  const ws = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
+  const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
   // Send binary data
   const testData = Buffer.from([1, 2, 3, 4, 5, 255])
@@ -143,16 +143,16 @@ test.serial("WebSocket connection: binary message echo", async (t) => {
 })
 
 test.serial("WebSocket connection: multiple messages", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-ws-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    const port = runtime.workerPort
-    await runtime.stop()
+    const port = kettle.workerPort
+    await kettle.stop()
     // Wait for the port to actually close, but don't block forever
     try {
       await waitForPortClosed(port)
@@ -162,9 +162,9 @@ test.serial("WebSocket connection: multiple messages", async (t) => {
     }
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
 
-  const ws = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
+  const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
   // Send multiple messages and verify they're all echoed
   const messages = ["message1", "message2", "message3"]
@@ -204,16 +204,16 @@ test.serial("WebSocket connection: multiple messages", async (t) => {
 })
 
 test.serial("WebSocket connection: concurrent connections", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-ws-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    const port = runtime.workerPort
-    await runtime.stop()
+    const port = kettle.workerPort
+    await kettle.stop()
     // Wait for the port to actually close, but don't block forever
     try {
       await waitForPortClosed(port)
@@ -223,11 +223,11 @@ test.serial("WebSocket connection: concurrent connections", async (t) => {
     }
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
 
-  const ws1 = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
-  const ws2 = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
-  const ws3 = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
+  const ws1 = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
+  const ws2 = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
+  const ws3 = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
   // Test each connection independently
   const testConnection = async (
@@ -274,16 +274,16 @@ test.serial("WebSocket connection: concurrent connections", async (t) => {
 })
 
 test.serial("WebSocket connection: close event handling", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-ws-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    const port = runtime.workerPort
-    await runtime.stop()
+    const port = kettle.workerPort
+    await kettle.stop()
     // Wait for the port to actually close, but don't block forever
     try {
       await waitForPortClosed(port)
@@ -293,10 +293,10 @@ test.serial("WebSocket connection: close event handling", async (t) => {
     }
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
   await new Promise((resolve) => setTimeout(resolve, 500))
 
-  const ws = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
+  const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
   // Send and receive a message first to ensure the connection is fully established
   await new Promise<void>((resolve) => {
@@ -323,16 +323,16 @@ test.serial("WebSocket connection: close event handling", async (t) => {
 })
 
 test.serial("WebSocket connection: large message handling", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-ws-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    const port = runtime.workerPort
-    await runtime.stop()
+    const port = kettle.workerPort
+    await kettle.stop()
     // Wait for the port to actually close, but don't block forever
     try {
       await waitForPortClosed(port)
@@ -342,10 +342,10 @@ test.serial("WebSocket connection: large message handling", async (t) => {
     }
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
   await new Promise((resolve) => setTimeout(resolve, 500))
 
-  const ws = await connectWebSocket(`ws://localhost:${runtime.workerPort}/ws`)
+  const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
   // Create a large message (512KB)
   const largeMessage = "x".repeat(512 * 1024)

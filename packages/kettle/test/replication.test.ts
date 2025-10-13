@@ -9,11 +9,11 @@ import { createClient } from "@libsql/client"
 test.serial(
   "replication: data written to primary is replicated to replica db",
   async (t) => {
-    const baseDir = mkdtempSync(join(tmpdir(), "teekit-replication-test-"))
+    const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-test-"))
     const dbPath = join(baseDir, "app.sqlite")
     const replicaDbPath = join(baseDir, "app.replica.db")
 
-    const runtime = await startWorker({
+    const kettle = await startWorker({
       dbPath,
       replicaDbPath,
       sqldPort: await findFreePort(),
@@ -21,11 +21,11 @@ test.serial(
     })
 
     t.teardown(async () => {
-      await runtime.stop()
+      await kettle.stop()
       await new Promise((resolve) => setTimeout(resolve, 500))
     })
 
-    const port = runtime.workerPort
+    const port = kettle.workerPort
     await waitForPortOpen(port)
 
     // Wait for health check
@@ -59,10 +59,10 @@ test.serial(
     await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // Now examine the replica database via HTTP
-    t.truthy(runtime.replicaDbUrl, "replica DB URL should be available")
+    t.truthy(kettle.replicaDbUrl, "replica DB URL should be available")
     const replicaClient = createClient({
-      url: runtime.replicaDbUrl!,
-      authToken: runtime.dbToken,
+      url: kettle.replicaDbUrl!,
+      authToken: kettle.dbToken,
     })
 
     // Verify the table exists in the replica

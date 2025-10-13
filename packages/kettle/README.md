@@ -1,4 +1,4 @@
-# @teekit/runtime
+# @teekit/kettle
 
 ## Installing sqld
 
@@ -32,7 +32,7 @@ brew install sqld
 
 The demo launches `sqld` and `workerd`, generates a random bearer
 token, and injects `DB_URL`/`DB_TOKEN` bindings so
-`packages/runtime/server.ts` can access the database via
+`packages/kettle/server.ts` can access the database via
 `@libsql/client-web`.
 
 ```

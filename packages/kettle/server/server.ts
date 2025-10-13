@@ -232,8 +232,8 @@ const config :Workerd.Config = (
 
 async function main() {
   const baseDir =
-    process.env.RUNTIME_DB_DIR ??
-    mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-runtime-"))
+    process.env.DB_DIR ??
+    mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
   if (!existsSync(baseDir)) {
     mkdirSync(baseDir, { recursive: true })
   }

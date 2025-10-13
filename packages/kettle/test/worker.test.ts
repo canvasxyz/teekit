@@ -6,20 +6,20 @@ import { startWorker } from "../server/server.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 
 test.serial("Workerd server: GET /uptime returns uptime data", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    await runtime.stop()
+    await kettle.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
   })
 
-  await waitForPortOpen(runtime.workerPort)
-  const response = await fetch(`http://localhost:${runtime.workerPort}/uptime`)
+  await waitForPortOpen(kettle.workerPort)
+  const response = await fetch(`http://localhost:${kettle.workerPort}/uptime`)
   t.is(response.status, 200)
   const data = await response.json()
   t.truthy(data.uptime)
@@ -28,21 +28,21 @@ test.serial("Workerd server: GET /uptime returns uptime data", async (t) => {
 })
 
 test.serial("Workerd server: POST /increment increments counter", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    await runtime.stop()
+    await kettle.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
   const response1 = await fetch(
-    `http://localhost:${runtime.workerPort}/increment`,
+    `http://localhost:${kettle.workerPort}/increment`,
     { method: "POST" },
   )
   t.is(response1.status, 200)
@@ -51,7 +51,7 @@ test.serial("Workerd server: POST /increment increments counter", async (t) => {
   t.true(typeof counter1 === "number")
   t.true(counter1 > 0)
   const response2 = await fetch(
-    `http://localhost:${runtime.workerPort}/increment`,
+    `http://localhost:${kettle.workerPort}/increment`,
     { method: "POST" },
   )
   const data2 = await response2.json()
@@ -59,21 +59,21 @@ test.serial("Workerd server: POST /increment increments counter", async (t) => {
 })
 
 test.serial("Workerd server: POST /quote returns quote data", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
+  const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
   const dbPath = join(baseDir, "app.sqlite")
-  const runtime = await startWorker({
+  const kettle = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
   })
   t.teardown(async () => {
-    await runtime.stop()
+    await kettle.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
   })
 
-  await waitForPortOpen(runtime.workerPort)
+  await waitForPortOpen(kettle.workerPort)
   const testPublicKey = new Array(32).fill(0).map((_, i) => i)
-  const response = await fetch(`http://localhost:${runtime.workerPort}/quote`, {
+  const response = await fetch(`http://localhost:${kettle.workerPort}/quote`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ publicKey: testPublicKey }),
@@ -88,22 +88,22 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
 
 // TODO: WebSocket test commented out until TunnelServer integration is complete
 // test.serial("Workerd server: WebSocket connection works", async (t) => {
-//   const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
+//   const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
 //   const dbPath = join(baseDir, "app.sqlite")
-//   const runtime = await startWorker({
+//   const kettle = await startWorker({
 //     dbPath,
-//     sqldPort: await findFreePortNear(),
-//     workerPort: await findFreePortNear(),
+//     sqldPort: await findFreePort(),
+//     workerPort: await findFreePort(),
 //   })
 //   t.teardown(async () => {
-//     await runtime.stop()
+//     await kettle.stop()
 //     await new Promise((resolve) => setTimeout(resolve, 500))
 //   })
 
-//   await waitForPortOpen(runtime.workerPort)
+//   await waitForPortOpen(kettle.workerPort)
 
 //   const testPublicKey = new Array(32).fill(0).map((_, i) => i)
-//   const response = await fetch(`http://localhost:${runtime.workerPort}/quote`, {
+//   const response = await fetch(`http://localhost:${kettle.workerPort}/quote`, {
 //     method: "POST",
 //     headers: { "Content-Type": "application/json" },
 //     body: JSON.stringify({ publicKey: testPublicKey }),
@@ -115,7 +115,7 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
 //   t.true(data.quote.length > 0, "quote should not be empty")
 //   t.true(data.quote.length > 100, "quote should be substantial in size")
 
-//   const ws = new WebSocket(`ws://localhost:${runtime.workerPort}/__ra__`)
+//   const ws = new WebSocket(`ws://localhost:${kettle.workerPort}/__ra__`)
 
 //   const connected = await new Promise<boolean>((resolve, reject) => {
 //     const timeout = setTimeout(

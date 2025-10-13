@@ -32,9 +32,7 @@ export class QuoteBinding {
     return await new Promise<QuoteData>(async (resolve, reject) => {
       // If config.json isn't set up, return a sample quote
       if (!fs.existsSync("config.json")) {
-        console.log(
-          "[teekit-runtime] TDX config.json not found, serving sample quote",
-        )
+        console.log("[kettle] TDX config.json not found, serving sample quote")
         const { tappdV4Base64 } = await import("../shared/samples.js")
         resolve({
           quote: base64.decode(tappdV4Base64),
@@ -43,9 +41,7 @@ export class QuoteBinding {
       }
 
       // Otherwise, get a quote from the SEAM (requires root)
-      console.log(
-        "[teekit-runtime] Getting a quote for " + toHex(x25519PublicKey),
-      )
+      console.log("[kettle] Getting a quote for " + toHex(x25519PublicKey))
       const userDataB64 = base64.encode(x25519PublicKey)
       const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
       exec(cmd, (err, stdout) => {

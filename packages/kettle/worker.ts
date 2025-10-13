@@ -111,7 +111,7 @@ app.post("/quote", async (c) => {
     const buf = Uint8Array.from(atob(tappdV4Base64), (c) => c.charCodeAt(0))
     return c.json({ quote: Array.from(buf) })
   } catch (error) {
-    console.error("[teekit-runtime] Error getting quote:", error)
+    console.error("[kettle] Error getting quote:", error)
     return c.json({ error: String(error) }, 500)
   }
 })
@@ -135,8 +135,8 @@ function getDb(env: Env): LibsqlClient {
         typeof input === "string"
           ? input
           : input instanceof URL
-          ? input.toString()
-          : (input as Request).url
+            ? input.toString()
+            : (input as Request).url
       const url = new URL(inputUrl, base)
 
       // Extract request components without constructing a Request from a relative URL
@@ -181,7 +181,7 @@ function getDb(env: Env): LibsqlClient {
           if (!res.ok) {
             const preview = await res.clone().text()
             console.error(
-              `[teekit-runtime] DB_HTTP ${method} ${absolute} -> ${
+              `[kettle] DB_HTTP ${method} ${absolute} -> ${
                 res.status
               } ${res.statusText} :: ${preview.substring(0, 200)}`,
             )
@@ -214,7 +214,7 @@ app.post("/db/init", async (c) => {
     )
     return c.json({ ok: true })
   } catch (e: any) {
-    console.error("[teekit-runtime] /db/init error:", e)
+    console.error("[kettle] /db/init error:", e)
     if (String(e?.message || e).includes("Database not configured")) {
       return c.json({ error: "DB not configured" }, 501)
     }
@@ -237,7 +237,7 @@ app.post("/db/put", async (c) => {
     })
     return c.json({ ok: true })
   } catch (e: any) {
-    console.error("[teekit-runtime] /db/put error:", e)
+    console.error("[kettle] /db/put error:", e)
     if (String(e?.message || e).includes("Database not configured")) {
       return c.json({ error: "DB not configured" }, 501)
     }
@@ -259,7 +259,7 @@ app.get("/db/get", async (c) => {
     const value = (row as any).value ?? Object.values(row)[0]
     return c.json({ key, value })
   } catch (e: any) {
-    console.error("[teekit-runtime] /db/get error:", e)
+    console.error("[kettle] /db/get error:", e)
     if (String(e?.message || e).includes("Database not configured")) {
       return c.json({ error: "DB not configured" }, 501)
     }
@@ -294,19 +294,19 @@ app.get(
             ws.send(String(event.data))
           }
         } catch (err) {
-          console.error("[teekit-runtime] Error echoing message:", err)
+          console.error("[kettle] Error echoing message:", err)
         }
       },
       onOpen(_event, _ws) {
-        console.log("[teekit-runtime] WebSocket connection opened")
+        console.log("[kettle] WebSocket connection opened")
       },
       onClose(event, _ws) {
         console.log(
-          `[teekit-runtime] WebSocket connection closed - code: ${event.code}, reason: ${event.reason}`,
+          `[kettle] WebSocket connection closed - code: ${event.code}, reason: ${event.reason}`,
         )
       },
       onError(event, _ws) {
-        console.error("[teekit-runtime] WebSocket error:", event)
+        console.error("[kettle] WebSocket error:", event)
       },
     } as WSEvents
   }),
