@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
 import { join } from "path"
 import { pathToFileURL } from "url"
 import {
-  findFreePortNear,
+  findFreePort,
   randomToken,
   resolveSqldBinary,
   shutdown,
@@ -39,7 +39,7 @@ export async function startWorker(
 
   // Enable replication if replicaDbPath is provided
   const enableReplication = !!replicaDbPath
-  const grpcPort = enableReplication ? await findFreePortNear(5001) : undefined
+  const grpcPort = enableReplication ? await findFreePort() : undefined
 
   let replicaSqld: ChildProcess | null = null
   let replicaHttpPort: number | null = null
@@ -50,7 +50,7 @@ export async function startWorker(
     ),
   )
   if (enableReplication) {
-    replicaHttpPort = await findFreePortNear(8180)
+    replicaHttpPort = await findFreePort()
     console.log(
       chalk.yellowBright(
         `Starting sqld replica on port ${replicaHttpPort}, gRPC on port ${grpcPort}`,
@@ -240,8 +240,8 @@ async function main() {
 
   const { stop } = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8088),
-    workerPort: await findFreePortNear(3001),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
 
   process.on("SIGINT", () => stop())

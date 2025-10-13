@@ -5,7 +5,7 @@ import { join } from "path"
 import { WebSocket } from "ws"
 import { startWorker } from "../server/server.js"
 import {
-  findFreePortNear,
+  findFreePort,
   waitForPortOpen,
   waitForPortClosed,
 } from "../server/utils.js"
@@ -42,8 +42,8 @@ test.serial("WebSocket connection: echo message", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8092),
-    workerPort: await findFreePortNear(3005),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     const port = runtime.workerPort
@@ -93,8 +93,8 @@ test.serial("WebSocket connection: binary message echo", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8093),
-    workerPort: await findFreePortNear(3006),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     const port = runtime.workerPort
@@ -147,8 +147,8 @@ test.serial("WebSocket connection: multiple messages", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8094),
-    workerPort: await findFreePortNear(3007),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     const port = runtime.workerPort
@@ -208,8 +208,8 @@ test.serial("WebSocket connection: concurrent connections", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8095),
-    workerPort: await findFreePortNear(3008),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     const port = runtime.workerPort
@@ -278,8 +278,8 @@ test.serial("WebSocket connection: close event handling", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8096),
-    workerPort: await findFreePortNear(3009),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     const port = runtime.workerPort
@@ -327,8 +327,8 @@ test.serial("WebSocket connection: large message handling", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8097),
-    workerPort: await findFreePortNear(3010),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     const port = runtime.workerPort

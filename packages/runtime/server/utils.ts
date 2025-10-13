@@ -70,25 +70,8 @@ export async function waitForPortClosed(
   throw new Error(`Port ${port} did not close in ${timeoutMs}ms`)
 }
 
-export async function findFreePortNear(basePort: number): Promise<number> {
-  const tried = new Set<number>()
-  const maxAttempts = 50
-  for (let i = 0; i < maxAttempts; i++) {
-    const candidate = basePort + Math.floor(Math.random() * 1000)
-    if (tried.has(candidate)) continue
-    tried.add(candidate)
-    const isFree = await new Promise<boolean>((resolve) => {
-      const server = net.createServer()
-      server.once("error", () => resolve(false))
-      server.once("listening", () => {
-        server.close(() => resolve(true))
-      })
-      server.listen(candidate, "127.0.0.1")
-    })
-    if (isFree) return candidate
-  }
-  // Fallback: ask OS for an ephemeral port and return it
-  const free = await new Promise<number>((resolve, reject) => {
+export async function findFreePort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
     const server = net.createServer()
     server.once("error", reject)
     server.listen(0, "127.0.0.1", () => {
@@ -101,7 +84,6 @@ export async function findFreePortNear(basePort: number): Promise<number> {
       }
     })
   })
-  return free
 }
 
 export function shutdown(child: ChildProcess, timeoutMs = 3000): Promise<void> {

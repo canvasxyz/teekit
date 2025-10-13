@@ -3,7 +3,7 @@ import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker } from "../server/server.js"
-import { findFreePortNear, waitForPortOpen } from "../server/utils.js"
+import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { createClient } from "@libsql/client"
 
 test.serial(
@@ -16,8 +16,8 @@ test.serial(
     const runtime = await startWorker({
       dbPath,
       replicaDbPath,
-      sqldPort: await findFreePortNear(8088),
-      workerPort: await findFreePortNear(3001),
+      sqldPort: await findFreePort(),
+      workerPort: await findFreePort(),
     })
 
     t.teardown(async () => {

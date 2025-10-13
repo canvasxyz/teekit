@@ -3,15 +3,15 @@ import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker } from "../server/server.js"
-import { findFreePortNear, waitForPortOpen } from "../server/utils.js"
+import { findFreePort, waitForPortOpen } from "../server/utils.js"
 
 test.serial("Workerd server: GET /uptime returns uptime data", async (t) => {
   const baseDir = mkdtempSync(join(tmpdir(), "teekit-runtime-test-"))
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8088),
-    workerPort: await findFreePortNear(3001),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     await runtime.stop()
@@ -32,8 +32,8 @@ test.serial("Workerd server: POST /increment increments counter", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8089),
-    workerPort: await findFreePortNear(3002),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     await runtime.stop()
@@ -63,8 +63,8 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
   const dbPath = join(baseDir, "app.sqlite")
   const runtime = await startWorker({
     dbPath,
-    sqldPort: await findFreePortNear(8090),
-    workerPort: await findFreePortNear(3003),
+    sqldPort: await findFreePort(),
+    workerPort: await findFreePort(),
   })
   t.teardown(async () => {
     await runtime.stop()
@@ -92,8 +92,8 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
 //   const dbPath = join(baseDir, "app.sqlite")
 //   const runtime = await startWorker({
 //     dbPath,
-//     sqldPort: await findFreePortNear(8091),
-//     workerPort: await findFreePortNear(3004),
+//     sqldPort: await findFreePortNear(),
+//     workerPort: await findFreePortNear(),
 //   })
 //   t.teardown(async () => {
 //     await runtime.stop()
