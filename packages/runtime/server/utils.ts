@@ -88,6 +88,11 @@ export async function findFreePort(): Promise<number> {
 
 export function shutdown(child: ChildProcess, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve) => {
+    try {
+      // Avoid keeping the event loop alive because of stdio
+      ;(child.stdout as any)?.unref?.()
+      ;(child.stderr as any)?.unref?.()
+    } catch {}
     const killTimer = setTimeout(() => {
       try {
         child.kill("SIGKILL")

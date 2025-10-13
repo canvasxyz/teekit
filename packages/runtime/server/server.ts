@@ -75,6 +75,10 @@ export async function startWorker(
 
   const sqldBin = resolveSqldBinary()
   const sqld = spawn(sqldBin, sqldArgs, { stdio: ["ignore", "pipe", "pipe"] })
+  // Do not keep the event loop alive because of child stdio
+  // Note: optional chaining guards older Node typings
+  ;(sqld.stdout as any)?.unref?.()
+  ;(sqld.stderr as any)?.unref?.()
 
   sqld.stdout.on("data", (d) => {
     process.stdout.write(chalk.greenBright(String(d).trim()))
@@ -105,6 +109,8 @@ export async function startWorker(
     replicaSqld = spawn(sqldBin, replicaArgs, {
       stdio: ["ignore", "pipe", "pipe"],
     })
+    ;(replicaSqld.stdout as any)?.unref?.()
+    ;(replicaSqld.stderr as any)?.unref?.()
 
     replicaSqld.stdout?.on("data", (d) => {
       process.stdout.write(chalk.blueBright(`[replica] ${String(d).trim()}`))
