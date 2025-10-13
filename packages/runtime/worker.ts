@@ -272,11 +272,12 @@ app.get(
   "/ws",
   upgradeWebSocket(() => {
     return {
-      onMessage(event, ws) {
+      async onMessage(event, ws) {
         try {
           if (event.data instanceof Blob) {
-            // Handle Blob data asynchronously
-            event.data.arrayBuffer().then((buf) => ws.send(new Uint8Array(buf)))
+            // Handle Blob data asynchronously - properly await the operation
+            const buf = await event.data.arrayBuffer()
+            ws.send(new Uint8Array(buf))
           } else if (event.data instanceof ArrayBuffer) {
             // Convert ArrayBuffer to Uint8Array for consistent handling
             ws.send(new Uint8Array(event.data))
