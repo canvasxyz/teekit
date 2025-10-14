@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from "express"
 import { Context, Hono } from "hono"
 import { createNodeWebSocket } from "@hono/node-ws"
-import { serve } from "@hono/node-server"
+import { serve, ServerType } from "@hono/node-server"
 import type { AddressInfo } from "node:net"
 import sodium from "libsodium-wrappers"
 
@@ -259,4 +259,58 @@ export async function stopTunnel(
       tunnelServer.server!.close(() => resolve())
     })
   }
+}
+
+// Helper to start a plain Hono app without tunnel, for baseline comparisons
+export async function startPlainHonoApp() {
+  const app = new Hono()
+
+  app.get("/hello", (c) => c.text("world", 200))
+
+  app.post("/echo", async (c) => {
+    const body = await (async () => {
+      const ct = c.req.header("content-type") || ""
+      if (ct.includes("application/json")) return await c.req.json()
+      if (ct.includes("application/x-www-form-urlencoded")) {
+        const text = await c.req.text()
+        const params = new URLSearchParams(text)
+        const obj: Record<string, string> = {}
+        params.forEach((v, k) => (obj[k] = v))
+        return obj
+      }
+      return await c.req.text()
+    })()
+    const headers = Object.fromEntries(c.req.raw.headers.entries())
+    return c.json({ method: c.req.method, headers, body }, 200)
+  })
+
+  app.get("/bytes/:size", (c) => {
+    const size = Math.min(
+      2 * 1024 * 1024,
+      Math.max(0, Number(c.req.param("size")) || 0),
+    )
+    const buf = new Uint8Array(size)
+    for (let i = 0; i < size; i++) buf[i] = i % 256
+    const headers = new Headers()
+    headers.set("content-type", "application/octet-stream")
+    return new Response(buf, { status: 200, headers })
+  })
+
+  const server = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", resolve)
+    server.once("error", reject)
+  })
+
+  const address = server.address() as AddressInfo
+  const origin = `http://127.0.0.1:${address.port}`
+
+  return { server, origin }
+}
+
+export async function stopPlainHonoApp(server: ServerType) {
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve())
+  })
 }
