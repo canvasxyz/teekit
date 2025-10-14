@@ -11,30 +11,28 @@ _Note: Under active development, has not been audited._
 ## Background
 
 Trusted execution environments make it possible to build private,
-verifiable web services, but one issue that makes this harder is that
-web pages cannot natively verify that they're connected to a TEE.
-Browsers don't expose X.509 certificate extensions that can be used to
-prove a connection terminates inside the secured environment. This
-means proxies like Cloudflare can trivially see and modify traffic to
-TEEs forwarded through them. Anyone hosting a TEE app can easily
-insert their own TLS proxy in front of it, and extract session data
-that lets them impersonate users.
+verifiable web services, but web pages in a browser cannot verify
+that they're connected to a TEE. This is beacuse browsers don't
+expose X.509 certificate information required to prove a connection
+terminates inside the secure environment. As a result, proxies like
+Cloudflare can trivially see and modify traffic to TEEs forwarded
+through them, and anyone hosting a TEE app can use a TLS proxy to
+undetectably extract session data and/or impersonate users.
 
-To work around this, TEE application hosts may implement their own
+To work around this, some TEE application hosts implement their own
 proxy in front of the TEE, but this reintroduces trust assumptions
-around the proxy. Hosts can also use certificate log monitoring to
-boost security, but this happens out-of-band and doesn't directly
+around their proxy. We can also use certificate log monitoring to
+improve security, but this happens out-of-band and doesn't directly
 protect the connection between the user and the TEE.
 
 @teekit/tunnel implements protocols for remotely-attested HTTPS and
 WSS channels, which web pages can use to establish secure connections
 that verifiably terminate inside trusted execution environments
-(currently Intel TDX/SGX).
-
-Applications using teekit can treat TEEs like a regular web server,
-and use public certificate authorities like Let's Encrypt and
-Cloudflare without custom configuration. Developers can also host copies
-of the same application on IPFS or other immutable cloud services.
+(currently Intel TDX/SGX). This makes it possible to create
+applications that interact with a TEE trustlessly, especially if
+applications are pinned on IPFS or other immutable hosting services.
+It also allows TEE developers to use public certificate authorities
+like Let's Encrypt and Cloudflare.
 
 ## Components
 
@@ -61,7 +59,10 @@ of the same application on IPFS or other immutable cloud services.
 
 ## Performance
 
-| Test | Average (ms) | Median (ms) | 90th % (ms) | Max (ms) |
+Benchmarks are based on HTTP requests, and indicative of 1x-3x overhead.
+We have several optimizations for encoding/decoding of large payloads planned.
+
+| Test | Mean (ms) | Median (ms) | 90th % (ms) | Max (ms) |
 |------|--------------|-------------|-------------|-------------|
 | 100 concurrent requests (tunneled) | 67.31 | 67.32 | 67.70 | 69.75 |
 | 100 concurrent requests (no tunnel) | 31.59 | 32.83 | 37.00 | 37.79 |
@@ -69,8 +70,6 @@ of the same application on IPFS or other immutable cloud services.
 | 50 requests (no tunnel) | 0.35 | 0.17 | 0.40 | 6.75 |
 | 50 requests, 1MB up/down (tunneled) | 22.08 | 21.43 | 23.55 | 40.83 |
 | 50 requests, 1MB up/down (no tunnel) | 5.09 | 4.78 | 7.24 | 9.00 |
-
-Several optimizations for large payloads are planned for the next release.
 
 ## Usage
 
@@ -236,13 +235,15 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher
 
 ## Limitations
 
-- For security reasons, we currently require that all WebSocket connections to the HTTP server go through the encrypted channel. Mixing and matching unencrypted WebSockets and @teekit/tunnel is not supported.
-- One keypair is generated per server. No key rotation (yet) or support for load balancing across TEEs.
-- HTTP request/response bodies are buffered end-to-end; very large payloads cannot be streamed.
-- HTTP request bodies: string, `Uint8Array`, `ArrayBuffer`, `ReadableStream` (no `FormData`).
-- Our `WebSocket.send` does not accept `Blob`. Convert blobs to `ArrayBuffer` or `Uint8Array` first.
-- The default client request timeout is 30 seconds, and this is not configurable at this time.
-- WebSocket messages queued before `open` are automatically flushed once the socket opens.
+- We require that all WebSocket connections to the HTTP server go through the
+  encrypted channel. Mixing encrypted and unencrypted WebSockets is not supported.
+- One keypair is generated per server. No key rotation (yet) or support for load
+  balancing across TEEs.
+- HTTP request/response bodies are buffered end-to-end, not streamed.
+- HTTP request bodies: `string`, `Uint8Array`, `ArrayBuffer`, `ReadableStream` (no `FormData`).
+- WebSocket paylods: `Blob` is not supported, convert to `ArrayBuffer` first.
+- The client request timeout is 30 seconds, and this is not configurable at this time.
+- WebSocket messages queued before `open` are flushed once the socket opens.
 
 ## License
 
