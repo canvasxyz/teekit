@@ -59,6 +59,19 @@ of the same application on IPFS or other immutable cloud services.
   - A workerd-based runtime that supports arbitrary JS applications,
     executed inside V8 isolates.
 
+## Performance
+
+| Test | Average (ms) | Median (ms) | 90th % (ms) | Max (ms) |
+|------|--------------|-------------|-------------|-------------|
+| 100 concurrent requests (tunneled) | 67.31 | 67.32 | 67.70 | 69.75 |
+| 100 concurrent requests (no tunnel) | 31.59 | 32.83 | 37.00 | 37.79 |
+| 50 requests (tunneled) | 0.68 | 0.32 | 0.44 | 16.94 |
+| 50 requests (no tunnel) | 0.35 | 0.17 | 0.40 | 6.75 |
+| 50 requests, 1MB up/down (tunneled) | 22.08 | 21.43 | 23.55 | 40.83 |
+| 50 requests, 1MB up/down (no tunnel) | 5.09 | 4.78 | 7.24 | 9.00 |
+
+Several optimizations for large payloads are planned for the next release.
+
 ## Usage
 
 On the client, create a `TunnelClient()` object. You should switch out
@@ -139,6 +152,8 @@ async function main() {
 
 main()
 ```
+
+## ServiceWorker
 
 You may also use the included ServiceWorker to transparently upgrade
 HTTP GET/POST requests to go over the encrypted channel to your
