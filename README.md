@@ -32,7 +32,7 @@ that verifiably terminate inside trusted execution environments
 applications that interact with a TEE trustlessly, especially if
 applications are pinned on IPFS or other immutable hosting services.
 It also allows TEE developers to use public certificate authorities
-like Let's Encrypt and Cloudflare.
+like Let's Encrypt without custom configuration.
 
 ## Components
 
