@@ -19,6 +19,7 @@ import {
   RAEncryptedHTTPResponse,
   RAEncryptedServerEvent,
   RAEncryptedWSMessage,
+  ControlChannelKXClientReady,
   ControlChannelKXConfirm,
   ControlChannelEncryptedMessage,
   RAEncryptedMessage,
@@ -126,15 +127,10 @@ export class TunnelClient {
       this.ws = new WebSocket(controlUrl.toString())
       this.ws.binaryType = "arraybuffer"
 
+      // Send a hello message since non-Node environments may not call onOpen
       this.ws.onopen = () => {
-        // WORKAROUND: workerd doesn't call onOpen handlers, so we need to trigger
-        // the server's onMessage handler by sending a hello message
-        try {
-          this.ws!.send("hello")
-        } catch (e) {
-          console.error("Failed to send hello:", e)
-        }
-        // Wait for server_kx to complete handshake before resolving
+        const hello: ControlChannelKXClientReady = { type: "client_kx_ready" }
+        this.ws!.send(encodeCbor(hello))
       }
 
       this.ws.onclose = () => {
@@ -454,8 +450,8 @@ export class TunnelClient {
       response.status === 204
         ? null
         : response.body instanceof Uint8Array
-        ? (response.body as BodyInit)
-        : response.body,
+          ? (response.body as BodyInit)
+          : response.body,
       {
         status: response.status,
         statusText: response.statusText,

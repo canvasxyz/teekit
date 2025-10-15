@@ -414,11 +414,6 @@ export class TunnelServer {
 
       // Announce server key-exchange public key to the client
       try {
-        // Send a preamble message (optional, for debugging)
-        try {
-          controlWs.send("server_kx_ready")
-        } catch {}
-        
         const serverKxMessage: ControlChannelKXAnnounce = {
           type: "server_kx",
           x25519PublicKey: this.x25519PublicKey,
@@ -478,7 +473,7 @@ export class TunnelServer {
       return
     }
 
-    // If handshake not complete yet, ignore any other messages (client sends "hello" to trigger init)
+    // If handshake not complete yet, ignore any other messages (hello/ready are harmless)
     if (!this.symmetricKeyBySocket.has(controlWs)) {
       return
     }

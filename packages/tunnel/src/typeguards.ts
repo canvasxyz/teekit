@@ -7,6 +7,7 @@ import type {
   RAEncryptedServerEvent,
   RAEncryptedWSMessage,
   ControlChannelEncryptedMessage,
+  ControlChannelKXClientReady,
   ControlChannelKXAnnounce,
   ControlChannelKXConfirm,
   TunnelApp,
@@ -68,6 +69,12 @@ export function isControlChannelEncryptedMessage(
   message: unknown,
 ): message is ControlChannelEncryptedMessage {
   return isMessage(message) && message.type === "enc"
+}
+
+export function isControlChannelHello(
+  message: unknown,
+): message is ControlChannelKXClientReady {
+  return isMessage(message) && message.type === "client_kx_ready"
 }
 
 export function isMessage(message: unknown): message is { type: string } {

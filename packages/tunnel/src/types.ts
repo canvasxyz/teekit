@@ -79,6 +79,12 @@ export type RAEncryptedMessage =
   | RAEncryptedWSMessage
   | RAEncryptedServerEvent
 
+// Sent by the tunnel client to trigger initialization on servers
+// where onOpen is unreliable.
+export type ControlChannelKXClientReady = {
+  type: "client_kx_ready"
+}
+
 // Sent by the tunnel server to announce its key exchange public key.
 export type ControlChannelKXAnnounce = {
   type: "server_kx"
