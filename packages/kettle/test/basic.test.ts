@@ -1,56 +1,26 @@
 import test from "ava"
-import { mkdtempSync } from "fs"
-import { tmpdir } from "os"
-import { join } from "path"
-import { startWorker } from "../server/server.js"
+import { WorkerResult } from "../server/server.js"
 import { WebSocket } from "ws"
-import {
-  findFreePort,
-  waitForPortOpen,
-  waitForPortClosed,
-} from "../server/utils.js"
+import { connectWebSocket, startKettle, stopKettle } from "./helpers.js"
 
-// Helper function to create a WebSocket connection with timeout
-async function connectWebSocket(
-  url: string,
-  timeoutMs = 5000,
-): Promise<WebSocket> {
-  const ws = new WebSocket(url)
+let shared: WorkerResult | null = null
 
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      ws.terminate()
-      reject(new Error("WebSocket connection timeout"))
-    }, timeoutMs)
+test.before(async () => {
+  shared = await startKettle()
+})
 
-    ws.on("open", () => {
-      clearTimeout(timeout)
-      resolve()
-    })
-
-    ws.on("error", (err) => {
-      clearTimeout(timeout)
-      reject(err)
-    })
-  })
-
-  return ws
-}
+test.after.always(async () => {
+  if (shared) {
+    const kettle = shared
+    shared = null
+    await stopKettle(kettle)
+  }
+})
 
 test.serial("bare fetch: GET /uptime returns uptime data", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    await kettle.stop()
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  })
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
-  await waitForPortOpen(kettle.workerPort)
   const response = await fetch(`http://localhost:${kettle.workerPort}/uptime`)
   t.is(response.status, 200)
   const data = await response.json()
@@ -60,19 +30,9 @@ test.serial("bare fetch: GET /uptime returns uptime data", async (t) => {
 })
 
 test.serial("bare fetch: POST /increment increments counter", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    await kettle.stop()
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  })
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
-  await waitForPortOpen(kettle.workerPort)
   const response1 = await fetch(
     `http://localhost:${kettle.workerPort}/increment`,
     { method: "POST" },
@@ -91,19 +51,9 @@ test.serial("bare fetch: POST /increment increments counter", async (t) => {
 })
 
 test.serial("bare fetch: POST /quote returns quote data", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    await kettle.stop()
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  })
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
-  await waitForPortOpen(kettle.workerPort)
   const testPublicKey = new Array(32).fill(0).map((_, i) => i)
   const response = await fetch(`http://localhost:${kettle.workerPort}/quote`, {
     method: "POST",
@@ -119,27 +69,8 @@ test.serial("bare fetch: POST /quote returns quote data", async (t) => {
 })
 
 test.serial("bare ws: echo message", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    const port = kettle.workerPort
-    await kettle.stop()
-    // Wait for the port to actually close, but don't block forever
-    try {
-      await waitForPortClosed(port)
-    } catch (err) {
-      // Port didn't close cleanly, force a delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-  })
-
-  await waitForPortOpen(kettle.workerPort)
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
   // Connect using helper function
   const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
@@ -170,27 +101,8 @@ test.serial("bare ws: echo message", async (t) => {
 })
 
 test.serial("bare ws: binary message echo", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    const port = kettle.workerPort
-    await kettle.stop()
-    // Wait for the port to actually close, but don't block forever
-    try {
-      await waitForPortClosed(port)
-    } catch (err) {
-      // Port didn't close cleanly, force a delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-  })
-
-  await waitForPortOpen(kettle.workerPort)
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
   const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
@@ -224,26 +136,8 @@ test.serial("bare ws: binary message echo", async (t) => {
 })
 
 test.serial("bare ws: multiple messages", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    const port = kettle.workerPort
-    await kettle.stop()
-    // Wait for the port to actually close, but don't block forever
-    try {
-      await waitForPortClosed(port)
-    } catch (err) {
-      // Port didn't close cleanly, force a delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-  })
-
-  await waitForPortOpen(kettle.workerPort)
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
   const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
@@ -285,26 +179,8 @@ test.serial("bare ws: multiple messages", async (t) => {
 })
 
 test.serial("bare ws: concurrent connections", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    const port = kettle.workerPort
-    await kettle.stop()
-    // Wait for the port to actually close, but don't block forever
-    try {
-      await waitForPortClosed(port)
-    } catch (err) {
-      // Port didn't close cleanly, force a delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-  })
-
-  await waitForPortOpen(kettle.workerPort)
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
   const ws1 = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
   const ws2 = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
@@ -355,27 +231,8 @@ test.serial("bare ws: concurrent connections", async (t) => {
 })
 
 test.serial("bare ws: close event handling", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    const port = kettle.workerPort
-    await kettle.stop()
-    // Wait for the port to actually close, but don't block forever
-    try {
-      await waitForPortClosed(port)
-    } catch (err) {
-      // Port didn't close cleanly, force a delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-  })
-
-  await waitForPortOpen(kettle.workerPort)
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
   const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 
@@ -404,27 +261,8 @@ test.serial("bare ws: close event handling", async (t) => {
 })
 
 test.serial("bare ws: large message handling", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-ws-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-  t.teardown(async () => {
-    const port = kettle.workerPort
-    await kettle.stop()
-    // Wait for the port to actually close, but don't block forever
-    try {
-      await waitForPortClosed(port)
-    } catch (err) {
-      // Port didn't close cleanly, force a delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-  })
-
-  await waitForPortOpen(kettle.workerPort)
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
 
   const ws = await connectWebSocket(`ws://localhost:${kettle.workerPort}/ws`)
 

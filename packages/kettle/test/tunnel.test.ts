@@ -1,57 +1,8 @@
 import test from "ava"
-import { mkdtempSync } from "fs"
-import { tmpdir } from "os"
-import { join } from "path"
-import { startWorker, WorkerResult } from "../server/server.js"
-import { findFreePort, waitForPortOpen } from "../server/utils.js"
+import { WorkerResult } from "../server/server.js"
 import { TunnelClient } from "@teekit/tunnel"
-import { base64 } from "@scure/base"
-import { hex, parseTdxQuote } from "@teekit/qvl"
-import { tappdV4Base64 } from "@teekit/tunnel/samples"
+import { startKettleWithTunnel, stopKettleWithTunnel } from "./helpers.js"
 
-async function startKettleTunnel() {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-tunnel-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-  })
-
-  await waitForPortOpen(kettle.workerPort)
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-
-  const origin = `http://localhost:${kettle.workerPort}`
-
-  // Use the sample quote to establish tunnel
-  const quote = base64.decode(tappdV4Base64)
-  const quoteBodyParsed = parseTdxQuote(quote).body
-
-  const tunnelClient = await TunnelClient.initialize(origin, {
-    mrtd: hex(quoteBodyParsed.mr_td),
-    report_data: hex(quoteBodyParsed.report_data),
-    customVerifyX25519Binding: () => true,
-  })
-
-  return { kettle, tunnelClient, origin }
-}
-
-async function stopKettleTunnel(
-  kettle: WorkerResult,
-  tunnelClient: TunnelClient,
-) {
-  try {
-    if (tunnelClient.ws) {
-      tunnelClient.ws.onclose = () => {}
-      tunnelClient.ws.close()
-    }
-  } catch {}
-
-  await kettle.stop()
-  await new Promise((resolve) => setTimeout(resolve, 500))
-}
-
-// Shared worker/tunnel state reused across all tests in this file
 let shared: {
   kettle: WorkerResult
   tunnelClient: TunnelClient
@@ -59,18 +10,18 @@ let shared: {
 } | null = null
 
 test.before(async () => {
-  shared = await startKettleTunnel()
+  shared = await startKettleWithTunnel()
 })
 
 test.after.always(async () => {
   if (shared) {
     const { kettle, tunnelClient } = shared
     shared = null
-    await stopKettleTunnel(kettle, tunnelClient)
+    await stopKettleWithTunnel(kettle, tunnelClient)
   }
 })
 
-test.serial("Kettle tunnel: GET /uptime", async (t) => {
+test.serial("tunnel: GET /uptime", async (t) => {
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient } = shared!
 
@@ -84,7 +35,7 @@ test.serial("Kettle tunnel: GET /uptime", async (t) => {
   t.regex(data.uptime.formatted, /\d+m \d+/)
 })
 
-test.serial("Kettle tunnel: POST /increment", async (t) => {
+test.serial("tunnel: POST /increment", async (t) => {
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient } = shared!
 
@@ -107,7 +58,7 @@ test.serial("Kettle tunnel: POST /increment", async (t) => {
   t.is(data2.counter, counter1 + 1)
 })
 
-test.serial("Kettle tunnel: WebSocket echo", async (t) => {
+test.serial("tunnel: WebSocket echo", async (t) => {
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
@@ -168,7 +119,7 @@ test.serial("Kettle tunnel: WebSocket echo", async (t) => {
   })
 })
 
-test.serial("Kettle tunnel: WebSocket binary message", async (t) => {
+test.serial("tunnel: WebSocket binary message", async (t) => {
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
