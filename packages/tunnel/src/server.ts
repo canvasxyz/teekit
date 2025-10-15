@@ -4,7 +4,11 @@ import type { WebSocketServer, WebSocket } from "ws"
 import sodium from "./crypto.js"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
-import type { createRequest, createResponse } from "node-mocks-http"
+import type {
+  createRequest,
+  createResponse,
+  RequestMethod,
+} from "node-mocks-http"
 import type { Express } from "express"
 import type { Hono } from "hono"
 import type { NodeWebSocket } from "@hono/node-ws"
@@ -122,14 +126,14 @@ export class TunnelServer {
   public runtimeData: Uint8Array | null
   public readonly wss: ServerRAMockWebSocketServer
   private readonly controlWss?: WebSocketServer // for express
-  private controlClients = new Set<any>() // for hono/workerd
+  private controlClients = new Set<WebSocket>() // for hono/workerd
 
   public x25519PublicKey: Uint8Array
   private x25519PrivateKey: Uint8Array
 
   private sockets = new Map<
     string,
-    { mockWs: ServerRAMockWebSocket; controlWs: any }
+    { mockWs: ServerRAMockWebSocket; controlWs: WebSocket }
   >()
   private symmetricKeyBySocket = new Map<any, Uint8Array>()
   private livenessBySocket = new Map<
@@ -142,9 +146,9 @@ export class TunnelServer {
   private heartbeatInterval: number
   private heartbeatTimeout: number
 
-  private readonly _getQuote: (x25519PublicKey: Uint8Array) =>
-    | Promise<QuoteData>
-    | QuoteData
+  private readonly _getQuote: (
+    x25519PublicKey: Uint8Array,
+  ) => Promise<QuoteData> | QuoteData
   private lazyInit: boolean
   private keyReady: boolean
 
@@ -156,9 +160,9 @@ export class TunnelServer {
     config?: TunnelServerConfig,
   ) {
     this.app = app
-    this._getQuote = (() => {
+    this._getQuote = () => {
       throw new Error("getQuote not set")
-    }) as any
+    }
     this.lazyInit = !!config?.deferInit
     this.keyReady = false
 
@@ -186,14 +190,13 @@ export class TunnelServer {
       this.x25519PrivateKey = new Uint8Array(32)
     }
 
-    // If this looks like a Hono app (has a fetch handler), optionally bind the
-    // control WebSocket channel using Hono's upgradeWebSocket helper when provided.
-    // Otherwise, create an HTTP server to host the control WebSocket channel.
+    // If this looks like a Hono app (has a fetch handler), bind the control
+    // WebSocket channel using Hono's upgradeWebSocket helper.
     if (isHonoApp(app)) {
-      // Attach a Workerd/Hono-compatible control channel using upgradeWebSocket
       if (!config?.upgradeWebSocket) {
         throw new Error("Hono apps must provide { upgradeWebSocket } argument")
       }
+
       try {
         app.get(
           "/__ra__",
@@ -203,54 +206,55 @@ export class TunnelServer {
             const self = this
             let wsInitialized = false
             return {
-            onOpen: (_event: any, ws: any) => {
-              // NOTE: onOpen is never called in workerd, but may be called in other environments
-              if (!wsInitialized) {
-                wsInitialized = true
-                self.#onHonoOpen(ws, env)
-              }
-            },
-            onMessage: async (event: any, ws: any) => {
-              try {
-                // WORKAROUND: onOpen is never called in workerd, so we initialize on first message
+              onOpen: (_event: any, ws: any) => {
+                // Initialize when onOpen is called, for Node.js WS environments
                 if (!wsInitialized) {
                   wsInitialized = true
                   self.#onHonoOpen(ws, env)
                 }
-                
-                let bytes: Uint8Array
-                const data = event?.data
-                if (typeof data === "string") {
-                  bytes = new TextEncoder().encode(data)
-                } else if (data instanceof Uint8Array) {
-                  bytes = data
-                } else if (data instanceof ArrayBuffer) {
-                  bytes = new Uint8Array(data)
-                } else if (ArrayBuffer.isView(data)) {
-                  const view = data as ArrayBufferView
-                  bytes = new Uint8Array(
-                    view.buffer as ArrayBuffer,
-                    view.byteOffset,
-                    view.byteLength,
-                  )
-                } else if (typeof data?.arrayBuffer === "function") {
-                  const buf = await data.arrayBuffer()
-                  bytes = new Uint8Array(buf)
-                } else {
-                  bytes = new Uint8Array(data)
+              },
+              onMessage: async (event: any, ws: any) => {
+                try {
+                  // Initialize on first message, if onOpen isn't called in non-Node environments
+                  if (!wsInitialized) {
+                    wsInitialized = true
+                    self.#onHonoOpen(ws, env)
+                  }
+
+                  // Decode incoming messages
+                  let bytes: Uint8Array
+                  const data = event?.data
+                  if (typeof data === "string") {
+                    bytes = new TextEncoder().encode(data)
+                  } else if (data instanceof Uint8Array) {
+                    bytes = data
+                  } else if (data instanceof ArrayBuffer) {
+                    bytes = new Uint8Array(data)
+                  } else if (ArrayBuffer.isView(data)) {
+                    const view = data as ArrayBufferView
+                    bytes = new Uint8Array(
+                      view.buffer as ArrayBuffer,
+                      view.byteOffset,
+                      view.byteLength,
+                    )
+                  } else if (typeof data?.arrayBuffer === "function") {
+                    const buf = await data.arrayBuffer()
+                    bytes = new Uint8Array(buf)
+                  } else {
+                    bytes = new Uint8Array(data)
+                  }
+                  self.#onHonoMessage(ws, bytes)
+                } catch (e) {
+                  console.error("Failed to process Hono WS message:", e)
                 }
-                self.#onHonoMessage(ws, bytes)
-              } catch (e) {
-                console.error("Failed to process Hono WS message:", e)
-              }
-            },
-            onClose: (_event: any, ws: any) => {
-              self.#onHonoClose(ws)
-            },
-            onError: (event: any, _ws: any) => {
-              console.error("Control channel error:", event)
-            },
-          }
+              },
+              onClose: (_event: any, ws: any) => {
+                self.#onHonoClose(ws)
+              },
+              onError: (event: any, _ws: any) => {
+                console.error("Control channel error:", event)
+              },
+            }
           }),
         )
       } catch (e) {
@@ -258,7 +262,8 @@ export class TunnelServer {
         throw e
       }
     } else {
-      // Express apps will have the http server created during initialize()
+      // Express apps will have WebSocket messages handled via an
+      // http server created during initialize()
     }
 
     this.heartbeatInterval = config?.heartbeatInterval || 30000
@@ -268,7 +273,7 @@ export class TunnelServer {
     this.wss = new ServerRAMockWebSocketServer()
 
     // Only enable Node-style heartbeat when using Node ws server
-    if (!config?.upgradeWebSocket) {
+    if (!isHonoApp(app)) {
       this.heartbeatTimer = setInterval(
         () => this.#heartbeatSweep(),
         this.heartbeatInterval,
@@ -277,8 +282,6 @@ export class TunnelServer {
         ;(this.heartbeatTimer as any).unref()
       }
     }
-
-    // http server close handler is attached when server is created
   }
 
   static async initialize(
@@ -376,7 +379,7 @@ export class TunnelServer {
 
   // ---------- Hono/Workerd control channel (no Node-only APIs) ----------
 
-  #onHonoOpen(controlWs: any, env: unknown): void {
+  #onHonoOpen(controlWs: WebSocket, env: unknown): void {
     this.controlClients.add(controlWs)
     this.envBySocket.set(controlWs, env)
 
@@ -441,7 +444,7 @@ export class TunnelServer {
     })
   }
 
-  #onHonoMessage(controlWs: any, bytes: Uint8Array): void {
+  #onHonoMessage(controlWs: WebSocket, bytes: Uint8Array): void {
     const live = this.livenessBySocket.get(controlWs)
     if (live) live.lastActivityMs = Date.now()
 
@@ -529,7 +532,7 @@ export class TunnelServer {
     }
   }
 
-  #onHonoClose(controlWs: any): void {
+  #onHonoClose(controlWs: WebSocket): void {
     this.controlClients.delete(controlWs)
     this.symmetricKeyBySocket.delete(controlWs)
     this.livenessBySocket.delete(controlWs)
@@ -624,7 +627,7 @@ export class TunnelServer {
         try {
           const data = args[0] as Uint8Array
           message = decodeCbor(data)
-        } catch (error: any) {
+        } catch (error) {
           console.error("Received invalid CBOR message")
           return true
         }
@@ -748,7 +751,7 @@ export class TunnelServer {
   }
 
   async #handleTunnelHttpRequestHono(
-    controlWs: any,
+    controlWs: WebSocket,
     tunnelReq: RAEncryptedHTTPRequest,
     app: Hono,
   ): Promise<void> {
@@ -838,7 +841,7 @@ export class TunnelServer {
       createResponse: typeof createResponse
     }
     let httpMocks: HttpMocksType
-    let EventEmitter: any
+    let EventEmitter
 
     // Dynamically import node-mocks-http and events if we're using Express
     try {
@@ -865,7 +868,7 @@ export class TunnelServer {
     })
 
     const req = httpMocks.createRequest({
-      method: tunnelReq.method as any,
+      method: tunnelReq.method as RequestMethod,
       url: tunnelReq.url,
       path: urlObj.pathname,
       headers: tunnelReq.headers,
@@ -878,7 +881,7 @@ export class TunnelServer {
         : undefined
 
     try {
-      req.unpipe = (_dest?: any) => {
+      req.unpipe = () => {
         debug("req.unpipe called")
         return req
       }
@@ -1052,7 +1055,7 @@ export class TunnelServer {
   }
 
   #encryptForSocket(
-    controlWs: any,
+    controlWs: WebSocket,
     payload: unknown,
   ): ControlChannelEncryptedMessage {
     const key = this.symmetricKeyBySocket.get(controlWs)
@@ -1072,7 +1075,7 @@ export class TunnelServer {
   }
 
   #decryptEnvelopeForSocket(
-    controlWs: any,
+    controlWs: WebSocket,
     envelope: ControlChannelEncryptedMessage,
   ): unknown {
     const key = this.symmetricKeyBySocket.get(controlWs)
@@ -1089,7 +1092,7 @@ export class TunnelServer {
   /**
    * Encrypt and send a payload.
    */
-  private sendEncrypted(controlWs: any, payload: unknown): void {
+  private sendEncrypted(controlWs: WebSocket, payload: unknown): void {
     const env = this.#encryptForSocket(controlWs, payload)
     controlWs.send(encodeCbor(env))
     const l = this.livenessBySocket.get(controlWs)
