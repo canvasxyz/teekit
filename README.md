@@ -218,8 +218,7 @@ npm run server
 
 The tunnel performs a key exchange and attestation check before
 allowing any traffic. After the handshake, all payloads are CBOR
-encoded and encrypted with the XSalsa20‑Poly1305 stream cipher
-(libsodium `crypto_secretbox`).
+encoded and encrypted with the XSalsa20‑Poly1305 stream cipher.
 
 1. Client opens a control WebSocket to the server at
    `ws(s)://<host>:<port>/__ra__`.
@@ -227,8 +226,7 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher
    a TDX/SGX attestation quote.
 3. Client verifies the quote (using `@teekit/qvl`), optionally
    enforces `mrtd`/`report_data` or a custom matcher, generates a
-   symmetric key, and sends it sealed to the server via `client_kx`
-   (libsodium `crypto_box_seal`).
+   symmetric key, and sends it sealed to the server via `client_kx`.
 4. All subsequent messages are encrypted envelopes
    `{ type: "enc", nonce, ciphertext }` carrying tunneled HTTP
    and WebSocket messages.

@@ -1,7 +1,7 @@
 import type { Server as HttpServer, IncomingMessage } from "http"
 import type { Socket } from "net"
 import type { WebSocketServer, WebSocket } from "ws"
-import sodium from "libsodium-wrappers"
+import sodium from "./crypto.js"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
 import type { createRequest, createResponse } from "node-mocks-http"
@@ -212,7 +212,6 @@ export class TunnelServer {
     getQuote: (x25519PublicKey: Uint8Array) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ): Promise<TunnelServer> {
-    await sodium.ready
     const { publicKey, privateKey } = sodium.crypto_box_keypair()
     const quote = await Promise.resolve(getQuote(publicKey))
     const server = new TunnelServer(app, quote, publicKey, privateKey, config)

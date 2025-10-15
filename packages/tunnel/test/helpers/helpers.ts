@@ -3,7 +3,6 @@ import { Context, Hono } from "hono"
 import { createNodeWebSocket } from "@hono/node-ws"
 import { serve, ServerType } from "@hono/node-server"
 import type { AddressInfo } from "node:net"
-import sodium from "libsodium-wrappers"
 
 import { TunnelClient, TunnelServer } from "@teekit/tunnel"
 import { tappdV4Base64, trusteeV5Base64, occlumSgxBase64 } from "./samples.js"
@@ -55,7 +54,6 @@ export function loadQuote({
 }
 
 export async function startExpressTunnelApp() {
-  await sodium.ready
   const app = express()
   // Provide a simple default route used by several tests
   app.get("/hello", (_req, res) => res.status(200).send("world"))
@@ -88,7 +86,6 @@ export async function startExpressTunnelApp() {
 }
 
 export async function startHonoTunnelApp() {
-  await sodium.ready
   const app = new Hono()
   // Provide a simple default route used by several tests
   app.get("/hello", (c) => c.text("world", 200))

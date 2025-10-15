@@ -1,7 +1,6 @@
 import test from "ava"
 import express from "express"
 import type { AddressInfo } from "node:net"
-import sodium from "libsodium-wrappers"
 
 import { TunnelClient, TunnelServer } from "@teekit/tunnel"
 import { hex, parseTdxQuote } from "@teekit/qvl"
@@ -9,7 +8,6 @@ import { hex, parseTdxQuote } from "@teekit/qvl"
 import { loadQuote } from "./helpers/helpers.js"
 
 async function startTunnelFetchApp() {
-  await sodium.ready
   const app = express()
 
   // Basic endpoints

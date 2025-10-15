@@ -5,7 +5,7 @@ declare const self: ServiceWorkerGlobalScope
 // Minimal encrypted tunnel client inside a Service Worker.
 // Reads target origin from the ServiceWorker script URL query: ?target=...
 
-import sodium from "libsodium-wrappers"
+import sodium from "./crypto.js"
 import { encode, decode } from "cbor-x"
 
 type RAEncryptedHTTPRequest = {
@@ -60,8 +60,6 @@ function generateRequestId(): string {
 async function ensureConnection(): Promise<void> {
   if (ws && ws.readyState === WebSocket.OPEN && symmetricKey) return
   if (connectionPromise) return connectionPromise
-
-  await sodium.ready
 
   connectionPromise = new Promise<void>((resolve, reject) => {
     const url = new URL(TARGET_ORIGIN)

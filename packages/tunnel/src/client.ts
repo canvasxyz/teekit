@@ -1,4 +1,4 @@
-import sodium from "libsodium-wrappers"
+import sodium from "./crypto.js"
 import {
   hex,
   parseSgxQuote,
@@ -102,7 +102,6 @@ export class TunnelClient {
     origin: string,
     config: TunnelClientConfig,
   ): Promise<TunnelClient> {
-    await sodium.ready
     return new TunnelClient(origin, config)
   }
 

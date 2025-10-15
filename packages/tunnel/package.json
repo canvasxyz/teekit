@@ -18,9 +18,11 @@
     "./register": "./lib/registerServiceWorker.js"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.0.1",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^1.8.0",
     "@teekit/qvl": "0.0.1",
     "cbor-x": "^1.6.0",
-    "libsodium-wrappers": "^0.7.15",
     "node-mocks-http": "^1.17.2",
     "uint8array-extras": "^1.5.0",
     "ws": "^8.18.3"
@@ -29,7 +31,6 @@
     "@hono/node-server": "^1.19.5",
     "@hono/node-ws": "^1.2.0",
     "@types/express": "^5.0.3",
-    "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "^24.3.1",
     "@types/ws": "^8.18.1",
     "ava": "^6.4.1",

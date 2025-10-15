@@ -2,7 +2,7 @@ import test from "ava"
 import express, { Request, Response } from "express"
 import type { AddressInfo } from "node:net"
 import { WebSocket } from "ws"
-import sodium from "libsodium-wrappers"
+import sodium from "../src/crypto.js"
 import { encode, decode } from "cbor-x"
 
 import { TunnelClient, TunnelServer, encryptedOnly } from "@teekit/tunnel"
@@ -71,7 +71,6 @@ test.serial(
 test.serial(
   "Server drops plaintext requests, handles encrypted requests",
   async (t: any) => {
-    await sodium.ready
     const app = express()
     app.get("/hello", (_req: Request, res: Response) => {
       res.status(200).send("world")
@@ -116,7 +115,8 @@ test.serial(
 
       // Complete handshake
       const serverPub: Uint8Array = serverKx.x25519PublicKey
-      const symmetricKey = sodium.crypto_secretbox_keygen()
+      const symmetricKey = new Uint8Array(32)
+      crypto.getRandomValues(symmetricKey)
       const sealed = sodium.crypto_box_seal(symmetricKey, serverPub)
       const clientKx = {
         type: "client_kx",
@@ -142,7 +142,8 @@ test.serial(
         url: "/hello",
         headers: {},
       }
-      const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES)
+      const nonce = new Uint8Array(24)
+      crypto.getRandomValues(nonce)
       const plaintext = encode(httpReq)
       const ciphertext = sodium.crypto_secretbox_easy(
         plaintext,
