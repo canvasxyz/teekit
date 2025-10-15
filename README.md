@@ -233,13 +233,10 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher.
 
 ## Limitations
 
-- We require that all WebSocket connections to the HTTP server go through the
-  encrypted channel. Mixing encrypted and unencrypted WebSockets is not supported.
-- One keypair is generated per server. No key rotation (yet) or support for load
-  balancing across TEEs.
+- One fixed keypair per server. No key rotation (yet).
 - HTTP request/response bodies are buffered end-to-end, not streamed.
-- HTTP request bodies: `string`, `Uint8Array`, `ArrayBuffer`, `ReadableStream` (no `FormData`).
-- WebSocket paylods: `Blob` is not supported, convert to `ArrayBuffer` first.
+- HTTP request bodies supported: `string`, `Uint8Array`, `ArrayBuffer`, `ReadableStream` (no `FormData`).
+- WebSocket bodies: `Blob` is not supported, convert to `ArrayBuffer`.
 - The client request timeout is 30 seconds, and this is not configurable at this time.
 - WebSocket messages queued before `open` are flushed once the socket opens.
 

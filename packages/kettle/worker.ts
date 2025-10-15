@@ -5,9 +5,6 @@ import { upgradeWebSocket } from "hono/cloudflare-workers"
 import { WSEvents } from "hono/ws"
 import { TunnelServer } from "@teekit/tunnel"
 
-// TODO: TunnelServer integration commented out until workerd WebSocket adapter is implemented
-// import { TunnelServer } from "@teekit/tunnel"
-
 // Workerd types
 interface Fetcher {
   fetch(request: Request | string, init?: RequestInit): Promise<Response>
@@ -88,33 +85,9 @@ app.post("/increment", async (c) => {
   return c.json({ counter })
 })
 
-// Simple test route to verify routing works
-app.get("/__ra__test", (c) => {
-  console.log("[kettle] __ra__test route hit")
-  return c.json({ status: "ok", message: "ra test route works" })
-})
-
-// Minimal WebSocket test route to debug
-app.get(
-  "/__ra__simple",
-  upgradeWebSocket(() => ({
-    onOpen() {
-      console.log("[kettle] __ra__simple WebSocket opened!")
-    },
-    onMessage(event, ws) {
-      console.log("[kettle] __ra__simple received message")
-      ws.send("echo: " + event.data)
-    },
-    onClose() {
-      console.log("[kettle] __ra__simple WebSocket closed")
-    },
-  })),
-)
-
 // Readiness/liveness probe
 app.get("/healthz", async (c) => {
   try {
-    // If DB bindings exist, verify we can reach the DB; otherwise still report healthy
     if (c.env.DB_URL && c.env.DB_TOKEN) {
       const db = getDb(c.env)
       await db.execute("SELECT 1")
@@ -135,7 +108,7 @@ app.post("/quote", async (c) => {
     }
     const publicKey = new Uint8Array(publicKeyArray)
 
-    // Prefer QUOTE binding when available (workerd with Node privileges)
+    // Prefer QUOTE binding when available
     if (c.env.QUOTE && typeof c.env.QUOTE.getQuote === "function") {
       const quoteData = await c.env.QUOTE.getQuote(publicKey)
       const response = {
@@ -154,7 +127,7 @@ app.post("/quote", async (c) => {
       return c.json(response)
     }
 
-    // Fallback: sample quote for test environments without QUOTE binding
+    // Fallback: sample quote for test environments
     const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
     const buf = Uint8Array.from(atob(tappdV4Base64), (c) => c.charCodeAt(0))
     return c.json({ quote: Array.from(buf) })
@@ -164,7 +137,7 @@ app.post("/quote", async (c) => {
   }
 })
 
-// --- libsql helper and routes (enabled when DB_URL/DB_TOKEN bindings exist) ---
+// libsql helper and routes
 let cachedClient: LibsqlClient | null = null
 function getDb(env: Env): LibsqlClient {
   if (!env.DB_URL || !env.DB_TOKEN) {
@@ -315,7 +288,7 @@ app.get("/db/get", async (c) => {
   }
 })
 
-// Echo the message back to the client; normalize binary data to Uint8Array
+// bare websocket echo handler
 app.get(
   "/ws",
   upgradeWebSocket(
@@ -355,9 +328,6 @@ app.get(
     }),
   ),
 )
-
-// TODO: TunnelServer WebSocket integration
-// The TunnelServer WebSocket/chat will need to be adapted for workerd's WebSocket API
 
 // TODO: Static file serving
 // Note: In workerd, static files should be served via Assets binding configured in workerd.config.capnp
