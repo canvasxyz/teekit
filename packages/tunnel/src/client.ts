@@ -35,6 +35,10 @@ import {
 import { generateRequestId, Awaitable } from "./utils/client.js"
 import { ClientRAMockWebSocket } from "./ClientRAWebSocket.js"
 
+// Reuse encoder/decoder instances to reduce allocations
+const textEncoder = new TextEncoder()
+const textDecoder = new TextDecoder()
+
 export type TunnelClientConfig = {
   mrtd?: string
   report_data?: string
@@ -202,18 +206,25 @@ export class TunnelClient {
         let message
         try {
           let bytes: Uint8Array
-          if (typeof event.data === "string") {
-            // Handle data encoded as string
-            bytes = new TextEncoder().encode(event.data)
-          } else if (event.data instanceof ArrayBuffer) {
-            // Handle all ArrayBuffers as Uint8Array
-            bytes = new Uint8Array(event.data)
-          } else if (typeof event.data?.arrayBuffer === "function") {
-            // Handle Blob-like payloads from browser WebSockets
-            const buf = await event.data.arrayBuffer()
+          const data = event.data
+          if (typeof data === "string") {
+            bytes = textEncoder.encode(data)
+          } else if (data instanceof Uint8Array) {
+            bytes = data
+          } else if (data instanceof ArrayBuffer) {
+            bytes = new Uint8Array(data)
+          } else if (ArrayBuffer.isView(data)) {
+            const view = data as ArrayBufferView
+            bytes = new Uint8Array(
+              view.buffer as ArrayBuffer,
+              view.byteOffset,
+              view.byteLength,
+            )
+          } else if (typeof data?.arrayBuffer === "function") {
+            const buf = await data.arrayBuffer()
             bytes = new Uint8Array(buf)
           } else {
-            bytes = new Uint8Array(event.data)
+            bytes = new Uint8Array(data)
           }
           message = decodeCbor(bytes)
         } catch (error) {
@@ -567,9 +578,9 @@ export class TunnelClient {
       if (typeof requestBody === "string") {
         body = requestBody
       } else if (requestBody instanceof Uint8Array) {
-        body = new TextDecoder().decode(requestBody)
+        body = textDecoder.decode(requestBody)
       } else if (requestBody instanceof ArrayBuffer) {
-        body = new TextDecoder().decode(new Uint8Array(requestBody))
+        body = textDecoder.decode(new Uint8Array(requestBody))
       } else if (
         requestBody !== null &&
         requestBody !== undefined &&
@@ -578,13 +589,13 @@ export class TunnelClient {
       ) {
         // Blob, FormData (stringify), or ReadableStream with arrayBuffer
         const ab = await requestBody.arrayBuffer()
-        body = new TextDecoder().decode(new Uint8Array(ab))
+        body = textDecoder.decode(new Uint8Array(ab))
       } else if (
         typeof globalThis.ReadableStream !== "undefined" &&
         requestBody instanceof globalThis.ReadableStream
       ) {
         // ReadableStream
-        const reader = (requestBody as any).getReader()
+        const reader = requestBody.getReader()
         const chunks: Uint8Array[] = []
         while (true) {
           const { value, done } = await reader.read()
@@ -598,7 +609,7 @@ export class TunnelClient {
           merged.set(c, offset)
           offset += c.length
         }
-        body = new TextDecoder().decode(merged)
+        body = textDecoder.decode(merged)
       } else if (requestBody !== undefined && requestBody !== null) {
         throw new Error(
           "request body must be a string, ArrayBuffer, or ReadableStream",

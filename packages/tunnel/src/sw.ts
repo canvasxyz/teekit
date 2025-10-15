@@ -50,6 +50,9 @@ const pendingRequests = new Map<
   { resolve: (response: Response) => void; reject: (error: Error) => void }
 >()
 
+// Reuse TextDecoder instance to avoid repeated allocations
+const textDecoder = new TextDecoder()
+
 function generateRequestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
@@ -229,7 +232,7 @@ async function tunnelFetch(request: Request): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     const ab = await request.arrayBuffer()
     if (ab && ab.byteLength > 0) {
-      body = new TextDecoder().decode(new Uint8Array(ab))
+      body = textDecoder.decode(new Uint8Array(ab))
     }
   }
 
