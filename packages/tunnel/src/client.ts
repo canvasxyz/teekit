@@ -451,7 +451,7 @@ export class TunnelClient {
       response.status === 204
         ? null
         : response.body instanceof Uint8Array
-        ? Buffer.from(response.body)
+        ? (response.body as BodyInit)
         : response.body,
       {
         status: response.status,
