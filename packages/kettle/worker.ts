@@ -3,6 +3,7 @@ import { cors } from "hono/cors"
 import { createClient, type Client as LibsqlClient } from "@libsql/client"
 import { upgradeWebSocket } from "hono/cloudflare-workers"
 import { WSEvents } from "hono/ws"
+import { TunnelServer } from "@teekit/tunnel"
 
 // TODO: TunnelServer integration commented out until workerd WebSocket adapter is implemented
 // import { TunnelServer } from "@teekit/tunnel"
@@ -34,6 +35,30 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use("/*", cors())
 
+// Attach TunnelServer control channel at bootstrap without generating
+// randomness; keys/quote are deferred until first WS open.
+const { wss } = await TunnelServer.initialize(
+  app as any,
+  async () => {
+    const { tappdV4Base64 } = await import("./shared/samples.js")
+    const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
+    return { quote: buf }
+  },
+  { upgradeWebSocket, deferInit: true },
+)
+
+// Minimal echo behavior similar to demo: greet and echo messages
+wss.on("connection", (ws: any) => {
+  try {
+    ws.send("hello")
+  } catch {}
+  ws.on("message", (data: any) => {
+    try {
+      ws.send(data as any)
+    } catch {}
+  })
+})
+
 // let messages: Message[] = []
 // let totalMessageCount = 0
 // const MAX_MESSAGES = 30
@@ -62,6 +87,29 @@ app.post("/increment", async (c) => {
   counter += 1
   return c.json({ counter })
 })
+
+// Simple test route to verify routing works
+app.get("/__ra__test", (c) => {
+  console.log("[kettle] __ra__test route hit")
+  return c.json({ status: "ok", message: "ra test route works" })
+})
+
+// Minimal WebSocket test route to debug
+app.get(
+  "/__ra__simple",
+  upgradeWebSocket(() => ({
+    onOpen() {
+      console.log("[kettle] __ra__simple WebSocket opened!")
+    },
+    onMessage(event, ws) {
+      console.log("[kettle] __ra__simple received message")
+      ws.send("echo: " + event.data)
+    },
+    onClose() {
+      console.log("[kettle] __ra__simple WebSocket closed")
+    },
+  })),
+)
 
 // Readiness/liveness probe
 app.get("/healthz", async (c) => {
@@ -270,46 +318,40 @@ app.get("/db/get", async (c) => {
 // Echo the message back to the client; normalize binary data to Uint8Array
 app.get(
   "/ws",
-  upgradeWebSocket(() => {
-    return {
-      async onMessage(event, ws) {
-        try {
-          if (event.data instanceof Blob) {
-            // Handle Blob data asynchronously - properly await the operation
-            const buf = await event.data.arrayBuffer()
-            ws.send(new Uint8Array(buf))
-          } else if (event.data instanceof ArrayBuffer) {
-            // Convert ArrayBuffer to Uint8Array for consistent handling
-            ws.send(new Uint8Array(event.data))
-          } else if (event.data instanceof Uint8Array) {
-            // Send Uint8Array directly
-            ws.send(event.data)
-          } else if (event.data instanceof SharedArrayBuffer) {
-            // Clone SharedArrayBuffer to avoid cross-context issues
-            const src = new Uint8Array(event.data)
-            const clone = new Uint8Array(src.length)
-            clone.set(src)
-            ws.send(clone)
-          } else {
-            ws.send(String(event.data))
-          }
-        } catch (err) {
-          console.error("[kettle] Error echoing message:", err)
+  upgradeWebSocket((): WSEvents => ({
+    async onMessage(event, ws) {
+      try {
+        if (event.data instanceof Blob) {
+          const buf = await event.data.arrayBuffer()
+          ws.send(new Uint8Array(buf))
+        } else if (event.data instanceof ArrayBuffer) {
+          ws.send(new Uint8Array(event.data))
+        } else if (event.data instanceof Uint8Array) {
+          ws.send(event.data)
+        } else if (event.data instanceof SharedArrayBuffer) {
+          const src = new Uint8Array(event.data)
+          const clone = new Uint8Array(src.length)
+          clone.set(src)
+          ws.send(clone)
+        } else {
+          ws.send(String(event.data))
         }
-      },
-      onOpen(_event, _ws) {
-        console.log("[kettle] WebSocket connection opened")
-      },
-      onClose(event, _ws) {
-        console.log(
-          `[kettle] WebSocket connection closed - code: ${event.code}, reason: ${event.reason}`,
-        )
-      },
-      onError(event, _ws) {
-        console.error("[kettle] WebSocket error:", event)
-      },
-    } as WSEvents
-  }),
+      } catch (err) {
+        console.error("[kettle] Error echoing message:", err)
+      }
+    },
+    onOpen() {
+      console.log("[kettle] WebSocket connection opened")
+    },
+    onClose(event) {
+      console.log(
+        `[kettle] WebSocket connection closed - code: ${event.code}, reason: ${event.reason}`,
+      )
+    },
+    onError(event) {
+      console.error("[kettle] WebSocket error:", event)
+    },
+  })),
 )
 
 // TODO: TunnelServer WebSocket integration

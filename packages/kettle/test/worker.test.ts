@@ -2,6 +2,7 @@ import test from "ava"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
+import { WebSocket } from "ws"
 import { startWorker } from "../server/server.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 
@@ -162,3 +163,41 @@ test.serial("Workerd server: POST /quote returns quote data", async (t) => {
 
 //   ws.close()
 // })
+
+test.serial(
+  "Workerd server: RA control channel WebSocket opens control channel",
+  async (t) => {
+    const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
+    const dbPath = join(baseDir, "app.sqlite")
+    const kettle = await startWorker({
+      dbPath,
+      sqldPort: await findFreePort(),
+      workerPort: await findFreePort(),
+    })
+    t.teardown(async () => {
+      await kettle.stop()
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    })
+
+    await waitForPortOpen(kettle.workerPort)
+
+    const ws = new WebSocket(`ws://localhost:${kettle.workerPort}/__ra__`)
+
+    const connected = await new Promise<boolean>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error("WebSocket connection timeout")),
+        5000,
+      )
+      ws.on("open", () => {
+        clearTimeout(timeout)
+        resolve(true)
+      })
+      ws.on("error", (err) => {
+        clearTimeout(timeout)
+        reject(err)
+      })
+    })
+    t.true(connected)
+    ws.close()
+  },
+)

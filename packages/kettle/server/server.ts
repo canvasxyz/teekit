@@ -11,6 +11,7 @@ import {
   shutdown,
   waitForPortOpen,
 } from "./utils.js"
+import { build } from "esbuild"
 
 export interface WorkerConfig {
   dbPath: string
@@ -189,6 +190,41 @@ const config :Workerd.Config = (
 );
 `
   writeFileSync(tmpConfigPath, configText, "utf-8")
+
+  // Always (re)build worker bundle for tests/local runs to pick up changes
+  try {
+    const distDir = join(process.cwd(), "dist")
+    console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
+    await build({
+      entryPoints: [join(process.cwd(), "worker.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(distDir, "worker.js"),
+      external: [
+        // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
+        "path",
+        "fs",
+        "stream",
+        "buffer",
+        "events",
+        "http",
+        "ws",
+        "node-mocks-http",
+      ],
+    })
+    await build({
+      entryPoints: [join(process.cwd(), "bindings", "quote.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      outfile: join(distDir, "bindings", "quote.js"),
+      external: ["node:*"],
+    })
+  } catch (e) {
+    console.error("[kettle] Failed to build worker bundle:", e)
+    throw e
+  }
 
   const workerdBin = resolveWorkerdBinary()
   const workerd = spawn(

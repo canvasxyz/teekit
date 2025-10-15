@@ -50,6 +50,10 @@ type TunnelServerConfig = {
   upgradeWebSocket?:
     | NodeWebSocket["upgradeWebSocket"]
     | UpgradeWebSocket<any, any, any>
+
+  // When true, avoid randomness and quote fetching during initialize().
+  // Keys and quote will be generated lazily on first control channel open.
+  deferInit?: boolean
 }
 
 /**
@@ -113,15 +117,15 @@ type TunnelServerConfig = {
  */
 export class TunnelServer {
   public readonly server?: HttpServer
-  public readonly quote: Uint8Array
-  public readonly verifierData: VerifierData | null
-  public readonly runtimeData: Uint8Array | null
+  public quote: Uint8Array
+  public verifierData: VerifierData | null
+  public runtimeData: Uint8Array | null
   public readonly wss: ServerRAMockWebSocketServer
   private readonly controlWss?: WebSocketServer // for express
   private controlClients = new Set<any>() // for hono/workerd
 
-  public readonly x25519PublicKey: Uint8Array
-  private readonly x25519PrivateKey: Uint8Array
+  public x25519PublicKey: Uint8Array
+  private x25519PrivateKey: Uint8Array
 
   private sockets = new Map<
     string,
@@ -138,29 +142,49 @@ export class TunnelServer {
   private heartbeatInterval: number
   private heartbeatTimeout: number
 
+  private readonly _getQuote: (x25519PublicKey: Uint8Array) =>
+    | Promise<QuoteData>
+    | QuoteData
+  private lazyInit: boolean
+  private keyReady: boolean
+
   private constructor(
     private app: TunnelApp,
-    quoteData: QuoteData,
-    publicKey: Uint8Array,
-    privateKey: Uint8Array,
+    quoteData: QuoteData | null,
+    publicKey: Uint8Array | null,
+    privateKey: Uint8Array | null,
     config?: TunnelServerConfig,
   ) {
     this.app = app
-    this.quote = quoteData.quote
-    this.verifierData = quoteData.verifier_data ?? null
-    this.runtimeData = quoteData.runtime_data ?? null
+    this._getQuote = (() => {
+      throw new Error("getQuote not set")
+    }) as any
+    this.lazyInit = !!config?.deferInit
+    this.keyReady = false
 
-    if (
-      typeof this.runtimeData === "string" ||
-      Object.values(this.verifierData ?? []).some(
-        (value) => typeof value === "string",
-      )
-    ) {
-      throw new Error("quoteData fields must be Uint8Array")
+    if (quoteData && publicKey && privateKey) {
+      this.quote = quoteData.quote
+      this.verifierData = quoteData.verifier_data ?? null
+      this.runtimeData = quoteData.runtime_data ?? null
+      if (
+        typeof this.runtimeData === "string" ||
+        Object.values(this.verifierData ?? []).some(
+          (value) => typeof value === "string",
+        )
+      ) {
+        throw new Error("quoteData fields must be Uint8Array")
+      }
+      this.x25519PublicKey = publicKey
+      this.x25519PrivateKey = privateKey
+      this.keyReady = true
+    } else {
+      // Placeholders until first control channel open when deferInit=true
+      this.quote = new Uint8Array(0)
+      this.verifierData = null
+      this.runtimeData = null
+      this.x25519PublicKey = new Uint8Array(32)
+      this.x25519PrivateKey = new Uint8Array(32)
     }
-
-    this.x25519PublicKey = publicKey
-    this.x25519PrivateKey = privateKey
 
     // If this looks like a Hono app (has a fetch handler), optionally bind the
     // control WebSocket channel using Hono's upgradeWebSocket helper when provided.
@@ -173,12 +197,27 @@ export class TunnelServer {
       try {
         app.get(
           "/__ra__",
-          config.upgradeWebSocket((c) => ({
+          config.upgradeWebSocket((c) => {
+            // Capture env outside the handlers since it's available in the upgrade context
+            const env = c.env as unknown
+            const self = this
+            let wsInitialized = false
+            return {
             onOpen: (_event: any, ws: any) => {
-              this.#onHonoOpen(ws, c.env as unknown)
+              // NOTE: onOpen is never called in workerd, but may be called in other environments
+              if (!wsInitialized) {
+                wsInitialized = true
+                self.#onHonoOpen(ws, env)
+              }
             },
             onMessage: async (event: any, ws: any) => {
               try {
+                // WORKAROUND: onOpen is never called in workerd, so we initialize on first message
+                if (!wsInitialized) {
+                  wsInitialized = true
+                  self.#onHonoOpen(ws, env)
+                }
+                
                 let bytes: Uint8Array
                 const data = event?.data
                 if (typeof data === "string") {
@@ -200,18 +239,19 @@ export class TunnelServer {
                 } else {
                   bytes = new Uint8Array(data)
                 }
-                this.#onHonoMessage(ws, bytes)
+                self.#onHonoMessage(ws, bytes)
               } catch (e) {
                 console.error("Failed to process Hono WS message:", e)
               }
             },
             onClose: (_event: any, ws: any) => {
-              this.#onHonoClose(ws)
+              self.#onHonoClose(ws)
             },
             onError: (event: any, _ws: any) => {
               console.error("Control channel error:", event)
             },
-          })),
+          }
+          }),
         )
       } catch (e) {
         console.error("Failed to attach Hono upgradeWebSocket control channel")
@@ -246,9 +286,17 @@ export class TunnelServer {
     getQuote: (x25519PublicKey: Uint8Array) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ): Promise<TunnelServer> {
-    const { publicKey, privateKey } = sodium.crypto_box_keypair()
-    const quote = await Promise.resolve(getQuote(publicKey))
-    const server = new TunnelServer(app, quote, publicKey, privateKey, config)
+    let server: TunnelServer
+    if (config?.deferInit) {
+      // Avoid randomness/quote fetching at global scope (e.g., workerd)
+      server = new TunnelServer(app, null, null, null, config)
+      ;(server as any)._getQuote = getQuote
+    } else {
+      const { publicKey, privateKey } = sodium.crypto_box_keypair()
+      const quote = await Promise.resolve(getQuote(publicKey))
+      server = new TunnelServer(app, quote, publicKey, privateKey, config)
+      ;(server as any)._getQuote = getQuote
+    }
 
     // Setup http and WebSocketServer for Express apps (requires dynamic import)
     if (!config?.upgradeWebSocket) {
@@ -338,19 +386,64 @@ export class TunnelServer {
       lastActivityMs: Date.now(),
     })
 
-    // Announce server key-exchange public key to the client
-    try {
-      const serverKxMessage: ControlChannelKXAnnounce = {
-        type: "server_kx",
-        x25519PublicKey: this.x25519PublicKey,
-        quote: this.quote,
-        runtime_data: this.runtimeData ? this.runtimeData : null,
-        verifier_data: this.verifierData ? this.verifierData : null,
+    // Perform lazy initialization and send server_kx asynchronously
+    // to avoid blocking the WebSocket upgrade in workerd
+    const sendServerKx = async () => {
+      // Perform lazy initialization (keygen + quote) on first connection if needed
+      if (this.lazyInit && !this.keyReady) {
+        try {
+          const kp = sodium.crypto_box_keypair()
+          this.x25519PublicKey = kp.publicKey
+          this.x25519PrivateKey = kp.privateKey
+          const result = this._getQuote(this.x25519PublicKey)
+          // MUST await the quote before sending server_kx
+          const qd = await Promise.resolve(result)
+          this.quote = qd.quote
+          this.verifierData = qd.verifier_data ?? null
+          this.runtimeData = qd.runtime_data ?? null
+          this.keyReady = true
+        } catch (e) {
+          console.error("Lazy keygen or quote fetch failed:", e)
+          // Close connection on init failure
+          try {
+            controlWs.close(1011, "Initialization failed")
+          } catch {}
+          return
+        }
       }
-      controlWs.send(encodeCbor(serverKxMessage))
-    } catch (e) {
-      console.error("Failed to send server_kx message:", e)
+
+      // Announce server key-exchange public key to the client
+      try {
+        // Send a preamble message (optional, for debugging)
+        try {
+          controlWs.send("server_kx_ready")
+        } catch {}
+        
+        const serverKxMessage: ControlChannelKXAnnounce = {
+          type: "server_kx",
+          x25519PublicKey: this.x25519PublicKey,
+          quote: this.quote,
+          runtime_data: this.runtimeData ? this.runtimeData : null,
+          verifier_data: this.verifierData ? this.verifierData : null,
+        }
+        const bytes = encodeCbor(serverKxMessage)
+        const buf = bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        )
+        controlWs.send(buf)
+      } catch (e) {
+        console.error("Failed to send server_kx message:", e)
+      }
     }
+
+    // Run async initialization without blocking the onOpen callback
+    sendServerKx().catch((e) => {
+      console.error("sendServerKx failed:", e)
+      try {
+        controlWs.close(1011, "Initialization failed")
+      } catch {}
+    })
   }
 
   #onHonoMessage(controlWs: any, bytes: Uint8Array): void {
@@ -377,7 +470,7 @@ export class TunnelServer {
           )
           this.symmetricKeyBySocket.set(controlWs, opened)
         } else {
-          console.warn("client_kx received after key already set; ignoring")
+          debug("client_kx received after key already set; ignoring")
         }
       } catch (e) {
         console.error("Failed to process client_kx:", e)
@@ -385,15 +478,14 @@ export class TunnelServer {
       return
     }
 
-    // If handshake not complete yet, ignore any other messages
+    // If handshake not complete yet, ignore any other messages (client sends "hello" to trigger init)
     if (!this.symmetricKeyBySocket.has(controlWs)) {
-      console.warn("Dropping message before handshake completion")
       return
     }
 
     // Require encryption post-handshake
     if (!isControlChannelEncryptedMessage(message)) {
-      console.warn("Dropping non-encrypted message post-handshake")
+      debug("Dropping non-encrypted message post-handshake")
       return
     }
 

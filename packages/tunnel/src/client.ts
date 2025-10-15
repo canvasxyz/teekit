@@ -127,6 +127,13 @@ export class TunnelClient {
       this.ws.binaryType = "arraybuffer"
 
       this.ws.onopen = () => {
+        // WORKAROUND: workerd doesn't call onOpen handlers, so we need to trigger
+        // the server's onMessage handler by sending a hello message
+        try {
+          this.ws!.send("hello")
+        } catch (e) {
+          console.error("Failed to send hello:", e)
+        }
         // Wait for server_kx to complete handshake before resolving
       }
 
@@ -228,6 +235,7 @@ export class TunnelClient {
           message = decodeCbor(bytes)
         } catch (error) {
           console.error("Error parsing WebSocket message:", error)
+          return
         }
 
         if (isControlChannelKXAnnounce(message)) {
