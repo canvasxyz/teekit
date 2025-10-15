@@ -7,7 +7,7 @@ import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { TunnelClient } from "@teekit/tunnel"
 import { base64 } from "@scure/base"
 import { hex, parseTdxQuote } from "@teekit/qvl"
-import { tappdV4Base64 } from "./samples.js"
+import { tappdV4Base64 } from "@teekit/tunnel/samples"
 
 async function startKettleTunnel() {
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-tunnel-test-"))

@@ -17,7 +17,7 @@ import {
   tappdV4Base64,
   trusteeV5Base64,
   occlumSgxBase64,
-} from "../shared/samples.js"
+} from "@teekit/tunnel/samples"
 
 export const baseUrl =
   document.location.hostname === "localhost"

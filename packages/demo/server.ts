@@ -28,7 +28,7 @@ async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
       console.log(
         "[teekit-demo] TDX config.json not found, serving sample quote",
       )
-      const { tappdV4Base64 } = await import("./shared/samples.js")
+      const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
       resolve({
         quote: base64.decode(tappdV4Base64),
       })

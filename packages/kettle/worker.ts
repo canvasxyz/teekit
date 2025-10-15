@@ -40,7 +40,7 @@ app.use("/*", cors())
 const { wss } = await TunnelServer.initialize(
   app as any,
   async () => {
-    const { tappdV4Base64 } = await import("./shared/samples.js")
+    const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
     const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
     return { quote: buf }
   },
@@ -155,7 +155,7 @@ app.post("/quote", async (c) => {
     }
 
     // Fallback: sample quote for test environments without QUOTE binding
-    const { tappdV4Base64 } = await import("./shared/samples.js")
+    const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
     const buf = Uint8Array.from(atob(tappdV4Base64), (c) => c.charCodeAt(0))
     return c.json({ quote: Array.from(buf) })
   } catch (error) {
@@ -318,40 +318,42 @@ app.get("/db/get", async (c) => {
 // Echo the message back to the client; normalize binary data to Uint8Array
 app.get(
   "/ws",
-  upgradeWebSocket((): WSEvents => ({
-    async onMessage(event, ws) {
-      try {
-        if (event.data instanceof Blob) {
-          const buf = await event.data.arrayBuffer()
-          ws.send(new Uint8Array(buf))
-        } else if (event.data instanceof ArrayBuffer) {
-          ws.send(new Uint8Array(event.data))
-        } else if (event.data instanceof Uint8Array) {
-          ws.send(event.data)
-        } else if (event.data instanceof SharedArrayBuffer) {
-          const src = new Uint8Array(event.data)
-          const clone = new Uint8Array(src.length)
-          clone.set(src)
-          ws.send(clone)
-        } else {
-          ws.send(String(event.data))
+  upgradeWebSocket(
+    (): WSEvents => ({
+      async onMessage(event, ws) {
+        try {
+          if (event.data instanceof Blob) {
+            const buf = await event.data.arrayBuffer()
+            ws.send(new Uint8Array(buf))
+          } else if (event.data instanceof ArrayBuffer) {
+            ws.send(new Uint8Array(event.data))
+          } else if (event.data instanceof Uint8Array) {
+            ws.send(event.data)
+          } else if (event.data instanceof SharedArrayBuffer) {
+            const src = new Uint8Array(event.data)
+            const clone = new Uint8Array(src.length)
+            clone.set(src)
+            ws.send(clone)
+          } else {
+            ws.send(String(event.data))
+          }
+        } catch (err) {
+          console.error("[kettle] Error echoing message:", err)
         }
-      } catch (err) {
-        console.error("[kettle] Error echoing message:", err)
-      }
-    },
-    onOpen() {
-      console.log("[kettle] WebSocket connection opened")
-    },
-    onClose(event) {
-      console.log(
-        `[kettle] WebSocket connection closed - code: ${event.code}, reason: ${event.reason}`,
-      )
-    },
-    onError(event) {
-      console.error("[kettle] WebSocket error:", event)
-    },
-  })),
+      },
+      onOpen() {
+        console.log("[kettle] WebSocket connection opened")
+      },
+      onClose(event) {
+        console.log(
+          `[kettle] WebSocket connection closed - code: ${event.code}, reason: ${event.reason}`,
+        )
+      },
+      onError(event) {
+        console.error("[kettle] WebSocket error:", event)
+      },
+    }),
+  ),
 )
 
 // TODO: TunnelServer WebSocket integration

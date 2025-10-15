@@ -15,7 +15,8 @@
   "exports": {
     ".": "./lib/index.js",
     "./sw": "./lib/swMiddleware.js",
-    "./register": "./lib/registerServiceWorker.js"
+    "./register": "./lib/registerServiceWorker.js",
+    "./samples": "./lib/samples.js"
   },
   "dependencies": {
     "@noble/ciphers": "^2.0.1",

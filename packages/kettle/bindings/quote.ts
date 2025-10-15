@@ -33,7 +33,7 @@ export class QuoteBinding {
       // If config.json isn't set up, return a sample quote
       if (!fs.existsSync("config.json")) {
         console.log("[kettle] TDX config.json not found, serving sample quote")
-        const { tappdV4Base64 } = await import("../shared/samples.js")
+        const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
         resolve({
           quote: base64.decode(tappdV4Base64),
         })
