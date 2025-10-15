@@ -82,16 +82,16 @@ export type RAEncryptedMessage =
 // Sent by the tunnel server to announce its key exchange public key.
 export type ControlChannelKXAnnounce = {
   type: "server_kx"
-  x25519PublicKey: string // base64
-  quote: string // base64
-  runtime_data: string | null // base64
-  verifier_data: string | null // cbor base64
+  x25519PublicKey: Uint8Array
+  quote: Uint8Array
+  runtime_data: Uint8Array | null
+  verifier_data: VerifierData | null
 }
 
 // Sent by the client to deliver a symmetric key sealed to the server pubkey.
 export type ControlChannelKXConfirm = {
   type: "client_kx"
-  sealedSymmetricKey: string // base64
+  sealedSymmetricKey: Uint8Array
 }
 
 // Encrypted envelope carrying any tunneled payload after handshake.

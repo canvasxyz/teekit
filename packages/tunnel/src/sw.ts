@@ -29,7 +29,7 @@ type RAEncryptedHTTPResponse = {
 
 type ControlChannelKXConfirm = {
   type: "client_kx"
-  sealedSymmetricKey: string
+  sealedSymmetricKey: Uint8Array
 }
 
 type ControlChannelEncryptedMessage = {
@@ -95,20 +95,14 @@ async function ensureConnection(): Promise<void> {
 
         if (message && message.type === "server_kx") {
           try {
-            const serverPub = sodium.from_base64(
-              message.x25519PublicKey,
-              sodium.base64_variants.ORIGINAL,
-            )
+            const serverPub: Uint8Array = message.x25519PublicKey
             const key = sodium.crypto_secretbox_keygen()
             const sealed = sodium.crypto_box_seal(key, serverPub)
             symmetricKey = key
 
             const reply: ControlChannelKXConfirm = {
               type: "client_kx",
-              sealedSymmetricKey: sodium.to_base64(
-                sealed,
-                sodium.base64_variants.ORIGINAL,
-              ),
+              sealedSymmetricKey: sealed,
             }
             console.log("[teekit-sw] ServiceWorker completing client_kx")
             ws!.send(encode(reply))

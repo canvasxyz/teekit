@@ -8,7 +8,7 @@ import {
   verifySgx,
   verifyTdx,
 } from "@teekit/qvl"
-import { base64 as scureBase64 } from "@scure/base"
+// no base64 encoding inside CBOR for handshake
 // no extra utils needed here
 import { getExpectedReportDataFromUserdata, isUserdataBound } from "@teekit/qvl"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
@@ -238,7 +238,7 @@ export class TunnelClient {
           if (!message.quote || message.quote.length === 0) {
             throw new Error("Error opening channel: empty quote")
           }
-          const quote = scureBase64.decode(message.quote)
+          const quote = message.quote as Uint8Array
           if (this.config.sgx) {
             valid = await verifySgx(quote)
             validQuote = parseSgxQuote(quote)
@@ -258,10 +258,10 @@ export class TunnelClient {
           // Decode and store report binding data from server
           try {
             const runtimeData = message.runtime_data
-              ? scureBase64.decode(message.runtime_data)
+              ? (message.runtime_data as Uint8Array)
               : null
             const verifierData = message.verifier_data
-              ? decodeCbor(scureBase64.decode(message.verifier_data))
+              ? (message.verifier_data as VerifierData)
               : null
             if (runtimeData || verifierData) {
               this.reportBindingData = { runtimeData, verifierData }
@@ -271,10 +271,7 @@ export class TunnelClient {
           }
 
           // Decode and store X25519 key from server
-          const serverPub = sodium.from_base64(
-            message.x25519PublicKey,
-            sodium.base64_variants.ORIGINAL,
-          )
+          const serverPub = message.x25519PublicKey as Uint8Array
           const symmetricKey = sodium.crypto_secretbox_keygen()
           const sealed = sodium.crypto_box_seal(symmetricKey, serverPub)
           this.serverX25519PublicKey = serverPub
@@ -331,10 +328,7 @@ export class TunnelClient {
           try {
             const reply: ControlChannelKXConfirm = {
               type: "client_kx",
-              sealedSymmetricKey: sodium.to_base64(
-                sealed,
-                sodium.base64_variants.ORIGINAL,
-              ),
+              sealedSymmetricKey: sealed,
             }
             this.send(reply)
 

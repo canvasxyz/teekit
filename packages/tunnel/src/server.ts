@@ -4,7 +4,6 @@ import type { WebSocketServer, WebSocket } from "ws"
 import sodium from "libsodium-wrappers"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
-import { base64 } from "@scure/base"
 import type { createRequest, createResponse } from "node-mocks-http"
 import type { Express } from "express"
 import type { Hono } from "hono"
@@ -320,12 +319,10 @@ export class TunnelServer {
     try {
       const serverKxMessage: ControlChannelKXAnnounce = {
         type: "server_kx",
-        x25519PublicKey: base64.encode(this.x25519PublicKey),
-        quote: base64.encode(this.quote),
-        runtime_data: this.runtimeData ? base64.encode(this.runtimeData) : null,
-        verifier_data: this.verifierData
-          ? base64.encode(encodeCbor(this.verifierData))
-          : null,
+        x25519PublicKey: this.x25519PublicKey,
+        quote: this.quote,
+        runtime_data: this.runtimeData ? this.runtimeData : null,
+        verifier_data: this.verifierData ? this.verifierData : null,
       }
       controlWs.send(encodeCbor(serverKxMessage))
     } catch (e) {
@@ -377,10 +374,7 @@ export class TunnelServer {
           try {
             // Only accept a single symmetric key per WebSocket
             if (!ra.symmetricKeyBySocket.has(controlWs)) {
-              const sealed = sodium.from_base64(
-                message.sealedSymmetricKey,
-                sodium.base64_variants.ORIGINAL,
-              )
+              const sealed = message.sealedSymmetricKey
               const opened = sodium.crypto_box_seal_open(
                 sealed,
                 ra.x25519PublicKey,

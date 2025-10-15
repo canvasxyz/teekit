@@ -115,18 +115,12 @@ test.serial(
       t.true(noReplyEarly)
 
       // Complete handshake
-      const serverPub = sodium.from_base64(
-        serverKx.x25519PublicKey,
-        sodium.base64_variants.ORIGINAL,
-      )
+      const serverPub: Uint8Array = serverKx.x25519PublicKey
       const symmetricKey = sodium.crypto_secretbox_keygen()
       const sealed = sodium.crypto_box_seal(symmetricKey, serverPub)
       const clientKx = {
         type: "client_kx",
-        sealedSymmetricKey: sodium.to_base64(
-          sealed,
-          sodium.base64_variants.ORIGINAL,
-        ),
+        sealedSymmetricKey: sealed,
       }
       ws.send(encode(clientKx))
 
