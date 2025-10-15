@@ -272,7 +272,8 @@ export class TunnelClient {
 
           // Decode and store X25519 key from server
           const serverPub = message.x25519PublicKey as Uint8Array
-          const symmetricKey = sodium.crypto_secretbox_keygen()
+          const symmetricKey = new Uint8Array(32)
+          crypto.getRandomValues(symmetricKey)
           const sealed = sodium.crypto_box_seal(symmetricKey, serverPub)
           this.serverX25519PublicKey = serverPub
           this.symmetricKey = symmetricKey
@@ -392,7 +393,8 @@ export class TunnelClient {
     if (!this.symmetricKey) {
       throw new Error("Missing symmetric key")
     }
-    const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES)
+    const nonce = new Uint8Array(24)
+    crypto.getRandomValues(nonce)
     const plaintext = encodeCbor(payload)
     const ciphertext = sodium.crypto_secretbox_easy(
       plaintext,

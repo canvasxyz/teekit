@@ -798,7 +798,8 @@ export class TunnelServer {
       this.logWebSocketConnections()
       throw new Error("Missing symmetric key for socket (outbound)")
     }
-    const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES)
+    const nonce = new Uint8Array(24)
+    crypto.getRandomValues(nonce)
     const plaintext = encodeCbor(payload)
     const ciphertext = sodium.crypto_secretbox_easy(plaintext, nonce, key)
     return {

@@ -96,7 +96,8 @@ async function ensureConnection(): Promise<void> {
         if (message && message.type === "server_kx") {
           try {
             const serverPub: Uint8Array = message.x25519PublicKey
-            const key = sodium.crypto_secretbox_keygen()
+            const key = new Uint8Array(32)
+            crypto.getRandomValues(key)
             const sealed = sodium.crypto_box_seal(key, serverPub)
             symmetricKey = key
 
@@ -197,7 +198,8 @@ async function ensureConnection(): Promise<void> {
 
 function encryptPayload(payload: any): ControlChannelEncryptedMessage {
   if (!symmetricKey) throw new Error("Missing symmetric key")
-  const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES)
+  const nonce = new Uint8Array(24)
+  crypto.getRandomValues(nonce)
   const plaintext = encode(payload)
   const ciphertext = sodium.crypto_secretbox_easy(
     plaintext,
