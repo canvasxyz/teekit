@@ -4,6 +4,7 @@
 	"compilerOptions": {
 		"rootDir": "..",
 		"outDir": "lib",
+		"lib": ["ES2024", "DOM", "DOM.Iterable"],
 		"module": "Node16",
 		"moduleResolution": "Node16"
 	},

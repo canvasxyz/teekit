@@ -1,9 +1,14 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { createClient, type Client as LibsqlClient } from "@libsql/client"
-import { upgradeWebSocket } from "hono/cloudflare-workers"
 import { WSEvents } from "hono/ws"
-import { TunnelServer } from "@teekit/tunnel"
+import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
+import type {
+  Message,
+  IncomingChatMessage,
+  BroadcastMessage,
+  BacklogMessage,
+} from "./types.js"
 
 // Workerd types
 interface Fetcher {
@@ -32,10 +37,16 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use("/*", cors())
 
+/* ********************************************************************************
+ * Begin teekit tunnel code.
+ * ******************************************************************************** */
+
+import { upgradeWebSocket } from "hono/cloudflare-workers"
+
 // Attach TunnelServer control channel at bootstrap without generating
 // randomness; keys/quote are deferred until first WS open.
 const { wss } = await TunnelServer.initialize(
-  app,
+  app as any, // TODO
   async () => {
     const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
     const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
@@ -44,23 +55,65 @@ const { wss } = await TunnelServer.initialize(
   { upgradeWebSocket },
 )
 
-// Minimal echo behavior similar to demo: greet and echo messages
-wss.on("connection", (ws: any) => {
-  try {
-    ws.send("hello")
-  } catch {}
-  ws.on("message", (data: any) => {
-    try {
-      ws.send(data)
-    } catch {}
-  })
-})
+/* ********************************************************************************
+ * End teekit tunnel code.
+ * ******************************************************************************** */
 
-// let messages: Message[] = []
-// let totalMessageCount = 0
-// const MAX_MESSAGES = 30
+let messages: Message[] = []
+let totalMessageCount = 0
+const MAX_MESSAGES = 30
 const startTime = Date.now()
 let counter = 0
+
+wss.on("connection", (ws) => {
+  // Send backlog on connect
+  const hiddenCount = Math.max(0, totalMessageCount - messages.length)
+  const backlogMessage: BacklogMessage = {
+    type: "backlog",
+    messages,
+    hiddenCount,
+  }
+  ws.send(JSON.stringify(backlogMessage))
+
+  // Broadcast on incoming chat messages
+  ws.on("message", (data) => {
+    try {
+      const incoming: IncomingChatMessage = JSON.parse(
+        typeof data === "string" ? data : new TextDecoder().decode(data),
+      )
+
+      if (incoming?.type === "chat") {
+        const chatMessage: Message = {
+          id: Date.now().toString(),
+          username: incoming.username,
+          text: incoming.text,
+          timestamp: new Date().toISOString(),
+        }
+
+        messages.push(chatMessage)
+        totalMessageCount += 1
+        if (messages.length > MAX_MESSAGES) {
+          messages = messages.slice(-MAX_MESSAGES)
+        }
+
+        const broadcast: BroadcastMessage = {
+          type: "message",
+          message: chatMessage,
+        }
+
+        // iterate over ServerRAMockWebSocket instances
+        wss.clients.forEach((client: ServerRAMockWebSocket) => {
+          if (client.readyState === 1 /* WebSocket.OPEN */) {
+            client.send(JSON.stringify(broadcast))
+          }
+        })
+      }
+    } catch (err) {
+      console.error("[kettle] Error parsing message:", err)
+      ws.send(data) // just echo on error
+    }
+  })
+})
 
 app.get("/uptime", (c) => {
   const uptimeMs = Date.now() - startTime
@@ -84,6 +137,10 @@ app.post("/increment", async (c) => {
   counter += 1
   return c.json({ counter })
 })
+
+/* ********************************************************************************
+ * Other workerd related fixtures below.
+ * ******************************************************************************** */
 
 // Readiness/liveness probe
 app.get("/healthz", async (c) => {
@@ -156,8 +213,8 @@ function getDb(env: Env): LibsqlClient {
         typeof input === "string"
           ? input
           : input instanceof URL
-            ? input.toString()
-            : (input as Request).url
+          ? input.toString()
+          : (input as Request).url
       const url = new URL(inputUrl, base)
 
       // Extract request components without constructing a Request from a relative URL
@@ -199,9 +256,9 @@ function getDb(env: Env): LibsqlClient {
           if (!res.ok) {
             const preview = await res.clone().text()
             console.error(
-              `[kettle] DB_HTTP ${method} ${absolute} -> ${
-                res.status
-              } ${res.statusText} :: ${preview.substring(0, 200)}`,
+              `[kettle] DB_HTTP ${method} ${absolute} -> ${res.status} ${
+                res.statusText
+              } :: ${preview.substring(0, 200)}`,
             )
           }
         } catch {}

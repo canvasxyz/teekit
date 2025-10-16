@@ -56,8 +56,8 @@ export class ClientRAMockWebSocket extends EventTarget {
       const targetPort = target.port
         ? Number(target.port)
         : target.protocol === "wss:" || target.protocol === "https:"
-          ? 443
-          : 80
+        ? 443
+        : 80
       if (originPort !== targetPort) {
         throw new Error(
           `Port mismatch: RA origin port ${originPort} != target port ${targetPort}`,
@@ -114,7 +114,6 @@ export class ClientRAMockWebSocket extends EventTarget {
       messageData = data
       dataType = "string"
     } else {
-      // Send binary as raw bytes
       const arrayBuffer = toArrayBuffer(data)
       messageData = new Uint8Array(arrayBuffer)
       dataType = "arraybuffer"
@@ -161,7 +160,6 @@ export class ClientRAMockWebSocket extends EventTarget {
       console.error("Error sending close message:", error)
     }
 
-    // Clean up
     this.ra.unregisterWebSocketTunnel(this.connectionId)
   }
 
@@ -232,6 +230,4 @@ export class ClientRAMockWebSocket extends EventTarget {
       this.onerror.call(this, errorEvent)
     }
   }
-
-  // helpers are imported from utils.ts
 }

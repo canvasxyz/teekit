@@ -65,126 +65,69 @@ test.serial("tunnel: WebSocket echo", async (t) => {
   // Connect to WebSocket through the tunnel
   const wsUrl = new URL(origin)
   wsUrl.protocol = wsUrl.protocol.replace(/^http/, "ws")
-  wsUrl.pathname = "/ws"
+  wsUrl.pathname = "/"
   const ws = new tunnelClient.WebSocket(wsUrl.toString())
 
-  // Wait for connection to open
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("WebSocket connection timeout")),
-      5000,
-    )
-
-    ws.onopen = () => {
-      clearTimeout(timeout)
-      resolve()
-    }
-
-    ws.onerror = (err) => {
-      clearTimeout(timeout)
-      reject(err)
-    }
-  })
-
-  // Verify connection is established
-  t.truthy(ws)
-  t.is(ws.readyState, WebSocket.OPEN)
-
-  // Send a test message and verify it's echoed back
-  const testMessage = "Hello from tunnel!"
-  const echoReceived = await new Promise<string>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("No echo received")),
-      5000,
-    )
-
-    ws.onmessage = (event) => {
-      clearTimeout(timeout)
-      resolve(event.data as string)
-    }
-
-    ws.send(testMessage)
-  })
-
-  t.is(echoReceived, testMessage, "Server should echo the message back")
-
-  // Wait for WebSocket to fully close (with timeout since close event may not fire in workerd)
+  // Wait for open
   await new Promise<void>((resolve) => {
-    const timeout = setTimeout(() => resolve(), 2000)
-    ws.onclose = () => {
-      clearTimeout(timeout)
-      resolve()
-    }
-    ws.close()
-  })
+    ws.onopen = () => resolve()
+  }),
+    t.is(ws.readyState, WebSocket.OPEN)
+
+  // Send a string; this will fail JSON parsing and be echoeed
+  const message1 = "hello world"
+  const { promise, resolve } = Promise.withResolvers()
+  ws.onmessage = (event) => {
+    resolve(event.data)
+  }
+  ws.send(message1)
+  const result = await promise
+
+  t.deepEqual(result, message1)
 })
 
-test.serial("tunnel: WebSocket binary message", async (t) => {
+test.serial("tunnel: WebSocket chat messages", async (t) => {
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
   // Connect to WebSocket through the tunnel
   const wsUrl = new URL(origin)
   wsUrl.protocol = wsUrl.protocol.replace(/^http/, "ws")
-  wsUrl.pathname = "/ws"
-  const ws = new tunnelClient.WebSocket(wsUrl.toString())
+  wsUrl.pathname = "/"
+  const ws1 = new tunnelClient.WebSocket(wsUrl.toString())
+  const ws2 = new tunnelClient.WebSocket(wsUrl.toString())
 
-  // Wait for connection to open
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("WebSocket connection timeout")),
-      5000,
-    )
+  await Promise.all([
+    new Promise<void>((resolve) => {
+      ws1.onopen = () => resolve()
+    }),
+    new Promise<void>((resolve) => {
+      ws2.onopen = () => resolve()
+    }),
+  ])
 
-    ws.onopen = () => {
-      clearTimeout(timeout)
-      resolve()
-    }
+  // Verify connection is established
+  t.is(ws1.readyState, WebSocket.OPEN)
+  t.is(ws2.readyState, WebSocket.OPEN)
 
-    ws.onerror = (err) => {
-      clearTimeout(timeout)
-      reject(err)
-    }
-  })
+  // Send messages from ws1/ws2 concurrently
+  const message1 = { id: "id1", username: "meow" }
+  const message2 = { id: "id2", username: "nyaa" }
+  const { promise: promise1, resolve: resolveWs1 } = Promise.withResolvers()
+  const { promise: promise2, resolve: resolveWs2 } = Promise.withResolvers()
 
-  // Send binary data
-  const testData = new Uint8Array([1, 2, 3, 4, 5, 255])
-  const echoReceived = await new Promise<Uint8Array>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("No echo received")),
-      5000,
-    )
+  ws1.onmessage = (event) => {
+    resolveWs1(event.data)
+  }
+  ws2.onmessage = (event) => resolveWs2(event.data)
+  ws1.send(JSON.stringify(message1))
+  ws2.send(JSON.stringify(message2))
 
-    ws.onmessage = async (event) => {
-      clearTimeout(timeout)
-      if (event.data instanceof Blob) {
-        const buffer = await event.data.arrayBuffer()
-        resolve(new Uint8Array(buffer))
-      } else if (event.data instanceof ArrayBuffer) {
-        resolve(new Uint8Array(event.data))
-      } else if (event.data instanceof Uint8Array) {
-        resolve(event.data)
-      } else {
-        reject(new Error("Unexpected data type"))
-      }
-    }
+  console.log("Resolving message promises...")
 
-    ws.send(testData)
-  })
+  const result1 = await promise1
+  const result2 = await promise2
 
-  t.deepEqual(
-    Array.from(echoReceived),
-    Array.from(testData),
-    "Server should echo binary data correctly",
-  )
-
-  // Wait for WebSocket to fully close (with timeout since close event may not fire in workerd)
-  await new Promise<void>((resolve) => {
-    const timeout = setTimeout(() => resolve(), 2000)
-    ws.onclose = () => {
-      clearTimeout(timeout)
-      resolve()
-    }
-    ws.close()
-  })
+  t.deepEqual(result2, message1)
+  t.deepEqual(result1, message2)
 })
