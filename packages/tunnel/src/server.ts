@@ -12,7 +12,7 @@ import type {
 import type { Express } from "express"
 import type { Hono } from "hono"
 import type { NodeWebSocket } from "@hono/node-ws"
-import type { UpgradeWebSocket } from "hono/ws"
+import type { UpgradeWebSocket, WSContext, WSEvents } from "hono/ws"
 
 import {
   RAEncryptedHTTPRequest,
@@ -63,14 +63,14 @@ export class TunnelServer {
   public runtimeData: Uint8Array | null = null
   public readonly wss: ServerRAMockWebSocketServer
   private readonly controlWss?: WebSocketServer // for express
-  private controlClients = new Set<WebSocket>() // for hono/workerd
+  private controlClients = new Set<WebSocket | WSContext>() // for hono/workerd
 
   public x25519PublicKey: Uint8Array | null = null
   private x25519PrivateKey: Uint8Array | null = null
 
   private sockets = new Map<
     string,
-    { mockWs: ServerRAMockWebSocket; controlWs: WebSocket }
+    { mockWs: ServerRAMockWebSocket; controlWs: WebSocket | WSContext }
   >()
   private symmetricKeyBySocket = new Map<any, Uint8Array>()
   private livenessBySocket = new Map<
@@ -150,14 +150,14 @@ export class TunnelServer {
           const self = this
           let wsInitialized = false
           return {
-            onOpen: (_event: any, ws: any) => {
+            onOpen: (_event, ws) => {
               // Initialize when onOpen is called, for Node.js WS environments
               if (!wsInitialized) {
                 wsInitialized = true
                 self.#onHonoOpen(ws, env)
               }
             },
-            onMessage: async (event: any, ws: any) => {
+            onMessage: async (event, ws) => {
               try {
                 // Initialize on first message, if onOpen isn't called in non-Node environments
                 if (!wsInitialized) {
@@ -167,38 +167,36 @@ export class TunnelServer {
 
                 // Decode incoming messages
                 let bytes: Uint8Array
-                const data = event?.data
-                if (typeof data === "string") {
-                  bytes = new TextEncoder().encode(data)
-                } else if (data instanceof Uint8Array) {
-                  bytes = data
-                } else if (data instanceof ArrayBuffer) {
-                  bytes = new Uint8Array(data)
-                } else if (ArrayBuffer.isView(data)) {
-                  const view = data as ArrayBufferView
+                if (typeof event.data === "string") {
+                  bytes = new TextEncoder().encode(event.data)
+                } else if (event.data instanceof Uint8Array) {
+                  bytes = event.data
+                } else if (event.data instanceof ArrayBuffer) {
+                  bytes = new Uint8Array(event.data)
+                } else if (ArrayBuffer.isView(event.data)) {
+                  const view = event.data as ArrayBufferView
                   bytes = new Uint8Array(
                     view.buffer as ArrayBuffer,
                     view.byteOffset,
                     view.byteLength,
                   )
-                } else if (typeof data?.arrayBuffer === "function") {
-                  const buf = await data.arrayBuffer()
-                  bytes = new Uint8Array(buf)
+                } else if (event.data instanceof Blob) {
+                  bytes = new Uint8Array(await event.data.arrayBuffer())
                 } else {
-                  bytes = new Uint8Array(data)
+                  bytes = new Uint8Array(event.data)
                 }
                 self.#onHonoMessage(ws, bytes)
               } catch (e) {
                 console.error("Failed to process Hono WS message:", e)
               }
             },
-            onClose: (_event: any, ws: any) => {
+            onClose: (_event, ws) => {
               self.#onHonoClose(ws)
             },
-            onError: (event: any, _ws: any) => {
+            onError: (event) => {
               console.error("Control channel error:", event)
             },
-          }
+          } as WSEvents
         }),
       )
     } catch (e) {
@@ -258,7 +256,7 @@ export class TunnelServer {
     }
   }
 
-  #onHonoOpen(controlWs: WebSocket, env: unknown): void {
+  #onHonoOpen(controlWs: WebSocket | WSContext, env: unknown): void {
     this.controlClients.add(controlWs)
     this.envBySocket.set(controlWs, env)
 
@@ -269,11 +267,11 @@ export class TunnelServer {
     })
   }
 
-  #onHonoMessage(controlWs: WebSocket, bytes: Uint8Array): void {
+  #onHonoMessage(controlWs: WSContext, bytes: Uint8Array): void {
     this.#handleControlMessage(controlWs, bytes)
   }
 
-  #onHonoClose(controlWs: WebSocket): void {
+  #onHonoClose(controlWs: WSContext): void {
     this.controlClients.delete(controlWs)
     this.symmetricKeyBySocket.delete(controlWs)
     this.livenessBySocket.delete(controlWs)
@@ -367,7 +365,9 @@ export class TunnelServer {
   }
 
   // Shared server kx
-  async #getQuoteAndSendServerKx(controlWs: WebSocket): Promise<void> {
+  async #getQuoteAndSendServerKx(
+    controlWs: WebSocket | WSContext,
+  ): Promise<void> {
     if (!this.keyReady) {
       try {
         const kp = sodium.crypto_box_keypair()
@@ -403,13 +403,7 @@ export class TunnelServer {
         runtime_data: this.runtimeData ? this.runtimeData : null,
         verifier_data: this.verifierData ? this.verifierData : null,
       }
-      const bytes = encodeCbor(serverKxMessage)
-      // Always send ArrayBuffer for broad runtime compatibility (Node ws and workerd)
-      const buf = bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength,
-      )
-      controlWs.send(buf)
+      controlWs.send(encodeCbor(serverKxMessage) as unknown as ArrayBuffer)
     } catch (e) {
       console.error("Failed to send server_kx message:", e)
     }
@@ -417,7 +411,7 @@ export class TunnelServer {
 
   // Handle generic control messages, by completing KX or calling handleTunnel methods
   async #handleControlMessage(
-    controlWs: WebSocket,
+    controlWs: WebSocket | WSContext,
     bytes: Uint8Array,
   ): Promise<void> {
     const live = this.livenessBySocket.get(controlWs)
@@ -514,7 +508,7 @@ export class TunnelServer {
 
   // Handle tunnel requests by synthesizing requests, and routing to Express or Hono
   async #handleTunnelHttpRequest(
-    controlWs: WebSocket,
+    controlWs: WebSocket | WSContext,
     tunnelReq: RAEncryptedHTTPRequest,
   ): Promise<void> {
     try {
@@ -543,7 +537,7 @@ export class TunnelServer {
   }
 
   async #handleTunnelHttpRequestHono(
-    controlWs: WebSocket,
+    controlWs: WebSocket | WSContext,
     tunnelReq: RAEncryptedHTTPRequest,
     app: Hono,
   ): Promise<void> {
@@ -624,7 +618,7 @@ export class TunnelServer {
   }
 
   async #handleTunnelHttpRequestExpress(
-    controlWs: WebSocket,
+    controlWs: WebSocket | WSContext,
     tunnelReq: RAEncryptedHTTPRequest,
     app: Express,
   ): Promise<void> {
@@ -725,7 +719,7 @@ export class TunnelServer {
   }
 
   async #handleTunnelWebSocketConnect(
-    controlWs: WebSocket,
+    controlWs: WebSocket | WSContext,
     connectReq: RAEncryptedClientConnectEvent,
   ): Promise<void> {
     try {
@@ -847,7 +841,7 @@ export class TunnelServer {
   }
 
   #encryptForSocket(
-    controlWs: WebSocket,
+    controlWs: WebSocket | WSContext,
     payload: unknown,
   ): ControlChannelEncryptedMessage {
     const key = this.symmetricKeyBySocket.get(controlWs)
@@ -867,7 +861,7 @@ export class TunnelServer {
   }
 
   #decryptEnvelopeForSocket(
-    controlWs: WebSocket,
+    controlWs: WebSocket | WSContext,
     envelope: ControlChannelEncryptedMessage,
   ): unknown {
     const key = this.symmetricKeyBySocket.get(controlWs)
@@ -884,9 +878,12 @@ export class TunnelServer {
   /**
    * Encrypt and send a payload.
    */
-  private sendEncrypted(controlWs: WebSocket, payload: unknown): void {
+  private sendEncrypted(
+    controlWs: WebSocket | WSContext,
+    payload: unknown,
+  ): void {
     const env = this.#encryptForSocket(controlWs, payload)
-    controlWs.send(encodeCbor(env))
+    controlWs.send(encodeCbor(env) as unknown as ArrayBuffer)
     const l = this.livenessBySocket.get(controlWs)
     if (l) l.lastActivityMs = Date.now()
   }
@@ -941,55 +938,46 @@ export class TunnelServer {
     }
   }
 
-  // Periodic heartbeat to prune dead sockets and cleanup keys
+  // TODO: Make sure heartbeat sweep works on Hono WSContext.
   #heartbeatSweep(): void {
-    try {
-      const now = Date.now()
+    const now = Date.now()
+    const iterableClients = this.controlWss
+      ? Array.from(this.controlWss.clients.values())
+      : Array.from(this.controlClients.values())
 
-      const iterableClients = this.controlWss
-        ? Array.from(this.controlWss.clients.values())
-        : Array.from(this.controlClients.values())
-      for (const ws of iterableClients) {
-        const l = this.livenessBySocket.get(ws)
-        if (!l) {
-          this.livenessBySocket.set(ws, { isAlive: true, lastActivityMs: now })
-          try {
-            ws.ping()
-          } catch {}
-          continue
-        }
-
-        // If a previous ping went unanswered, terminate to trigger cleanup
-        if (
-          l.isAlive === false ||
-          now - l.lastActivityMs > this.heartbeatTimeout
-        ) {
-          try {
-            ws.terminate()
-          } catch {}
-          continue
-        }
-
-        // Ask for a pong next interval
-        l.isAlive = false
-        try {
-          ws.ping()
-        } catch {}
+    // Periodic heartbeat to prune dead sockets and cleanup keys
+    for (const ws of iterableClients) {
+      const l = this.livenessBySocket.get(ws)
+      if (!l) {
+        this.livenessBySocket.set(ws, { isAlive: true, lastActivityMs: now })
+        if ("ping" in ws) ws.ping()
+        continue
       }
 
-      // Proactively remove keys for sockets that are CLOSED or no longer tracked by ws server
-      for (const controlWs of Array.from(this.symmetricKeyBySocket.keys())) {
-        const known = this.controlWss
-          ? this.controlWss.clients.has(controlWs)
-          : this.controlClients.has(controlWs)
-        if (controlWs.readyState === 3 || !known) {
-          // WebSocket.CLOSED
-          this.symmetricKeyBySocket.delete(controlWs)
-          this.livenessBySocket.delete(controlWs)
-        }
+      // If a previous ping went unanswered, terminate to trigger cleanup
+      if (
+        l.isAlive === false ||
+        now - l.lastActivityMs > this.heartbeatTimeout
+      ) {
+        if ("terminate" in ws) ws.terminate()
+        continue
       }
-    } catch (e) {
-      console.error("Heartbeat sweep failed:", e)
+
+      // Ask for a pong next interval
+      l.isAlive = false
+      if ("ping" in ws) ws.ping()
+    }
+
+    // Proactively remove keys for sockets that are CLOSED or no longer tracked by ws server
+    for (const controlWs of Array.from(this.symmetricKeyBySocket.keys())) {
+      const known = this.controlWss
+        ? this.controlWss.clients.has(controlWs)
+        : this.controlClients.has(controlWs)
+      if (controlWs.readyState === 3 || !known) {
+        // WebSocket.CLOSED
+        this.symmetricKeyBySocket.delete(controlWs)
+        this.livenessBySocket.delete(controlWs)
+      }
     }
   }
 }

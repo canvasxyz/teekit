@@ -1,4 +1,3 @@
-import sodium from "./crypto.js"
 import {
   hex,
   parseSgxQuote,
@@ -7,13 +6,13 @@ import {
   TdxQuote,
   verifySgx,
   verifyTdx,
+  getExpectedReportDataFromUserdata,
+  isUserdataBound,
 } from "@teekit/qvl"
-// no base64 encoding inside CBOR for handshake
-// no extra utils needed here
-import { getExpectedReportDataFromUserdata, isUserdataBound } from "@teekit/qvl"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
 
+import sodium from "./crypto.js"
 import {
   RAEncryptedHTTPRequest,
   RAEncryptedHTTPResponse,
@@ -450,8 +449,8 @@ export class TunnelClient {
       response.status === 204
         ? null
         : response.body instanceof Uint8Array
-          ? (response.body as BodyInit)
-          : response.body,
+        ? (response.body as BodyInit)
+        : response.body,
       {
         status: response.status,
         statusText: response.statusText,
