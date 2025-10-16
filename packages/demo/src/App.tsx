@@ -506,16 +506,20 @@ function App() {
                     expectedReportData === attestedReportData ? "green" : "red",
                 }}
               >
-                {expectedReportData || "None"}
+                {expectedReportData || "Could not validate tunnel binding"}
               </span>
             </div>
             <div style={{ borderLeft: "1px solid #ccc", paddingLeft: 12 }}>
               <div style={{ marginBottom: 6 }}>
                 Based on sha512(nonce, iat, key):
               </div>
-              <div style={{ marginBottom: 6 }}>Nonce: {verifierNonce}</div>
               <div style={{ marginBottom: 6 }}>
-                Nonce issued at: {verifierNonceIat}
+                Nonce:{" "}
+                {verifierNonce || <span style={{ color: "red" }}>None</span>}
+              </div>
+              <div style={{ marginBottom: 6 }}>
+                Nonce issued at:{" "}
+                {verifierNonceIat || <span style={{ color: "red" }}>None</span>}
               </div>
               <div style={{ marginBottom: 6 }}>
                 X25519 tunnel key:{" "}

@@ -10,7 +10,11 @@ import "./App.css"
 
 import { TunnelClient } from "@teekit/tunnel"
 import { verifyTdxBase64, verifySgxBase64, hex, isTdxQuote } from "@teekit/qvl"
-import { WebSocket, MessageEvent, ErrorEvent } from "isomorphic-ws"
+import type {
+  WebSocket as IWebSocket,
+  MessageEvent,
+  ErrorEvent,
+} from "isomorphic-ws"
 
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
@@ -22,7 +26,7 @@ import {
 
 export const baseUrl =
   document.location.hostname === "localhost"
-    ? "https://localhost:3001"
+    ? "http://localhost:3001"
     : document.location.hostname.endsWith(".vercel.app")
       ? "https://ra-https.canvas.xyz"
       : `${document.location.protocol}//${document.location.hostname}`
@@ -62,7 +66,7 @@ function App() {
   const [verifierNonce, setVerifierNonce] = useState<string>("")
   const [verifierNonceIat, setVerifierNonceIat] = useState<string>("")
   const initializedRef = useRef<boolean>(false)
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsRef = useRef<IWebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
@@ -502,16 +506,20 @@ function App() {
                     expectedReportData === attestedReportData ? "green" : "red",
                 }}
               >
-                {expectedReportData || "None"}
+                {expectedReportData || "Could not validate tunnel binding"}
               </span>
             </div>
             <div style={{ borderLeft: "1px solid #ccc", paddingLeft: 12 }}>
               <div style={{ marginBottom: 6 }}>
                 Based on sha512(nonce, iat, key):
               </div>
-              <div style={{ marginBottom: 6 }}>Nonce: {verifierNonce}</div>
               <div style={{ marginBottom: 6 }}>
-                Nonce issued at: {verifierNonceIat}
+                Nonce:{" "}
+                {verifierNonce || <span style={{ color: "red" }}>None</span>}
+              </div>
+              <div style={{ marginBottom: 6 }}>
+                Nonce issued at:{" "}
+                {verifierNonceIat || <span style={{ color: "red" }}>None</span>}
               </div>
               <div style={{ marginBottom: 6 }}>
                 X25519 tunnel key:{" "}
