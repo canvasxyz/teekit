@@ -41,7 +41,7 @@ const { wss } = await TunnelServer.initialize(
     const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
     return { quote: buf }
   },
-  { upgradeWebSocket, deferInit: true },
+  { upgradeWebSocket },
 )
 
 // Minimal echo behavior similar to demo: greet and echo messages

@@ -54,82 +54,19 @@ type TunnelServerConfig = {
   upgradeWebSocket?:
     | NodeWebSocket["upgradeWebSocket"]
     | UpgradeWebSocket<any, any, any>
-
-  // When true, avoid randomness and quote fetching during initialize().
-  // Keys and quote will be generated lazily on first control channel open.
-  deferInit?: boolean
 }
 
-/**
- * Virtual server for remote-attested encrypted channels.
- *
- * ## Hono instructions:
- *
- * ```
- * import { Hono } from 'hono'
- * import { upgradeWebSocket } from 'hono/ws'
- *
- * const app = new Hono()
- * app.get('/', (c) => c.text("Hello world!"))
- *
- * const { wss } = await TunnelServer.initialize(
- *   app,
- *   async (x25519PublicKey) => {
- *     // return a Uint8Array quote bound to x25519PublicKey
- *     return myQuote
- *   },
- *   { upgradeWebSocket },
- * )
- *
- * // No need to call server.listen for Hono — your platform/router hosts the app.
- * export default app
- * ```
- *
- * ## Express instructions:
- *
- * For HTTP requests, the virtual server binds to an Express server,
- * and decrypts and forwards requests to it.
- *
- * For Websockets, use the `wss` instance as a regular WebSocket server,
- * and messages will be encrypted and decrypted in-flight.
- *
- * ```
- * const { wss, server } = await TunnelServer.initialize(app, async (x25519PublicKey) => {
- *   // return a Uint8Array quote bound to x25519PublicKey
- *   return myQuote
- * })
- *
- * wss.on("connection", (ws: WebSocket) => {
- *   // Handle incoming messages
- *   ws.on("message", (data: Uint8Array) => { ... })
- *
- *   // Send an initial message
- *   ws.send(...)
- *
- *   // Handle disconnects
- *   ws.on("close", () => { ... })
- * })
- * ```
- *
- * You must use server.listen() to bind to a port:
- *
- * ```
- * server.listen(process.env.PORT, () => {
- *   console.log(`Server running on port ${PORT}`)
- * })
- * ```
- */
 export class TunnelServer {
   public readonly server?: HttpServer
-  public quote: Uint8Array
-  public verifierData: VerifierData | null
-  public runtimeData: Uint8Array | null
+  public quote: Uint8Array | null = null
+  public verifierData: VerifierData | null = null
+  public runtimeData: Uint8Array | null = null
   public readonly wss: ServerRAMockWebSocketServer
   private readonly controlWss?: WebSocketServer // for express
   private controlClients = new Set<WebSocket>() // for hono/workerd
 
-  public x25519PublicKey: Uint8Array
-  private x25519PrivateKey: Uint8Array
+  public x25519PublicKey: Uint8Array | null = null
+  private x25519PrivateKey: Uint8Array | null = null
 
   private sockets = new Map<
     string,
@@ -146,131 +83,21 @@ export class TunnelServer {
   private heartbeatInterval: number
   private heartbeatTimeout: number
 
-  private readonly _getQuote: (
-    x25519PublicKey: Uint8Array,
-  ) => Promise<QuoteData> | QuoteData
-  private lazyInit: boolean
   private keyReady: boolean
 
   private constructor(
     private app: TunnelApp,
-    quoteData: QuoteData | null,
-    publicKey: Uint8Array | null,
-    privateKey: Uint8Array | null,
+    private getQuote: (
+      x25519PublicKey: Uint8Array,
+    ) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ) {
     this.app = app
-    this._getQuote = () => {
-      throw new Error("getQuote not set")
-    }
-    this.lazyInit = !!config?.deferInit
     this.keyReady = false
-
-    if (quoteData && publicKey && privateKey) {
-      this.quote = quoteData.quote
-      this.verifierData = quoteData.verifier_data ?? null
-      this.runtimeData = quoteData.runtime_data ?? null
-      if (
-        typeof this.runtimeData === "string" ||
-        Object.values(this.verifierData ?? []).some(
-          (value) => typeof value === "string",
-        )
-      ) {
-        throw new Error("quoteData fields must be Uint8Array")
-      }
-      this.x25519PublicKey = publicKey
-      this.x25519PrivateKey = privateKey
-      this.keyReady = true
-    } else {
-      // Placeholders until first control channel open when deferInit=true
-      this.quote = new Uint8Array(0)
-      this.verifierData = null
-      this.runtimeData = null
-      this.x25519PublicKey = new Uint8Array(32)
-      this.x25519PrivateKey = new Uint8Array(32)
-    }
-
-    // If this looks like a Hono app (has a fetch handler), bind the control
-    // WebSocket channel using Hono's upgradeWebSocket helper.
-    if (isHonoApp(app)) {
-      if (!config?.upgradeWebSocket) {
-        throw new Error("Hono apps must provide { upgradeWebSocket } argument")
-      }
-
-      try {
-        app.get(
-          "/__ra__",
-          config.upgradeWebSocket((c) => {
-            // Capture env outside the handlers since it's available in the upgrade context
-            const env = c.env as unknown
-            const self = this
-            let wsInitialized = false
-            return {
-              onOpen: (_event: any, ws: any) => {
-                // Initialize when onOpen is called, for Node.js WS environments
-                if (!wsInitialized) {
-                  wsInitialized = true
-                  self.#onHonoOpen(ws, env)
-                }
-              },
-              onMessage: async (event: any, ws: any) => {
-                try {
-                  // Initialize on first message, if onOpen isn't called in non-Node environments
-                  if (!wsInitialized) {
-                    wsInitialized = true
-                    self.#onHonoOpen(ws, env)
-                  }
-
-                  // Decode incoming messages
-                  let bytes: Uint8Array
-                  const data = event?.data
-                  if (typeof data === "string") {
-                    bytes = new TextEncoder().encode(data)
-                  } else if (data instanceof Uint8Array) {
-                    bytes = data
-                  } else if (data instanceof ArrayBuffer) {
-                    bytes = new Uint8Array(data)
-                  } else if (ArrayBuffer.isView(data)) {
-                    const view = data as ArrayBufferView
-                    bytes = new Uint8Array(
-                      view.buffer as ArrayBuffer,
-                      view.byteOffset,
-                      view.byteLength,
-                    )
-                  } else if (typeof data?.arrayBuffer === "function") {
-                    const buf = await data.arrayBuffer()
-                    bytes = new Uint8Array(buf)
-                  } else {
-                    bytes = new Uint8Array(data)
-                  }
-                  self.#onHonoMessage(ws, bytes)
-                } catch (e) {
-                  console.error("Failed to process Hono WS message:", e)
-                }
-              },
-              onClose: (_event: any, ws: any) => {
-                self.#onHonoClose(ws)
-              },
-              onError: (event: any, _ws: any) => {
-                console.error("Control channel error:", event)
-              },
-            }
-          }),
-        )
-      } catch (e) {
-        console.error("Failed to attach Hono upgradeWebSocket control channel")
-        throw e
-      }
-    } else {
-      // Express apps will have WebSocket messages handled via an
-      // http server created during initialize()
-    }
+    this.wss = new ServerRAMockWebSocketServer()
 
     this.heartbeatInterval = config?.heartbeatInterval || 30000
     this.heartbeatTimeout = config?.heartbeatTimeout || 60000
-
-    // Expose a mock WebSocketServer to application code
-    this.wss = new ServerRAMockWebSocketServer()
 
     // Only enable Node-style heartbeat when using Node ws server
     if (!isHonoApp(app)) {
@@ -282,6 +109,15 @@ export class TunnelServer {
         ;(this.heartbeatTimer as any).unref()
       }
     }
+
+    // If this looks like a Hono app (has a fetch handler), bind the control
+    // WebSocket channel using Hono's upgradeWebSocket helper.
+    //
+    // Otherwise, Express apps will have WebSocket messages handled via an
+    // http server, created immediately after this constructor returns.
+    if (isHonoApp(app)) {
+      this.#setupHonoWebSocketChannel(app, config)
+    }
   }
 
   static async initialize(
@@ -289,66 +125,89 @@ export class TunnelServer {
     getQuote: (x25519PublicKey: Uint8Array) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ): Promise<TunnelServer> {
-    let server: TunnelServer
-    if (config?.deferInit) {
-      // Avoid randomness/quote fetching at global scope (e.g., workerd)
-      server = new TunnelServer(app, null, null, null, config)
-      ;(server as any)._getQuote = getQuote
-    } else {
-      const { publicKey, privateKey } = sodium.crypto_box_keypair()
-      const quote = await Promise.resolve(getQuote(publicKey))
-      server = new TunnelServer(app, quote, publicKey, privateKey, config)
-      ;(server as any)._getQuote = getQuote
-    }
+    const server = new TunnelServer(app, getQuote, config)
 
-    // Setup http and WebSocketServer for Express apps (requires dynamic import)
+    // Setup http and WebSocketServer for Express apps
     if (!config?.upgradeWebSocket) {
-      await server.#setupHttpServer()
-      await server.#setupWebSocketServer()
+      await server.#setupExpressHttpServer()
+      await server.#bindExpressWebSocketServer()
     }
 
     return server
   }
 
-  /**
-   * Setup WebSocketServer for Express apps (requires dynamic import of 'ws')
-   */
-  async #setupWebSocketServer(): Promise<void> {
-    try {
-      const wsModule = await import("ws")
-      const WebSocketServer = wsModule.WebSocketServer
-      ;(this as any).controlWss = new WebSocketServer({ noServer: true })
-      this.#setupControlChannel()
+  async #setupHonoWebSocketChannel(app: Hono, config?: TunnelServerConfig) {
+    if (!config?.upgradeWebSocket) {
+      throw new Error("Hono apps must provide { upgradeWebSocket } argument")
+    }
 
-      if (this.server) {
-        this.server.on(
-          "upgrade",
-          (req: IncomingMessage, socket: Socket, head: Buffer) => {
-            const url = req.url || ""
-            if (url.startsWith("/__ra__")) {
-              this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
-                this.controlWss!.emit("connection", controlWs, req)
-              })
-            } else {
-              // Don't allow other WebSocket servers to bind to the server;
-              // all WebSocket connections go to the encrypted channel.
-              socket.destroy()
-            }
-          },
-        )
-      }
-    } catch (error) {
-      throw new Error(
-        "ws module is required for Express support but could not be loaded. " +
-          "Install it with: npm install ws",
+    try {
+      app.get(
+        "/__ra__",
+        config.upgradeWebSocket((c) => {
+          // Capture env outside the handlers since it's available in the upgrade context
+          const env = c.env as unknown
+          const self = this
+          let wsInitialized = false
+          return {
+            onOpen: (_event: any, ws: any) => {
+              // Initialize when onOpen is called, for Node.js WS environments
+              if (!wsInitialized) {
+                wsInitialized = true
+                self.#onHonoOpen(ws, env)
+              }
+            },
+            onMessage: async (event: any, ws: any) => {
+              try {
+                // Initialize on first message, if onOpen isn't called in non-Node environments
+                if (!wsInitialized) {
+                  wsInitialized = true
+                  self.#onHonoOpen(ws, env)
+                }
+
+                // Decode incoming messages
+                let bytes: Uint8Array
+                const data = event?.data
+                if (typeof data === "string") {
+                  bytes = new TextEncoder().encode(data)
+                } else if (data instanceof Uint8Array) {
+                  bytes = data
+                } else if (data instanceof ArrayBuffer) {
+                  bytes = new Uint8Array(data)
+                } else if (ArrayBuffer.isView(data)) {
+                  const view = data as ArrayBufferView
+                  bytes = new Uint8Array(
+                    view.buffer as ArrayBuffer,
+                    view.byteOffset,
+                    view.byteLength,
+                  )
+                } else if (typeof data?.arrayBuffer === "function") {
+                  const buf = await data.arrayBuffer()
+                  bytes = new Uint8Array(buf)
+                } else {
+                  bytes = new Uint8Array(data)
+                }
+                self.#onHonoMessage(ws, bytes)
+              } catch (e) {
+                console.error("Failed to process Hono WS message:", e)
+              }
+            },
+            onClose: (_event: any, ws: any) => {
+              self.#onHonoClose(ws)
+            },
+            onError: (event: any, _ws: any) => {
+              console.error("Control channel error:", event)
+            },
+          }
+        }),
       )
+    } catch (e) {
+      console.error("Failed to attach Hono upgradeWebSocket control channel")
+      throw e
     }
   }
 
-  /**
-   * Setup http.Server for Express apps (dynamic import to avoid bundling for Hono)
-   */
-  async #setupHttpServer(): Promise<void> {
+  async #setupExpressHttpServer(): Promise<void> {
     try {
       const httpModule = await import("http")
       ;(this as any).server = httpModule.createServer(this.app as any)
@@ -368,83 +227,199 @@ export class TunnelServer {
   }
 
   /**
-   * Intercept incoming WebSocket messages on `this.wss`.
+   * Setup WebSocketServer for Express apps, bind to `this.server`
    */
-  #setupControlChannel(): void {
+  async #bindExpressWebSocketServer(): Promise<void> {
+    const wsModule = await import("ws")
+    const WebSocketServer = wsModule.WebSocketServer
+    ;(this as any).controlWss = new WebSocketServer({ noServer: true })
+
     this.controlWss!.on("connection", (controlWs: WebSocket) => {
       debug("New WebSocket connection, setting up control channel")
-      this.#onControlConnection(controlWs)
+      this.#onExpressControlConnection(controlWs)
     })
-  }
 
-  // ---------- Hono/Workerd control channel (no Node-only APIs) ----------
+    if (this.server) {
+      this.server.on(
+        "upgrade",
+        (req: IncomingMessage, socket: Socket, head: Buffer) => {
+          const url = req.url || ""
+          if (url.startsWith("/__ra__")) {
+            this.controlWss!.handleUpgrade(req, socket, head, (controlWs) => {
+              this.controlWss!.emit("connection", controlWs, req)
+            })
+          } else {
+            // Don't allow other WebSocket servers to bind to the server;
+            // all WebSocket connections go to the encrypted channel.
+            socket.destroy()
+          }
+        },
+      )
+    }
+  }
 
   #onHonoOpen(controlWs: WebSocket, env: unknown): void {
     this.controlClients.add(controlWs)
     this.envBySocket.set(controlWs, env)
 
-    // Initialize liveness tracking (no ping/pong in Workerd)
-    this.livenessBySocket.set(controlWs, {
-      isAlive: true,
-      lastActivityMs: Date.now(),
-    })
-
-    // Perform lazy initialization and send server_kx asynchronously
-    // to avoid blocking the WebSocket upgrade in workerd
-    const sendServerKx = async () => {
-      // Perform lazy initialization (keygen + quote) on first connection if needed
-      if (this.lazyInit && !this.keyReady) {
-        try {
-          const kp = sodium.crypto_box_keypair()
-          this.x25519PublicKey = kp.publicKey
-          this.x25519PrivateKey = kp.privateKey
-          const result = this._getQuote(this.x25519PublicKey)
-          // MUST await the quote before sending server_kx
-          const qd = await Promise.resolve(result)
-          this.quote = qd.quote
-          this.verifierData = qd.verifier_data ?? null
-          this.runtimeData = qd.runtime_data ?? null
-          this.keyReady = true
-        } catch (e) {
-          console.error("Lazy keygen or quote fetch failed:", e)
-          // Close connection on init failure
-          try {
-            controlWs.close(1011, "Initialization failed")
-          } catch {}
-          return
-        }
-      }
-
-      // Announce server key-exchange public key to the client
-      try {
-        const serverKxMessage: ControlChannelKXAnnounce = {
-          type: "server_kx",
-          x25519PublicKey: this.x25519PublicKey,
-          quote: this.quote,
-          runtime_data: this.runtimeData ? this.runtimeData : null,
-          verifier_data: this.verifierData ? this.verifierData : null,
-        }
-        const bytes = encodeCbor(serverKxMessage)
-        const buf = bytes.buffer.slice(
-          bytes.byteOffset,
-          bytes.byteOffset + bytes.byteLength,
-        )
-        controlWs.send(buf)
-      } catch (e) {
-        console.error("Failed to send server_kx message:", e)
-      }
-    }
-
     // Run async initialization without blocking the onOpen callback
-    sendServerKx().catch((e) => {
+    this.#getQuoteAndSendServerKx(controlWs).catch((e) => {
       console.error("sendServerKx failed:", e)
-      try {
-        controlWs.close(1011, "Initialization failed")
-      } catch {}
+      controlWs.close(1011, "Initialization failed")
     })
   }
 
   #onHonoMessage(controlWs: WebSocket, bytes: Uint8Array): void {
+    this.#handleControlMessage(controlWs, bytes)
+  }
+
+  #onHonoClose(controlWs: WebSocket): void {
+    this.controlClients.delete(controlWs)
+    this.symmetricKeyBySocket.delete(controlWs)
+    this.livenessBySocket.delete(controlWs)
+    this.envBySocket.delete(controlWs)
+
+    const toRemove: string[] = []
+    for (const [connId, conn] of this.sockets.entries()) {
+      if (conn.controlWs === controlWs) {
+        try {
+          conn.mockWs.emitClose(1006, "tunnel closed")
+          this.wss.deleteClient(conn.mockWs)
+          this.symmetricKeyBySocket.delete(conn.controlWs)
+          toRemove.push(connId)
+        } catch (e) {
+          console.error("Unexpected error cleaning up control ws:", e)
+        }
+      }
+    }
+    for (const id of toRemove) {
+      this.sockets.delete(id)
+    }
+  }
+
+  // Shared setup for a new control channel connection
+  async #onExpressControlConnection(controlWs: WebSocket): Promise<void> {
+    this.controlClients.add(controlWs)
+
+    // Intercept messages before they reach application handlers
+    const originalEmit = controlWs.emit.bind(controlWs)
+
+    // Initialize liveness tracking
+    this.livenessBySocket.set(controlWs, {
+      isAlive: true,
+      lastActivityMs: Date.now(),
+    })
+    try {
+      controlWs.on("pong", () => {
+        const l = this.livenessBySocket.get(controlWs)
+        if (l) {
+          l.isAlive = true
+          l.lastActivityMs = Date.now()
+        }
+      })
+    } catch {}
+
+    // Run async initialization without blocking the connection callback
+    this.#getQuoteAndSendServerKx(controlWs).catch((e) => {
+      console.error("sendServerKx failed:", e)
+      controlWs.close(1011, "Initialization failed")
+    })
+
+    // Cleanup on close
+    controlWs.on("close", () => {
+      this.controlClients.delete(controlWs)
+      this.symmetricKeyBySocket.delete(controlWs)
+      this.livenessBySocket.delete(controlWs)
+
+      const toRemove: string[] = []
+      for (const [connId, conn] of this.sockets.entries()) {
+        if (conn.controlWs === controlWs) {
+          try {
+            conn.mockWs.emitClose(1006, "tunnel closed")
+            this.wss.deleteClient(conn.mockWs)
+            this.symmetricKeyBySocket.delete(conn.controlWs)
+            toRemove.push(connId)
+          } catch (e) {
+            console.error("Unexpected error cleaning up control ws:", e)
+          }
+        }
+      }
+      for (const id of toRemove) {
+        this.sockets.delete(id)
+      }
+    })
+
+    controlWs.emit = function (event: string, ...args: any[]): boolean {
+      if (event === "message") {
+        const ra = (this as any).ra as TunnelServer
+        try {
+          const data = args[0] as Uint8Array
+          ra.#handleControlMessage(controlWs, data)
+        } catch (e) {
+          console.error("Failed to process control message:", e)
+        }
+      }
+
+      // Forward all non-message events to the original emitter
+      return originalEmit(event, ...args)
+    }
+    ;(controlWs as any).ra = this
+  }
+
+  // Shared server kx
+  async #getQuoteAndSendServerKx(controlWs: WebSocket): Promise<void> {
+    if (!this.keyReady) {
+      try {
+        const kp = sodium.crypto_box_keypair()
+        this.x25519PublicKey = kp.publicKey
+        this.x25519PrivateKey = kp.privateKey
+        const result = this.getQuote(this.x25519PublicKey)
+        // MUST await the quote before sending server_kx
+        const qd = await Promise.resolve(result)
+        this.quote = qd.quote
+        this.verifierData = qd.verifier_data ?? null
+        this.runtimeData = qd.runtime_data ?? null
+        this.keyReady = true
+      } catch (e) {
+        console.error("Lazy keygen or quote fetch failed:", e)
+        // Close connection on init failure
+        try {
+          controlWs.close(1011, "Initialization failed")
+        } catch {}
+        return
+      }
+    }
+
+    if (this.x25519PublicKey === null || this.quote === null) {
+      throw new Error("expected publickey, privatekey, quote to be set")
+    }
+
+    // Announce server key-exchange public key to the client
+    try {
+      const serverKxMessage: ControlChannelKXAnnounce = {
+        type: "server_kx",
+        x25519PublicKey: this.x25519PublicKey,
+        quote: this.quote,
+        runtime_data: this.runtimeData ? this.runtimeData : null,
+        verifier_data: this.verifierData ? this.verifierData : null,
+      }
+      const bytes = encodeCbor(serverKxMessage)
+      // Always send ArrayBuffer for broad runtime compatibility (Node ws and workerd)
+      const buf = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      )
+      controlWs.send(buf)
+    } catch (e) {
+      console.error("Failed to send server_kx message:", e)
+    }
+  }
+
+  // Handle generic control messages, by completing KX or calling handleTunnel methods
+  async #handleControlMessage(
+    controlWs: WebSocket,
+    bytes: Uint8Array,
+  ): Promise<void> {
     const live = this.livenessBySocket.get(controlWs)
     if (live) live.lastActivityMs = Date.now()
 
@@ -456,7 +431,10 @@ export class TunnelServer {
       return
     }
 
-    // Handshake: client delivers a sealed symmetric key
+    if (this.x25519PublicKey === null || this.x25519PrivateKey === null) {
+      throw new Error("expected publickey, privatekey, quote to be set")
+    }
+
     if (isControlChannelKXConfirm(message)) {
       try {
         if (!this.symmetricKeyBySocket.has(controlWs)) {
@@ -476,18 +454,16 @@ export class TunnelServer {
       return
     }
 
-    // If handshake not complete yet, ignore any other messages (hello/ready are harmless)
     if (!this.symmetricKeyBySocket.has(controlWs)) {
+      debug("Dropping message before handshake completion")
       return
     }
 
-    // Require encryption post-handshake
     if (!isControlChannelEncryptedMessage(message)) {
       debug("Dropping non-encrypted message post-handshake")
       return
     }
 
-    // Decrypt envelope and dispatch
     try {
       message = this.#decryptEnvelopeForSocket(
         controlWs,
@@ -520,204 +496,20 @@ export class TunnelServer {
         },
       )
       return
-    } else if (isRAEncryptedClientConnectEvent(message)) {
+    }
+
+    if (isRAEncryptedClientConnectEvent(message)) {
       this.#handleTunnelWebSocketConnect(controlWs, message)
       return
-    } else if (isRAEncryptedWSMessage(message)) {
+    }
+    if (isRAEncryptedWSMessage(message)) {
       this.#handleTunnelWebSocketMessage(message)
       return
-    } else if (isRAEncryptedClientCloseEvent(message)) {
+    }
+    if (isRAEncryptedClientCloseEvent(message)) {
       this.#handleTunnelWebSocketClose(message)
       return
     }
-  }
-
-  #onHonoClose(controlWs: WebSocket): void {
-    this.controlClients.delete(controlWs)
-    this.symmetricKeyBySocket.delete(controlWs)
-    this.livenessBySocket.delete(controlWs)
-    this.envBySocket.delete(controlWs)
-
-    const toRemove: string[] = []
-    for (const [connId, conn] of this.sockets.entries()) {
-      if (conn.controlWs === controlWs) {
-        try {
-          conn.mockWs.emitClose(1006, "tunnel closed")
-          this.wss.deleteClient(conn.mockWs)
-          this.symmetricKeyBySocket.delete(conn.controlWs)
-          toRemove.push(connId)
-        } catch (e) {
-          console.error("Unexpected error cleaning up control ws:", e)
-        }
-      }
-    }
-    for (const id of toRemove) {
-      this.sockets.delete(id)
-    }
-  }
-
-  // Shared setup for a new control channel connection (Hono or ws server)
-  #onControlConnection(controlWs: WebSocket): void {
-    this.controlClients.add(controlWs)
-
-    // Intercept messages before they reach application handlers
-    const originalEmit = controlWs.emit.bind(controlWs)
-
-    // Initialize liveness tracking
-    this.livenessBySocket.set(controlWs, {
-      isAlive: true,
-      lastActivityMs: Date.now(),
-    })
-    try {
-      controlWs.on("pong", () => {
-        const l = this.livenessBySocket.get(controlWs)
-        if (l) {
-          l.isAlive = true
-          l.lastActivityMs = Date.now()
-        }
-      })
-    } catch {}
-
-    // Immediately announce server key-exchange public key to the client
-    try {
-      const serverKxMessage: ControlChannelKXAnnounce = {
-        type: "server_kx",
-        x25519PublicKey: this.x25519PublicKey,
-        quote: this.quote,
-        runtime_data: this.runtimeData ? this.runtimeData : null,
-        verifier_data: this.verifierData ? this.verifierData : null,
-      }
-      controlWs.send(encodeCbor(serverKxMessage))
-    } catch (e) {
-      console.error("Failed to send server_kx message:", e)
-    }
-
-    // Cleanup on close
-    controlWs.on("close", () => {
-      this.controlClients.delete(controlWs)
-      this.symmetricKeyBySocket.delete(controlWs)
-      this.livenessBySocket.delete(controlWs)
-
-      const toRemove: string[] = []
-      for (const [connId, conn] of this.sockets.entries()) {
-        if (conn.controlWs === controlWs) {
-          try {
-            conn.mockWs.emitClose(1006, "tunnel closed")
-            this.wss.deleteClient(conn.mockWs)
-            this.symmetricKeyBySocket.delete(conn.controlWs)
-            toRemove.push(connId)
-          } catch (e) {
-            console.error("Unexpected error cleaning up control ws:", e)
-          }
-        }
-      }
-      for (const id of toRemove) {
-        this.sockets.delete(id)
-      }
-    })
-
-    controlWs.emit = function (event: string, ...args: any[]): boolean {
-      if (event === "message") {
-        const ra = (this as any).ra as TunnelServer
-
-        const live = ra.livenessBySocket.get(controlWs)
-        if (live) live.lastActivityMs = Date.now()
-        // Decode incoming message from client
-        let message
-        try {
-          const data = args[0] as Uint8Array
-          message = decodeCbor(data)
-        } catch (error) {
-          console.error("Received invalid CBOR message")
-          return true
-        }
-
-        // Handle client key exchange
-        if (isControlChannelKXConfirm(message)) {
-          try {
-            // Only accept a single symmetric key per WebSocket
-            if (!ra.symmetricKeyBySocket.has(controlWs)) {
-              const sealed = message.sealedSymmetricKey
-              const opened = sodium.crypto_box_seal_open(
-                sealed,
-                ra.x25519PublicKey,
-                ra.x25519PrivateKey,
-              )
-              ra.symmetricKeyBySocket.set(controlWs, opened)
-            } else {
-              console.warn("client_kx received after key already set; ignoring")
-            }
-          } catch (e) {
-            console.error("Failed to process client_kx:", e)
-          }
-          return true
-        }
-
-        // If handshake not complete yet, ignore any other messages
-        if (!ra.symmetricKeyBySocket.has(controlWs)) {
-          console.warn("Dropping message before handshake completion")
-          return true
-        }
-
-        // Require encryption post-handshake
-        if (!isControlChannelEncryptedMessage(message)) {
-          console.warn("Dropping non-encrypted message post-handshake")
-          return true
-        }
-
-        // Decrypt envelope messages post-handshake
-        if (isControlChannelEncryptedMessage(message)) {
-          try {
-            message = ra.#decryptEnvelopeForSocket(
-              controlWs,
-              message as ControlChannelEncryptedMessage,
-            )
-          } catch (e) {
-            console.error("Failed to decrypt envelope:", e)
-            return true
-          }
-        }
-
-        if (isRAEncryptedHTTPRequest(message)) {
-          ra.logWebSocketConnections()
-          debug(`Encrypted HTTP request (${message.requestId}): ${message.url}`)
-          ra.#handleTunnelHttpRequest(controlWs, message).catch(
-            (error: Error) => {
-              console.error("Error handling encrypted request:", error)
-
-              // Send 500 error response back to client
-              try {
-                ra.sendEncrypted(controlWs, {
-                  type: "http_response",
-                  requestId: message.requestId,
-                  status: 500,
-                  statusText: "Internal Server Error",
-                  headers: {},
-                  body: "",
-                  error: error.message,
-                } as RAEncryptedHTTPResponse)
-              } catch (sendError) {
-                console.error("Failed to send error response:", sendError)
-              }
-            },
-          )
-          return true
-        } else if (isRAEncryptedClientConnectEvent(message)) {
-          ra.#handleTunnelWebSocketConnect(controlWs, message)
-          return true
-        } else if (isRAEncryptedWSMessage(message)) {
-          ra.#handleTunnelWebSocketMessage(message)
-          return true
-        } else if (isRAEncryptedClientCloseEvent(message)) {
-          ra.#handleTunnelWebSocketClose(message)
-          return true
-        }
-      }
-
-      // Forward all non-message events to the original emitter
-      return originalEmit(event, ...args)
-    }
-    ;(controlWs as any).ra = this
   }
 
   // Handle tunnel requests by synthesizing requests, and routing to Express or Hono
