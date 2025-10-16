@@ -2,7 +2,7 @@ import test from "ava"
 import { startTunnelApp, stopTunnel } from "./helpers/helpers.js"
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string) {
-  let to: any
+  let to: NodeJS.Timeout
   const timeout = new Promise<never>((_, reject) => {
     to = setTimeout(() => reject(new Error(`${label} timed out`)), ms)
   })
@@ -19,12 +19,11 @@ test.serial(
     // Echo server and initial greeting
     tunnelServer.wss.on("connection", (ws) => {
       ws.send("hello")
-      ws.on("message", (data: any) => ws.send(data))
+      ws.on("message", (data) => ws.send(data))
     })
 
     try {
-      const TunnelWS = tunnelClient.WebSocket
-      const ws = new TunnelWS(origin.replace(/^http/, "ws"))
+      const ws = new tunnelClient.WebSocket(origin.replace(/^http/, "ws"))
 
       // Ready state constants
       t.is(ws.CONNECTING, 0)
@@ -45,11 +44,11 @@ test.serial(
             const v = typeof evt.data === "string" ? evt.data : "<bin>"
             msgs.push(v)
             if (msgs.length >= 3) {
-              ws.removeEventListener("message", handler as any)
+              ws.removeEventListener("message", handler)
               resolve(msgs)
             }
           }
-          ws.addEventListener("message", handler as any)
+          ws.addEventListener("message", handler)
         }),
         2000,
         "first messages",

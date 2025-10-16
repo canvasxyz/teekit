@@ -34,6 +34,7 @@ import {
 } from "./typeguards.js"
 import { generateRequestId, Awaitable } from "./utils/client.js"
 import { ClientRAMockWebSocket } from "./ClientRAWebSocket.js"
+import { WebSocket as IsomorphicWebSocket } from "isomorphic-ws"
 
 // Reuse encoder/decoder instances to reduce allocations
 const textEncoder = new TextEncoder()
@@ -90,12 +91,24 @@ export class TunnelClient {
   private connectionPromise: Promise<void> | null = null
   private config: TunnelClientConfig
 
+  WebSocket: new (
+    url: string,
+    protocols?: string | string[],
+  ) => IsomorphicWebSocket
+
   private constructor(
     public readonly origin: string,
     config: TunnelClientConfig,
   ) {
     this.id = Math.random().toString().slice(2)
     this.config = config
+
+    const self = this
+    this.WebSocket = class extends ClientRAMockWebSocket {
+      constructor(url: string, protocols?: string | string[]) {
+        super(self, url, protocols)
+      }
+    } as any
   }
 
   static async initialize(
@@ -485,19 +498,6 @@ export class TunnelClient {
 
   public unregisterWebSocketTunnel(connectionId: string): void {
     this.webSocketConnections.delete(connectionId)
-  }
-
-  /**
-   * Client methods for encrypted `fetch` and encrypted WebSockets.
-   */
-
-  get WebSocket() {
-    const self = this
-    return class extends ClientRAMockWebSocket {
-      constructor(url: string, protocols?: string | string[]) {
-        super(self, url, protocols)
-      }
-    } as any // TODO
   }
 
   get fetch() {
