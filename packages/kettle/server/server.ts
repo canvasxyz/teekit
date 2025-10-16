@@ -103,6 +103,10 @@ export async function startWorker(
       `127.0.0.1:${replicaHttpPort}`,
       "--db-path",
       replicaDbPath,
+      // Enable at-rest encryption for the replica database
+      // Note: requires sqld with encryption support
+      "--db-encryption-key",
+      "test",
       "--primary-grpc-url",
       `http://127.0.0.1:${grpcPort}`,
     ]
@@ -230,7 +234,13 @@ const config :Workerd.Config = (
   console.log(chalk.yellowBright("[kettle] Starting workerd..."))
   const workerd = spawn(
     workerdBin,
-    ["serve", tmpConfigPath, "--socket-addr", `http=0.0.0.0:${workerPort}`],
+    [
+      "serve",
+      tmpConfigPath,
+      "--socket-addr",
+      `http=0.0.0.0:${workerPort}`,
+      "--verbose",
+    ],
     { stdio: ["ignore", "pipe", "pipe"] },
   )
 
