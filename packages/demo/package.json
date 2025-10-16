@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "server": "tsx server.ts",
+    "server:express": "tsx server-express.ts",
     "start": "concurrently \"npm run server\" \"npm run dev\"",
     "test": "ava --serial"
   },
@@ -15,6 +16,7 @@
     "@scure/base": "^2.0.0",
     "@teekit/qvl": "0.0.1",
     "@teekit/tunnel": "0.0.1",
+    "cors": "^2.8.5",
     "hono": "^4.7.5",
     "isomorphic-ws": "^5.0.0",
     "react": "^19.1.1",
