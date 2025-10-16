@@ -165,11 +165,14 @@ wss.on("connection", (ws: WebSocket) => {
 app.use("/*", serveStatic({ root: "./dist" }))
 
 // Start the Hono server and attach Node WS
+const port = process.env.PORT ? Number(process.env.PORT) : 3001
 const server = serve({
   fetch: app.fetch,
-  port: process.env.PORT ? Number(process.env.PORT) : 3001,
+  port,
   hostname: "0.0.0.0",
 })
 injectWebSocket(server)
+
+console.log(`[teekit-demo] Server listening on http://0.0.0.0:${port}`)
 
 export { app, server }

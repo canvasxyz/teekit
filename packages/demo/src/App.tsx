@@ -10,7 +10,7 @@ import "./App.css"
 
 import { TunnelClient } from "@teekit/tunnel"
 import { verifyTdxBase64, verifySgxBase64, hex, isTdxQuote } from "@teekit/qvl"
-import { WebSocket, MessageEvent, ErrorEvent } from "isomorphic-ws"
+import type { WebSocket as IWebSocket, MessageEvent, ErrorEvent } from "isomorphic-ws"
 
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
@@ -62,7 +62,7 @@ function App() {
   const [verifierNonce, setVerifierNonce] = useState<string>("")
   const [verifierNonceIat, setVerifierNonceIat] = useState<string>("")
   const initializedRef = useRef<boolean>(false)
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsRef = useRef<IWebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
