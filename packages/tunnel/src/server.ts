@@ -119,6 +119,9 @@ export class TunnelServer {
     if (isHonoApp(app)) {
       this.#setupHonoWebSocketChannel(app, config)
     }
+
+    // Also get a quote
+    this.#getQuote()
   }
 
   static async initialize(
@@ -262,7 +265,7 @@ export class TunnelServer {
     this.envBySocket.set(controlWs, env)
 
     // Run async initialization without blocking the onOpen callback
-    this.#getQuoteAndSendServerKx(controlWs).catch((e) => {
+    this.#sendServerKx(controlWs).catch((e) => {
       console.error("sendServerKx failed:", e)
       controlWs.close(1011, "Initialization failed")
     })
@@ -319,7 +322,7 @@ export class TunnelServer {
     } catch {}
 
     // Run async initialization without blocking the connection callback
-    this.#getQuoteAndSendServerKx(controlWs).catch((e) => {
+    this.#sendServerKx(controlWs).catch((e) => {
       console.error("sendServerKx failed:", e)
       controlWs.close(1011, "Initialization failed")
     })
@@ -365,29 +368,27 @@ export class TunnelServer {
     ;(controlWs as any).ra = this
   }
 
+  async #getQuote() {
+    const keypair = sodium.crypto_box_keypair()
+    this.x25519PublicKey = keypair.publicKey
+    this.x25519PrivateKey = keypair.privateKey
+    const quoteData = await this.getQuote(this.x25519PublicKey)
+    this.quote = quoteData.quote
+    this.verifierData = quoteData.verifier_data ?? null
+    this.runtimeData = quoteData.runtime_data ?? null
+    this.keyReady = true
+  }
+
   // Shared server kx
-  async #getQuoteAndSendServerKx(
-    controlWs: WebSocket | WSContext,
-  ): Promise<void> {
+  async #sendServerKx(controlWs: WebSocket | WSContext): Promise<void> {
     if (!this.keyReady) {
       try {
-        const kp = sodium.crypto_box_keypair()
-        this.x25519PublicKey = kp.publicKey
-        this.x25519PrivateKey = kp.privateKey
-        const result = this.getQuote(this.x25519PublicKey)
-        // MUST await the quote before sending server_kx
-        const qd = await Promise.resolve(result)
-        this.quote = qd.quote
-        this.verifierData = qd.verifier_data ?? null
-        this.runtimeData = qd.runtime_data ?? null
-        this.keyReady = true
+        await this.#getQuote()
       } catch (e) {
-        console.error("Lazy keygen or quote fetch failed:", e)
-        // Close connection on init failure
+        console.error("Quote fetch failed:", e)
         try {
           controlWs.close(1011, "Initialization failed")
         } catch {}
-        return
       }
     }
 
