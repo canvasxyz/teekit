@@ -10,7 +10,11 @@ import "./App.css"
 
 import { TunnelClient } from "@teekit/tunnel"
 import { verifyTdxBase64, verifySgxBase64, hex, isTdxQuote } from "@teekit/qvl"
-import type { WebSocket as IWebSocket, MessageEvent, ErrorEvent } from "isomorphic-ws"
+import type {
+  WebSocket as IWebSocket,
+  MessageEvent,
+  ErrorEvent,
+} from "isomorphic-ws"
 
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
@@ -22,7 +26,7 @@ import {
 
 export const baseUrl =
   document.location.hostname === "localhost"
-    ? "https://localhost:3001"
+    ? "http://localhost:3001"
     : document.location.hostname.endsWith(".vercel.app")
       ? "https://ra-https.canvas.xyz"
       : `${document.location.protocol}//${document.location.hostname}`
