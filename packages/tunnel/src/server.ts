@@ -622,7 +622,7 @@ export class TunnelServer {
   async #handleTunnelHttpRequestExpress(
     controlWs: WebSocket | WSContext,
     tunnelReq: RAEncryptedHTTPRequest,
-    app: Express,
+    app: Express | Hono,
   ): Promise<void> {
     type HttpMocksType = {
       createRequest: typeof createRequest
@@ -630,6 +630,10 @@ export class TunnelServer {
     }
     let httpMocks: HttpMocksType
     let EventEmitter
+
+    if (isHonoApp(app)) {
+      throw new Error("unexpected: express app should not export fetch")
+    }
 
     // Dynamically import node-mocks-http and events if we're using Express
     try {

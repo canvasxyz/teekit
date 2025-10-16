@@ -1,7 +1,7 @@
 import type { Express } from "express"
 import type { Hono } from "hono"
 
-export type TunnelApp = Express | Hono
+export type TunnelApp = Express | Hono<any, any, any>
 
 /** Used by trustauthority-cli to bind the public keys we provide to report_data. */
 export type VerifierData = {

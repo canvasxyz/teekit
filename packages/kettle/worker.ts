@@ -35,7 +35,7 @@ app.use("/*", cors())
 // Attach TunnelServer control channel at bootstrap without generating
 // randomness; keys/quote are deferred until first WS open.
 const { wss } = await TunnelServer.initialize(
-  app as any, // TODO
+  app,
   async () => {
     const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
     const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
