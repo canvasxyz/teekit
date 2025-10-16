@@ -82,10 +82,10 @@ export async function startWorker(
   ;(sqld.stderr as any)?.unref?.()
 
   sqld.stdout.on("data", (d) => {
-    process.stdout.write(chalk.greenBright(String(d).trim()))
+    console.log(chalk.greenBright(String(d).trim()))
   })
   sqld.stderr.on("data", (d) => {
-    process.stderr.write(chalk.yellowBright(String(d).trim()))
+    console.log(chalk.yellowBright(String(d).trim()))
   })
 
   // log if sqld exits early with an error
@@ -114,10 +114,10 @@ export async function startWorker(
     ;(replicaSqld.stderr as any)?.unref?.()
 
     replicaSqld.stdout?.on("data", (d) => {
-      process.stdout.write(chalk.blueBright(`[replica] ${String(d).trim()}`))
+      console.log(chalk.blueBright(`[replica] ${String(d).trim()}`))
     })
     replicaSqld.stderr?.on("data", (d) => {
-      process.stderr.write(chalk.magentaBright(`[replica] ${String(d).trim()}`))
+      console.log(chalk.magentaBright(`[replica] ${String(d).trim()}`))
     })
 
     // log if replica exits early with an error
@@ -227,6 +227,7 @@ const config :Workerd.Config = (
   }
 
   const workerdBin = resolveWorkerdBinary()
+  console.log(chalk.yellowBright("[kettle] Starting workerd..."))
   const workerd = spawn(
     workerdBin,
     ["serve", tmpConfigPath, "--socket-addr", `http=0.0.0.0:${workerPort}`],
@@ -234,16 +235,16 @@ const config :Workerd.Config = (
   )
 
   workerd.stdout.on("data", (d) => {
-    process.stdout.write(chalk.greenBright(String(d)))
+    console.log(chalk.greenBright(String(d)))
   })
   workerd.stderr.on("data", (d) => {
-    process.stderr.write(chalk.greenBright(String(d)))
+    console.log(chalk.greenBright(String(d)))
   })
 
   // Wait for workerd to be ready before returning
   await waitForPortOpen(workerPort, 15000)
   // Give workerd additional time to fully initialize
-  await new Promise((r) => setTimeout(r, 1000))
+  await new Promise((r) => setTimeout(r, 500))
 
   const result: WorkerResult = {
     workerPort,
@@ -263,10 +264,18 @@ const config :Workerd.Config = (
     },
   }
 
+  console.log(
+    chalk.yellowBright(
+      `[kettle] Server listening on http://0.0.0.0:${workerPort}`,
+    ),
+  )
+
   return result
 }
 
 async function main() {
+  const port = process.env.PORT ? Number(process.env.PORT) : 3001
+
   const baseDir =
     process.env.DB_DIR ??
     mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
@@ -279,7 +288,7 @@ async function main() {
   const { stop } = await startWorker({
     dbPath,
     sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
+    workerPort: port,
   })
 
   process.on("SIGINT", () => stop())
