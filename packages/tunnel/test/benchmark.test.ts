@@ -46,7 +46,9 @@ function logStats(testName: string, stats: BenchmarkStats) {
 const REQS_CONCURRENT = 100
 const REQS = 50
 
-test.serial(`benchmark: ${REQS_CONCURRENT} concurrent requests`, async (t) => {
+const benchTest = process.env.BENCHMARK ? test.serial : test.skip
+
+benchTest(`benchmark: ${REQS_CONCURRENT} concurrent requests`, async (t) => {
   const { tunnelServer, tunnelClient } = await startHonoTunnelApp()
   t.teardown(async () => {
     await stopTunnel(tunnelServer, tunnelClient)
@@ -72,7 +74,7 @@ test.serial(`benchmark: ${REQS_CONCURRENT} concurrent requests`, async (t) => {
   logStats(`${REQS_CONCURRENT} concurrent requests`, stats)
 })
 
-test.serial(`benchmark: ${REQS} serial requests`, async (t) => {
+benchTest(`benchmark: ${REQS} serial requests`, async (t) => {
   const { tunnelServer, tunnelClient } = await startHonoTunnelApp()
   t.teardown(async () => {
     await stopTunnel(tunnelServer, tunnelClient)
@@ -95,7 +97,7 @@ test.serial(`benchmark: ${REQS} serial requests`, async (t) => {
   logStats(`${REQS} serial requests`, stats)
 })
 
-test.serial(`benchmark: ${REQS} requests with 1MB up/down`, async (t) => {
+benchTest(`benchmark: ${REQS} requests with 1MB up/down`, async (t) => {
   const { tunnelServer, tunnelClient } = await startHonoTunnelApp()
   t.teardown(async () => {
     await stopTunnel(tunnelServer, tunnelClient)
@@ -126,7 +128,7 @@ test.serial(`benchmark: ${REQS} requests with 1MB up/down`, async (t) => {
   logStats(`${REQS} requests with 1MB up/down`, stats)
 })
 
-test.serial(`no tunnel: ${REQS_CONCURRENT} concurrent requests`, async (t) => {
+benchTest(`no tunnel: ${REQS_CONCURRENT} concurrent requests`, async (t) => {
   const { server, origin } = await startPlainHonoApp()
   t.teardown(() => stopPlainHonoApp(server))
   const timings: number[] = []
@@ -150,7 +152,7 @@ test.serial(`no tunnel: ${REQS_CONCURRENT} concurrent requests`, async (t) => {
   logStats(`${REQS_CONCURRENT} concurrent requests (no tunnel)`, stats)
 })
 
-test.serial(`no tunnel: ${REQS} serial requests`, async (t) => {
+benchTest(`no tunnel: ${REQS} serial requests`, async (t) => {
   const { server, origin } = await startPlainHonoApp()
   t.teardown(() => stopPlainHonoApp(server))
   const timings: number[] = []
@@ -171,7 +173,7 @@ test.serial(`no tunnel: ${REQS} serial requests`, async (t) => {
   logStats(`${REQS} serial requests (no tunnel)`, stats)
 })
 
-test.serial(`no tunnel: ${REQS} requests with 1MB up/down`, async (t) => {
+benchTest(`no tunnel: ${REQS} requests with 1MB up/down`, async (t) => {
   const { server, origin } = await startPlainHonoApp()
   t.teardown(() => stopPlainHonoApp(server))
   const timings: number[] = []
@@ -199,4 +201,3 @@ test.serial(`no tunnel: ${REQS} requests with 1MB up/down`, async (t) => {
   const stats = calculateStats(timings)
   logStats(`${REQS} requests with 1MB up/down (no tunnel)`, stats)
 })
-// (combined in echo test above)
