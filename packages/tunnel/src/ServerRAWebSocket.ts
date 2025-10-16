@@ -47,7 +47,7 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
   emitMessage(data: string | Uint8Array): void {
     if (this.readyState !== this.OPEN) return
     const payload = typeof data === "string" ? data : data
-    this.emit("message", payload as any)
+    this.emit("message", payload)
   }
 
   emitClose(code?: number, reason?: string): void {
@@ -57,7 +57,7 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
   }
 
   public emit(eventName: string | symbol, ...args: any[]): boolean {
-    return super.emit(eventName as any, ...args)
+    return super.emit(eventName, ...args)
   }
 }
 

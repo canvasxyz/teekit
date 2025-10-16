@@ -1,4 +1,4 @@
-export function parseBody(body: string, contentType?: string): any {
+export function parseBody(body: string, contentType?: string) {
   if (!contentType) return body
 
   if (contentType.includes("application/json")) {
@@ -22,7 +22,7 @@ export function parseBody(body: string, contentType?: string): any {
 }
 
 export function sanitizeHeaders(
-  headers: any,
+  headers: any, // TODO
 ): Record<string, string | string[]> {
   const sanitized: Record<string, string | string[]> = {}
 

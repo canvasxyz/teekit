@@ -56,8 +56,8 @@ export class ClientRAMockWebSocket extends EventTarget {
       const targetPort = target.port
         ? Number(target.port)
         : target.protocol === "wss:" || target.protocol === "https:"
-        ? 443
-        : 80
+          ? 443
+          : 80
       if (originPort !== targetPort) {
         throw new Error(
           `Port mismatch: RA origin port ${originPort} != target port ${targetPort}`,
@@ -181,7 +181,7 @@ export class ClientRAMockWebSocket extends EventTarget {
         const openEvent = new Event("open")
         this.dispatchEvent(openEvent)
         if (this.onopen) {
-          this.onopen.call(this as any, openEvent)
+          this.onopen.call(this, openEvent)
         }
         break
 
@@ -194,7 +194,7 @@ export class ClientRAMockWebSocket extends EventTarget {
         })
         this.dispatchEvent(closeEvent)
         if (this.onclose) {
-          this.onclose.call(this as any, closeEvent)
+          this.onclose.call(this, closeEvent)
         }
         this.ra.unregisterWebSocketTunnel(this.connectionId)
         break
@@ -219,17 +219,17 @@ export class ClientRAMockWebSocket extends EventTarget {
 
     this.dispatchEvent(messageEvent)
     if (this.onmessage) {
-      this.onmessage.call(this as any, messageEvent)
+      this.onmessage.call(this, messageEvent)
     }
   }
 
   private handleError(errorMessage: string): void {
     const errorEvent = new Event("error")
-    ;(errorEvent as any).message = errorMessage
+    ;(errorEvent as any).message = errorMessage // TODO
 
     this.dispatchEvent(errorEvent)
     if (this.onerror) {
-      this.onerror.call(this as any, errorEvent)
+      this.onerror.call(this, errorEvent)
     }
   }
 

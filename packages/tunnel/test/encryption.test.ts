@@ -15,7 +15,7 @@ test.serial(
 
     // Attach echo handler on server app wss
     tunnelServer.wss.on("connection", (ws) => {
-      ws.on("message", (data: any) => ws.send(data))
+      ws.on("message", (data) => ws.send(data))
     })
 
     try {
@@ -197,7 +197,7 @@ test.serial("Client send fails when symmetric key is missing", async (t) => {
   try {
     await tunnelClient.ensureConnection()
     // Drop the key to simulate corruption/forgetting
-    ;(tunnelClient as any).symmetricKey = undefined
+    tunnelClient.symmetricKey = undefined
 
     // fetch should reject because send() requires encryption
     const fetchErr = await t.throwsAsync(async () => {

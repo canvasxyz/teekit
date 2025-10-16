@@ -44,7 +44,7 @@ async function startTunnelFetchApp() {
         ]),
       ),
       // Body is already parsed by tunnel server utilities when content-type is known
-      body: (req as any).body,
+      body: req.body,
     })
   }
   app.post("/echo", echoHandler)
@@ -368,7 +368,7 @@ test.serial(
           controller.enqueue(new TextEncoder().encode("chunk2"))
           controller.close()
         },
-      }) as any
+      })
       const res = await tunnelClient.fetch("/echo", {
         method: "POST",
         headers: { "content-type": "text/plain" },

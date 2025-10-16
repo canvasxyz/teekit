@@ -57,12 +57,13 @@ type TunnelServerConfig = {
 }
 
 export class TunnelServer {
-  public readonly server?: HttpServer
+  public server?: HttpServer
   public quote: Uint8Array | null = null
   public verifierData: VerifierData | null = null
   public runtimeData: Uint8Array | null = null
   public readonly wss: ServerRAMockWebSocketServer
-  private readonly controlWss?: WebSocketServer // for express
+
+  private controlWss?: WebSocketServer // for express
   private controlClients = new Set<WebSocket | WSContext>() // for hono/workerd
 
   public x25519PublicKey: Uint8Array | null = null
@@ -105,8 +106,8 @@ export class TunnelServer {
         () => this.#heartbeatSweep(),
         this.heartbeatInterval,
       )
-      if (typeof (this.heartbeatTimer as any).unref === "function") {
-        ;(this.heartbeatTimer as any).unref()
+      if (typeof this.heartbeatTimer.unref === "function") {
+        this.heartbeatTimer.unref()
       }
     }
 
@@ -208,7 +209,7 @@ export class TunnelServer {
   async #setupExpressHttpServer(): Promise<void> {
     try {
       const httpModule = await import("http")
-      ;(this as any).server = httpModule.createServer(this.app as any)
+      this.server = httpModule.createServer(this.app as any) // TODO
       if (this.server) {
         this.server.on("close", () => {
           if (this.heartbeatTimer) {
@@ -230,7 +231,7 @@ export class TunnelServer {
   async #bindExpressWebSocketServer(): Promise<void> {
     const wsModule = await import("ws")
     const WebSocketServer = wsModule.WebSocketServer
-    ;(this as any).controlWss = new WebSocketServer({ noServer: true })
+    this.controlWss = new WebSocketServer({ noServer: true })
 
     this.controlWss!.on("connection", (controlWs: WebSocket) => {
       debug("New WebSocket connection, setting up control channel")
@@ -573,7 +574,7 @@ export class TunnelServer {
     } catch {}
     // Propagate per-socket env (for DB/QUOTE bindings) when available
     const env = this.envBySocket.get(controlWs)
-    const response = await (app as any).fetch(request, env)
+    const response = await app.fetch(request, env)
 
     const respHeaders: Record<string, string | string[]> = {}
     response.headers.forEach((value: string, key: string) => {

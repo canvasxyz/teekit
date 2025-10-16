@@ -11,14 +11,14 @@ import { hex, parseTdxQuote } from "@teekit/qvl"
 
 // Ensure timers don't keep `npx ava --watch` alive (client sets 30s timeouts)
 const originalSetTimeout = setTimeout
-;(globalThis as any).setTimeout = ((fn: any, ms?: any, ...args: any[]) => {
-  const handle: any = (originalSetTimeout as any)(fn, ms, ...args)
+globalThis.setTimeout = ((fn: any, ms?: any, ...args: any[]) => {
+  const handle = (originalSetTimeout as any)(fn, ms, ...args)
   if (handle && typeof handle.unref === "function") handle.unref()
   return handle
 }) as any
 
 // Polyfill CloseEvent for Node if missing
-if (!(globalThis as any).CloseEvent) {
+if (!globalThis.CloseEvent) {
   class PolyfillCloseEvent extends Event {
     code: number
     reason: string
@@ -30,7 +30,7 @@ if (!(globalThis as any).CloseEvent) {
       this.wasClean = Boolean(init?.wasClean)
     }
   }
-  ;(globalThis as any).CloseEvent = PolyfillCloseEvent as any
+  globalThis.CloseEvent = PolyfillCloseEvent
 }
 
 export function loadQuote({
@@ -236,7 +236,7 @@ export async function stopTunnel(
 
   // Close Hono ws server if present (Node adapter)
   try {
-    const honoWss: any = (tunnelServer as any).__honoWss
+    const honoWss = (tunnelServer as any).__honoWss
     if (honoWss && typeof honoWss.close === "function") {
       await new Promise<void>((resolve) => honoWss.close(() => resolve()))
     }
@@ -244,7 +244,7 @@ export async function stopTunnel(
 
   // Close underlying server that may have been created by helpers (Hono)
   try {
-    const honoServer: any = (tunnelServer as any).__honoServer
+    const honoServer = (tunnelServer as any).__honoServer
     if (honoServer && typeof honoServer.close === "function") {
       await new Promise<void>((resolve) => honoServer.close(() => resolve()))
     }

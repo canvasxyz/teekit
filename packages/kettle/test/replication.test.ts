@@ -79,7 +79,7 @@ test.serial(
 
     t.truthy(result.rows.length > 0, "replica should contain the written data")
     const replicaValue =
-      (result.rows[0] as any).value ?? Object.values(result.rows[0])[0]
+      result.rows[0].value ?? Object.values(result.rows[0])[0]
     t.is(replicaValue, "test-value", "replica should contain the correct value")
   },
 )

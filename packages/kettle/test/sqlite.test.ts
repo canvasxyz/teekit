@@ -53,7 +53,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
 
   resp = await fetch(`http://localhost:${port}/db/get?key=foo`)
   t.is(resp.status, 200)
-  let data: any = await resp.json()
+  let data = await resp.json()
   t.is(data.value, "bar")
 
   if (demo1) await demo1.stop()

@@ -22,7 +22,7 @@ export function getTcbStatus(
       for (let comp = 1; comp <= 16; comp++) {
         const key = `sgxtcbcomp${String(comp).padStart(2, "0")}svn`
         if (Object.prototype.hasOwnProperty.call(level.tcb, key)) {
-          if (cpuSvn[comp - 1] < (level.tcb as any)[key]) {
+          if (cpuSvn[comp - 1] < level.tcb[key]) {
             cpuOk = false
             break
           }

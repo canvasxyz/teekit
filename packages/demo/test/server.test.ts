@@ -161,7 +161,7 @@ test.serial("Node.js server: WebSocket connection works", async (t) => {
         } else {
           // For other RawData types (Buffer, string, Buffer[]),
           // assume the 'length' property is the intended way to check for content.
-          t.true((data as any).length > 0)
+          t.true(data.length > 0)
         }
         resolve(true)
       })

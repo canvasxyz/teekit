@@ -83,7 +83,7 @@ async function ensureConnection(): Promise<void> {
           event.data instanceof ArrayBuffer
             ? new Uint8Array(event.data)
             : new Uint8Array(await event.data.arrayBuffer?.())
-        let message: any = decode(bytes)
+        let message = decode(bytes)
 
         console.log(
           "[teekit-sw] ServiceWorker received message:",
@@ -140,7 +140,7 @@ async function ensureConnection(): Promise<void> {
               return
             }
 
-            const body = res.status === 204 ? null : res.body ?? null
+            const body = res.status === 204 ? null : (res.body ?? null)
             const hdrs = new Headers()
             for (const [k, v] of Object.entries(res.headers)) {
               if (Array.isArray(v)) {
@@ -150,6 +150,7 @@ async function ensureConnection(): Promise<void> {
               }
             }
             const response = new Response(body as any, {
+              // TODO
               status: res.status,
               statusText: res.statusText,
               headers: hdrs,
@@ -194,7 +195,7 @@ async function ensureConnection(): Promise<void> {
   return connectionPromise
 }
 
-function encryptPayload(payload: any): ControlChannelEncryptedMessage {
+function encryptPayload(payload: unknown): ControlChannelEncryptedMessage {
   if (!symmetricKey) throw new Error("Missing symmetric key")
   const nonce = new Uint8Array(24)
   crypto.getRandomValues(nonce)
@@ -265,7 +266,7 @@ async function tunnelFetch(request: Request): Promise<Response> {
         reject(new Error("Request timeout"))
       }
     }, 30000)
-    ;(timer as any).unref?.()
+    timer.unref?.()
   })
 }
 

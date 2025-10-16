@@ -80,7 +80,7 @@ test.serial("tunnel: WebSocket echo", async (t) => {
       resolve()
     }
 
-    ws.onerror = (err: any) => {
+    ws.onerror = (err) => {
       clearTimeout(timeout)
       reject(err)
     }
@@ -98,7 +98,7 @@ test.serial("tunnel: WebSocket echo", async (t) => {
       5000,
     )
 
-    ws.onmessage = (event: any) => {
+    ws.onmessage = (event) => {
       clearTimeout(timeout)
       resolve(event.data as string)
     }
@@ -141,7 +141,7 @@ test.serial("tunnel: WebSocket binary message", async (t) => {
       resolve()
     }
 
-    ws.onerror = (err: any) => {
+    ws.onerror = (err) => {
       clearTimeout(timeout)
       reject(err)
     }
@@ -155,7 +155,7 @@ test.serial("tunnel: WebSocket binary message", async (t) => {
       5000,
     )
 
-    ws.onmessage = async (event: any) => {
+    ws.onmessage = async (event) => {
       clearTimeout(timeout)
       if (event.data instanceof Blob) {
         const buffer = await event.data.arrayBuffer()

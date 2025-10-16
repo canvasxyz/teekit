@@ -35,7 +35,7 @@ app.use("/*", cors())
 // Attach TunnelServer control channel at bootstrap without generating
 // randomness; keys/quote are deferred until first WS open.
 const { wss } = await TunnelServer.initialize(
-  app as any,
+  app as any, // TODO
   async () => {
     const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
     const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
@@ -51,7 +51,7 @@ wss.on("connection", (ws: any) => {
   } catch {}
   ws.on("message", (data: any) => {
     try {
-      ws.send(data as any)
+      ws.send(data)
     } catch {}
   })
 })
@@ -190,14 +190,11 @@ function getDb(env: Env): LibsqlClient {
         url.origin === base.origin
       ) {
         const absolute = url.toString()
-        const res = await env.DB_HTTP!.fetch(
-          absolute as any,
-          {
-            method,
-            headers,
-            body: body as any,
-          } as RequestInit,
-        )
+        const res = await env.DB_HTTP!.fetch(absolute, {
+          method,
+          headers,
+          body,
+        } as RequestInit)
         try {
           if (!res.ok) {
             const preview = await res.clone().text()
@@ -215,14 +212,14 @@ function getDb(env: Env): LibsqlClient {
       return await fetch(url.toString(), {
         method,
         headers,
-        body: body as any,
+        body,
       } as RequestInit)
     }
   }
   cachedClient = createClient({
     url: env.DB_URL,
     authToken: env.DB_TOKEN,
-    fetch: customFetch as any,
+    fetch: customFetch,
   })
   return cachedClient
 }
@@ -277,7 +274,7 @@ app.get("/db/get", async (c) => {
     })
     const row = rs.rows?.[0]
     if (!row) return c.json({ error: "not found" }, 404)
-    const value = (row as any).value ?? Object.values(row)[0]
+    const value = row.value ?? Object.values(row)[0]
     return c.json({ key, value })
   } catch (e: any) {
     console.error("[kettle] /db/get error:", e)

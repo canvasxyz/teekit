@@ -301,7 +301,7 @@ test.serial(
           controller.enqueue(new TextEncoder().encode("chunk2"))
           controller.close()
         },
-      }) as any
+      })
       const res = await tunnelClient.fetch("/echo", {
         method: "POST",
         headers: { "content-type": "text/plain" },

@@ -74,11 +74,11 @@ test.serial(
         new Promise<string>((resolve) => {
           const handler = (evt: any) => {
             if (typeof evt.data === "string" && evt.data === "ping") {
-              ws.removeEventListener("message", handler as any)
+              ws.removeEventListener("message", handler)
               resolve("ping")
             }
           }
-          ws.addEventListener("message", handler as any)
+          ws.addEventListener("message", handler)
         }),
         2000,
         "ping echo",
@@ -87,11 +87,11 @@ test.serial(
         new Promise<ArrayBuffer>((resolve) => {
           const handler = (evt: any) => {
             if (typeof evt.data !== "string") {
-              ws.removeEventListener("message", handler as any)
+              ws.removeEventListener("message", handler)
               resolve(evt.data as ArrayBuffer)
             }
           }
-          ws.addEventListener("message", handler as any)
+          ws.addEventListener("message", handler)
         }),
         2000,
         "binary echo",
@@ -121,7 +121,7 @@ test.serial(
       // Blob is unsupported in this mock; ensure it throws
       const blobErr = t.throws(() => {
         const anyBlob: any = { size: 2, type: "application/octet-stream" }
-        ;(ws as any).send(anyBlob)
+        ws.send(anyBlob)
       })
       t.truthy(blobErr)
 
@@ -237,7 +237,7 @@ test.serial("Port mismatch triggers client error event", async (t) => {
     const err = await withTimeout(
       new Promise<string>((resolve) => {
         ws.addEventListener("error", (evt: any) =>
-          resolve((evt as any).message || "err"),
+          resolve(evt.message || "err"),
         )
       }),
       2000,
@@ -257,7 +257,7 @@ test.serial("Send after client close throws", async (t) => {
   const { tunnelServer, tunnelClient, origin } = await startTunnelApp()
 
   tunnelServer.wss.on("connection", (ws) => {
-    ws.on("message", (data: any) => ws.send(data))
+    ws.on("message", (data) => ws.send(data))
   })
 
   try {
@@ -315,12 +315,12 @@ test.serial(
 
     // Echo handler on server side
     tunnelServer.wss.on("connection", (ws) => {
-      ws.on("message", (data: any) => ws.send(data))
+      ws.on("message", (data) => ws.send(data))
     })
 
     try {
       const TunnelWS = tunnelClient.WebSocket
-      const ws: any = new TunnelWS(origin.replace(/^http/, "ws"))
+      const ws = new TunnelWS(origin.replace(/^http/, "ws"))
 
       await withTimeout(
         new Promise<void>((resolve) =>
@@ -416,13 +416,13 @@ test.serial("Server broadcast and server-initiated close", async (t) => {
 
   // Echo handler on server side
   tunnelServer.wss.on("connection", (ws) => {
-    ws.on("message", (data: any) => ws.send(data))
+    ws.on("message", (data) => ws.send(data))
   })
 
   try {
     const TunnelWS = tunnelClient.WebSocket
-    const ws1: any = new TunnelWS(origin.replace(/^http/, "ws"))
-    const ws2: any = new TunnelWS(origin.replace(/^http/, "ws"))
+    const ws1 = new TunnelWS(origin.replace(/^http/, "ws"))
+    const ws2 = new TunnelWS(origin.replace(/^http/, "ws"))
 
     await Promise.all([
       withTimeout(
@@ -493,7 +493,7 @@ test.serial(
 
     // Attach an echo handler to the server's built-in WebSocketServer
     tunnelServer.wss.on("connection", (ws) => {
-      ws.on("message", (data: any) => ws.send(data))
+      ws.on("message", (data) => ws.send(data))
     })
 
     try {

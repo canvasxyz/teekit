@@ -462,8 +462,8 @@ export class TunnelClient {
       response.status === 204
         ? null
         : response.body instanceof Uint8Array
-        ? (response.body as BodyInit)
-        : response.body,
+          ? (response.body as BodyInit)
+          : response.body,
       {
         status: response.status,
         statusText: response.statusText,
@@ -568,7 +568,7 @@ export class TunnelClient {
           }
         }
         if (options?.method) method = options.method
-        requestBody = options?.body ?? (resource as any).body ?? null
+        requestBody = options?.body ?? resource.body ?? null
       }
 
       // Handle string, ArrayBuffer, ArrayBuffer-like, and ReadableStream request bodies

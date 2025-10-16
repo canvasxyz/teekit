@@ -114,7 +114,7 @@ async function main() {
   // WebSocket over tunnel
   const ws = new client.WebSocket(origin.replace(/^http/, "ws"))
   ws.addEventListener("open", () => ws.send("ping"))
-  ws.addEventListener("message", (evt: any) => console.log(String(evt.data)))
+  ws.addEventListener("message", (evt) => console.log(evt.data))
 }
 
 main()
