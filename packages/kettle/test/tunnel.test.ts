@@ -110,24 +110,23 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
   t.is(ws1.readyState, WebSocket.OPEN)
   t.is(ws2.readyState, WebSocket.OPEN)
 
-  // Send messages from ws1/ws2 concurrently
-  const message1 = { id: "id1", username: "meow" }
-  const message2 = { id: "id2", username: "nyaa" }
+  // Send messages from ws1, receive on both ws1/ws2
+  const message1 = { type: "chat", username: "id1", text: "meow" }
   const { promise: promise1, resolve: resolveWs1 } = Promise.withResolvers()
   const { promise: promise2, resolve: resolveWs2 } = Promise.withResolvers()
 
-  ws1.onmessage = (event) => {
-    resolveWs1(event.data)
-  }
+  ws1.onmessage = (event) => resolveWs1(event.data)
   ws2.onmessage = (event) => resolveWs2(event.data)
   ws1.send(JSON.stringify(message1))
-  ws2.send(JSON.stringify(message2))
 
-  console.log("Resolving message promises...")
+  const result1 = JSON.parse((await promise1) as any)
+  const result2 = JSON.parse((await promise2) as any)
 
-  const result1 = await promise1
-  const result2 = await promise2
-
-  t.deepEqual(result2, message1)
-  t.deepEqual(result1, message2)
+  // Broadcasted message contains some extra data, only check the original fields
+  t.is(result1.type, "message")
+  t.is(result1.message.username, message1.username)
+  t.is(result1.message.text, message1.text)
+  t.is(result2.type, "message")
+  t.is(result2.message.username, message1.username)
+  t.is(result2.message.text, message1.text)
 })
