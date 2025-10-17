@@ -56,7 +56,7 @@ type TunnelServerConfig = {
     | UpgradeWebSocket<any, any, any>
 }
 
-export class TunnelServer {
+export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   public server?: HttpServer
   public quote: Uint8Array | null = null
   public verifierData: VerifierData | null = null
@@ -87,13 +87,12 @@ export class TunnelServer {
   private keyReady: boolean
 
   private constructor(
-    private app: TunnelApp,
+    public readonly app: TApp,
     private getQuote: (
       x25519PublicKey: Uint8Array,
     ) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ) {
-    this.app = app
     this.keyReady = false
     this.wss = new ServerRAMockWebSocketServer()
 
@@ -124,12 +123,12 @@ export class TunnelServer {
     this.#getQuote()
   }
 
-  static async initialize(
-    app: TunnelApp,
+  static async initialize<TApp extends TunnelApp>(
+    app: TApp,
     getQuote: (x25519PublicKey: Uint8Array) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
-  ): Promise<TunnelServer> {
-    const server = new TunnelServer(app, getQuote, config)
+  ): Promise<TunnelServer<TApp>> {
+    const server = new TunnelServer<TApp>(app, getQuote, config)
 
     // Setup http and WebSocketServer for Express apps
     if (!config?.upgradeWebSocket) {
