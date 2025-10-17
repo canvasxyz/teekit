@@ -134,3 +134,22 @@ export function resolveWorkerdBinary(): string {
   }
   return candidates[0]!
 }
+
+export function isSuppressedSqldLogs(msg: string) {
+  if (
+    msg.includes(
+      "INFO restore: libsql_server::namespace::meta_store: restoring meta store",
+    ) ||
+    msg.includes(
+      "INFO restore: libsql_server::namespace::meta_store: meta store restore completed",
+    ) ||
+    msg.includes(
+      "INFO libsql_server: Server sending heartbeat to URL <not supplied> every 30s",
+    ) ||
+    msg.includes(
+      "INFO create:try_new_primary:make_primary_connection_maker: libsql_server::replication::primary::logger: SQLite autocheckpoint: 1000",
+    )
+  ) {
+    return true
+  }
+}

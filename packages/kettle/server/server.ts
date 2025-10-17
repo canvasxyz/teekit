@@ -5,6 +5,7 @@ import { join } from "path"
 import { pathToFileURL } from "url"
 import {
   findFreePort,
+  isSuppressedSqldLogs,
   randomToken,
   resolveSqldBinary,
   resolveWorkerdBinary,
@@ -82,6 +83,7 @@ export async function startWorker(
   ;(sqld.stderr as any)?.unref?.()
 
   sqld.stdout.on("data", (d) => {
+    if (isSuppressedSqldLogs(String(d))) return
     console.log(chalk.greenBright(String(d).trim()))
   })
   sqld.stderr.on("data", (d) => {
@@ -118,6 +120,7 @@ export async function startWorker(
     ;(replicaSqld.stderr as any)?.unref?.()
 
     replicaSqld.stdout?.on("data", (d) => {
+      if (isSuppressedSqldLogs(String(d))) return
       console.log(chalk.blueBright(`[replica] ${String(d).trim()}`))
     })
     replicaSqld.stderr?.on("data", (d) => {

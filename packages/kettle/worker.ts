@@ -290,11 +290,12 @@ app.get(
   "/ws",
   upgradeWebSocket(
     (): WSEvents => ({
-      async onMessage(event, ws) {
+      onMessage(event, ws) {
         try {
           if (event.data instanceof Blob) {
-            const buf = await event.data.arrayBuffer()
-            ws.send(new Uint8Array(buf))
+            event.data.arrayBuffer().then((buf) => {
+              ws.send(new Uint8Array(buf))
+            })
           } else if (event.data instanceof ArrayBuffer) {
             ws.send(new Uint8Array(event.data))
           } else if (event.data instanceof Uint8Array) {
