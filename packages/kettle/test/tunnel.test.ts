@@ -95,7 +95,12 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
   wsUrl.protocol = wsUrl.protocol.replace(/^http/, "ws")
   wsUrl.pathname = "/"
   const ws1 = new tunnelClient.WebSocket(wsUrl.toString())
-  const ws2 = new tunnelClient.WebSocket(wsUrl.toString())
+
+  const tunnelClient2 = await TunnelClient.initialize(origin, {
+    customVerifyQuote: () => true,
+    customVerifyX25519Binding: () => true,
+  })
+  const ws2 = new tunnelClient2.WebSocket(wsUrl.toString())
 
   await Promise.all([
     new Promise<void>((resolve) => {
