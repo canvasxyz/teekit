@@ -43,6 +43,10 @@ import {
   ServerRAMockWebSocketServer,
 } from "./ServerRAWebSocket.js"
 
+type TunnelExtraContext<TApp extends TunnelApp> = TApp extends Hono<any, any, any>
+  ? Context
+  : undefined
+
 const debug = createDebug("teekit:TunnelServer")
 
 type TunnelServerConfig = {
@@ -61,7 +65,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   public quote: Uint8Array | null = null
   public verifierData: VerifierData | null = null
   public runtimeData: Uint8Array | null = null
-  public readonly wss: ServerRAMockWebSocketServer
+  public readonly wss: ServerRAMockWebSocketServer<TunnelExtraContext<TApp>>
 
   private controlWss?: WebSocketServer // for express
   private controlClients = new Set<WebSocket | WSContext>() // for hono/workerd
@@ -71,7 +75,10 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
 
   private sockets = new Map<
     string,
-    { mockWs: ServerRAMockWebSocket; controlWs: WebSocket | WSContext }
+    {
+      mockWs: ServerRAMockWebSocket<TunnelExtraContext<TApp>>
+      controlWs: WebSocket | WSContext
+    }
   >()
   private symmetricKeyBySocket = new Map<any, Uint8Array>()
   private livenessBySocket = new Map<
@@ -79,7 +86,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     { isAlive: boolean; lastActivityMs: number }
   >()
   private envBySocket = new Map<any, Env>()
-  private extraContextBySocket = new Map<any, Context>()
+  private extraContextBySocket = new Map<any, TunnelExtraContext<TApp>>()
   private heartbeatTimer?: ReturnType<typeof setInterval>
 
   private heartbeatInterval: number
@@ -95,7 +102,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     config?: TunnelServerConfig,
   ) {
     this.keyReady = false
-    this.wss = new ServerRAMockWebSocketServer()
+    this.wss = new ServerRAMockWebSocketServer<TunnelExtraContext<TApp>>()
 
     this.heartbeatInterval = config?.heartbeatInterval || 30000
     this.heartbeatTimeout = config?.heartbeatTimeout || 60000
@@ -158,7 +165,11 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
               // Initialize when onOpen is called, for Node.js WS environments
               if (!wsInitialized) {
                 wsInitialized = true
-                self.#onHonoOpen(ws, env, c)
+                self.#onHonoOpen(
+                  ws,
+                  env,
+                  c as TunnelExtraContext<TApp>,
+                )
               }
             },
             onMessage: async (event, ws) => {
@@ -166,7 +177,11 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
                 // Initialize on first message, if onOpen isn't called in non-Node environments
                 if (!wsInitialized) {
                   wsInitialized = true
-                  self.#onHonoOpen(ws, env, c)
+                  self.#onHonoOpen(
+                    ws,
+                    env,
+                    c as TunnelExtraContext<TApp>,
+                  )
                 }
 
                 // Decode incoming messages
@@ -263,7 +278,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   #onHonoOpen(
     controlWs: WebSocket | WSContext,
     env: Env,
-    extraContext: Context,
+    extraContext: TunnelExtraContext<TApp>,
   ): void {
     this.controlClients.add(controlWs)
     this.envBySocket.set(controlWs, env)
@@ -737,8 +752,11 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   ): Promise<void> {
     try {
       const extraContext = this.extraContextBySocket.get(controlWs)
+      if (isHonoApp(this.app) && extraContext === undefined) {
+        throw new Error("Missing Hono context for WebSocket connection")
+      }
       // Create a mock socket and expose it to application via mock server
-      const mock = new ServerRAMockWebSocket(
+      const mock = new ServerRAMockWebSocket<TunnelExtraContext<TApp>>(
         // onSend: application -> client
         (payload) => {
           let messageData: string | Uint8Array
@@ -781,7 +799,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
             console.error("Failed to send encrypted ws_event(close):", e)
           }
         },
-        extraContext,
+        extraContext as TunnelExtraContext<TApp>,
       )
 
       // Track mapping

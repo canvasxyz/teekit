@@ -2,15 +2,21 @@ import type { Context } from "hono"
 
 import { SimpleEventEmitter } from "./SimpleEventEmitter.js"
 
+type MaybeExtraContextTuple<TExtraContext> = [undefined] extends [TExtraContext]
+  ? [extraContext?: TExtraContext]
+  : [extraContext: TExtraContext]
+
 // Event types for ServerRAMockWebSocket
-interface ServerRAMockWebSocketEvents {
-  message: [data: string | Uint8Array, extraContext?: Context]
+interface ServerRAMockWebSocketEvents<TExtraContext> {
+  message: [data: string | Uint8Array, ...MaybeExtraContextTuple<TExtraContext>]
   close: [code: number, reason: string]
   [event: string]: any[] // Allow additional events
 }
 
 // Mock WebSocket exposed to applications
-export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSocketEvents> {
+export class ServerRAMockWebSocket<
+  TExtraContext = Context | undefined,
+> extends SimpleEventEmitter<ServerRAMockWebSocketEvents<TExtraContext>> {
   public readonly CONNECTING = 0
   public readonly OPEN = 1
   public readonly CLOSING = 2
@@ -21,12 +27,12 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
   private onSendToClient: (data: string | Uint8Array) => void
   private onCloseToClient: (code?: number, reason?: string) => void
 
-  public readonly extraContext?: Context
+  public readonly extraContext: TExtraContext
 
   constructor(
     onSendToClient: (data: string | Uint8Array) => void,
     onCloseToClient: (code?: number, reason?: string) => void,
-    extraContext?: Context,
+    extraContext: TExtraContext,
   ) {
     super()
     this.onSendToClient = onSendToClient
@@ -68,21 +74,26 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
 }
 
 // Event types for ServerRAMockWebSocketServer
-interface ServerRAMockWebSocketServerEvents {
-  connection: [ws: ServerRAMockWebSocket, extraContext?: Context]
+interface ServerRAMockWebSocketServerEvents<TExtraContext> {
+  connection: [
+    ws: ServerRAMockWebSocket<TExtraContext>,
+    ...MaybeExtraContextTuple<TExtraContext>,
+  ]
   [event: string]: any[] // Allow additional events
 }
 
 // Mock WebSocketServer exposed to application code
-export class ServerRAMockWebSocketServer extends SimpleEventEmitter<ServerRAMockWebSocketServerEvents> {
-  public clients: Set<ServerRAMockWebSocket> = new Set()
+export class ServerRAMockWebSocketServer<
+  TExtraContext = Context | undefined,
+> extends SimpleEventEmitter<ServerRAMockWebSocketServerEvents<TExtraContext>> {
+  public clients: Set<ServerRAMockWebSocket<TExtraContext>> = new Set()
 
-  addClient(ws: ServerRAMockWebSocket): void {
+  addClient(ws: ServerRAMockWebSocket<TExtraContext>): void {
     this.clients.add(ws)
     this.emit("connection", ws, ws.extraContext)
   }
 
-  deleteClient(ws: ServerRAMockWebSocket): void {
+  deleteClient(ws: ServerRAMockWebSocket<TExtraContext>): void {
     this.clients.delete(ws)
   }
 
