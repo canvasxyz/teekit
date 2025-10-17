@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from "child_process"
 import chalk from "chalk"
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
 import { join } from "path"
-import { pathToFileURL } from "url"
+import { pathToFileURL, fileURLToPath } from "url"
 import {
   findFreePort,
   isSuppressedSqldLogs,
@@ -138,10 +138,12 @@ export async function startWorker(
   }
 
   // Start workerd
-  const cwd = process.cwd()
-  const CONTRACT_JS = "dist/worker.js"
+  // Resolve the project directory (packages/kettle) regardless of process.cwd()
+  const projectDir = fileURLToPath(new URL("..", import.meta.url))
+  const WORKER_JS = "dist/worker.js"
+  const APP_JS = "dist/app.js"
   const QUOTE_JS = "dist/bindings/quote.js"
-  const tmpConfigPath = join(cwd, "workerd.config.tmp.capnp")
+  const tmpConfigPath = join(projectDir, "workerd.config.tmp.capnp")
   const configText = `using Workerd = import "/workerd/workerd.capnp";
 
 const config :Workerd.Config = (
@@ -152,7 +154,11 @@ const config :Workerd.Config = (
         modules = [
           (
             name = "worker.js",
-            esModule = embed "${CONTRACT_JS}"
+            esModule = embed "${WORKER_JS}"
+          ),
+          (
+            name = "app.js",
+            esModule = embed "${APP_JS}"
           ),
           (
             name = "quote",
@@ -161,6 +167,7 @@ const config :Workerd.Config = (
         ],
         compatibilityDate = "2024-01-01",
         compatibilityFlags = ["nodejs_compat"],
+
 
         bindings = [
           (
@@ -175,6 +182,19 @@ const config :Workerd.Config = (
             name = "DB_HTTP",
             service = "sqld"
           ),
+          (
+            name = "HONO_DO",
+            durableObjectNamespace = "HonoDurableObject"
+          ),
+        ],
+
+        durableObjectStorage = ( inMemory = void ),
+
+        durableObjectNamespaces = [
+          (
+            className = "HonoDurableObject",
+            uniqueKey = "kettle-hono-do"
+          )
         ],
       )
     ),
@@ -200,14 +220,15 @@ const config :Workerd.Config = (
 
   // Always (re)build worker bundle for tests/local runs to pick up changes
   try {
-    const distDir = join(process.cwd(), "dist")
+    const distDir = join(projectDir, "dist")
     console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
+    // Build the Hono app (used inside the Durable Object)
     await build({
-      entryPoints: [join(process.cwd(), "worker.ts")],
+      entryPoints: [join(projectDir, "app.ts")],
       bundle: true,
       format: "esm",
       platform: "browser",
-      outfile: join(distDir, "worker.js"),
+      outfile: join(distDir, "app.js"),
       external: [
         // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
         "path",
@@ -220,8 +241,30 @@ const config :Workerd.Config = (
         "node-mocks-http",
       ],
     })
+
+    // Build the Worker entrypoint that proxies to the Durable Object
     await build({
-      entryPoints: [join(process.cwd(), "bindings", "quote.ts")],
+      entryPoints: [join(projectDir, "worker.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(distDir, "worker.js"),
+      external: [
+        // Same externals as app; keep bundle minimal
+        "path",
+        "fs",
+        "stream",
+        "buffer",
+        "events",
+        "http",
+        "ws",
+        "node-mocks-http",
+        // Treat embedded module as external so it's resolved at runtime by workerd
+        "app.js",
+      ],
+    })
+    await build({
+      entryPoints: [join(projectDir, "bindings", "quote.ts")],
       bundle: true,
       format: "esm",
       platform: "node",

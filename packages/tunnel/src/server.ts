@@ -43,9 +43,8 @@ import {
   ServerRAMockWebSocketServer,
 } from "./ServerRAWebSocket.js"
 
-type TunnelExtraContext<TApp extends TunnelApp> = TApp extends Hono<any, any, any>
-  ? Context
-  : undefined
+type TunnelExtraContext<TApp extends TunnelApp> =
+  TApp extends Hono<any, any, any> ? Context : undefined
 
 const debug = createDebug("teekit:TunnelServer")
 
@@ -165,11 +164,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
               // Initialize when onOpen is called, for Node.js WS environments
               if (!wsInitialized) {
                 wsInitialized = true
-                self.#onHonoOpen(
-                  ws,
-                  env,
-                  c as TunnelExtraContext<TApp>,
-                )
+                self.#onHonoOpen(ws, env, c as TunnelExtraContext<TApp>)
               }
             },
             onMessage: async (event, ws) => {
@@ -177,11 +172,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
                 // Initialize on first message, if onOpen isn't called in non-Node environments
                 if (!wsInitialized) {
                   wsInitialized = true
-                  self.#onHonoOpen(
-                    ws,
-                    env,
-                    c as TunnelExtraContext<TApp>,
-                  )
+                  self.#onHonoOpen(ws, env, c as TunnelExtraContext<TApp>)
                 }
 
                 // Decode incoming messages
