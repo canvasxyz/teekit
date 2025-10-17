@@ -68,6 +68,40 @@ test.serial("WS echo with Hono app", async (t) => {
   }
 })
 
+test.serial("Hono context is forwarded to WebSocket consumers", async (t) => {
+  t.plan(3)
+  const { tunnelServer, tunnelClient, origin } = await startHonoTunnelApp()
+
+  const messageHandled = new Promise<void>((resolve) => {
+    tunnelServer.wss.on("connection", (ws, honoContext) => {
+      t.truthy(honoContext)
+      t.is(honoContext?.req.path, "/__ra__")
+
+      ws.on("message", (_data, ctxFromMessage) => {
+        t.is(ctxFromMessage, honoContext)
+        resolve()
+      })
+    })
+  })
+
+  try {
+    const TunnelWS = tunnelClient.WebSocket
+    const ws = new TunnelWS(origin.replace(/^http/, "ws"))
+
+    await new Promise<void>((resolve) =>
+      ws.addEventListener("open", () => resolve()),
+    )
+
+    ws.send("ping")
+
+    await messageHandled
+
+    ws.close(1000, "done")
+  } finally {
+    await stopTunnel(tunnelServer, tunnelClient)
+  }
+})
+
 test.serial(
   "Client WS API: text, binary, events, queueing, bufferedAmount",
   async (t) => {

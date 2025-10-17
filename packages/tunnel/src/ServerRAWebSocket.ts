@@ -1,8 +1,10 @@
+import type { Context } from "hono"
+
 import { SimpleEventEmitter } from "./SimpleEventEmitter.js"
 
 // Event types for ServerRAMockWebSocket
 interface ServerRAMockWebSocketEvents {
-  message: [data: string | Uint8Array]
+  message: [data: string | Uint8Array, extraContext?: Context]
   close: [code: number, reason: string]
   [event: string]: any[] // Allow additional events
 }
@@ -19,13 +21,17 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
   private onSendToClient: (data: string | Uint8Array) => void
   private onCloseToClient: (code?: number, reason?: string) => void
 
+  public readonly extraContext?: Context
+
   constructor(
     onSendToClient: (data: string | Uint8Array) => void,
     onCloseToClient: (code?: number, reason?: string) => void,
+    extraContext?: Context,
   ) {
     super()
     this.onSendToClient = onSendToClient
     this.onCloseToClient = onCloseToClient
+    this.extraContext = extraContext
   }
 
   send(data: string | Uint8Array): void {
@@ -47,7 +53,7 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
   emitMessage(data: string | Uint8Array): void {
     if (this.readyState !== this.OPEN) return
     const payload = typeof data === "string" ? data : data
-    this.emit("message", payload)
+    this.emit("message", payload, this.extraContext)
   }
 
   emitClose(code?: number, reason?: string): void {
@@ -63,7 +69,7 @@ export class ServerRAMockWebSocket extends SimpleEventEmitter<ServerRAMockWebSoc
 
 // Event types for ServerRAMockWebSocketServer
 interface ServerRAMockWebSocketServerEvents {
-  connection: [ws: ServerRAMockWebSocket]
+  connection: [ws: ServerRAMockWebSocket, extraContext?: Context]
   [event: string]: any[] // Allow additional events
 }
 
@@ -73,7 +79,7 @@ export class ServerRAMockWebSocketServer extends SimpleEventEmitter<ServerRAMock
 
   addClient(ws: ServerRAMockWebSocket): void {
     this.clients.add(ws)
-    this.emit("connection", ws)
+    this.emit("connection", ws, ws.extraContext)
   }
 
   deleteClient(ws: ServerRAMockWebSocket): void {

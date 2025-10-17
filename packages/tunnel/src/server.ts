@@ -10,7 +10,7 @@ import type {
   RequestMethod,
 } from "node-mocks-http"
 import type { Express } from "express"
-import type { Hono } from "hono"
+import type { Context, Env, Hono } from "hono"
 import type { NodeWebSocket } from "@hono/node-ws"
 import type { UpgradeWebSocket, WSContext, WSEvents } from "hono/ws"
 
@@ -78,7 +78,8 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     any,
     { isAlive: boolean; lastActivityMs: number }
   >()
-  private envBySocket = new Map<any, unknown>()
+  private envBySocket = new Map<any, Env>()
+  private extraContextBySocket = new Map<any, Context>()
   private heartbeatTimer?: ReturnType<typeof setInterval>
 
   private heartbeatInterval: number
@@ -147,9 +148,9 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     try {
       app.get(
         "/__ra__",
-        config.upgradeWebSocket((c) => {
+        config.upgradeWebSocket((c: Context) => {
           // Capture env outside the handlers since it's available in the upgrade context
-          const env = c.env as unknown
+          const env = c.env
           const self = this
           let wsInitialized = false
           return {
@@ -157,7 +158,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
               // Initialize when onOpen is called, for Node.js WS environments
               if (!wsInitialized) {
                 wsInitialized = true
-                self.#onHonoOpen(ws, env)
+                self.#onHonoOpen(ws, env, c)
               }
             },
             onMessage: async (event, ws) => {
@@ -165,7 +166,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
                 // Initialize on first message, if onOpen isn't called in non-Node environments
                 if (!wsInitialized) {
                   wsInitialized = true
-                  self.#onHonoOpen(ws, env)
+                  self.#onHonoOpen(ws, env, c)
                 }
 
                 // Decode incoming messages
@@ -259,9 +260,14 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     }
   }
 
-  #onHonoOpen(controlWs: WebSocket | WSContext, env: unknown): void {
+  #onHonoOpen(
+    controlWs: WebSocket | WSContext,
+    env: Env,
+    extraContext: Context,
+  ): void {
     this.controlClients.add(controlWs)
     this.envBySocket.set(controlWs, env)
+    this.extraContextBySocket.set(controlWs, extraContext)
 
     // Run async initialization without blocking the onOpen callback
     this.#sendServerKx(controlWs).catch((e) => {
@@ -279,6 +285,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     this.symmetricKeyBySocket.delete(controlWs)
     this.livenessBySocket.delete(controlWs)
     this.envBySocket.delete(controlWs)
+    this.extraContextBySocket.delete(controlWs)
 
     const toRemove: string[] = []
     for (const [connId, conn] of this.sockets.entries()) {
@@ -331,6 +338,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
       this.controlClients.delete(controlWs)
       this.symmetricKeyBySocket.delete(controlWs)
       this.livenessBySocket.delete(controlWs)
+      this.extraContextBySocket.delete(controlWs)
 
       const toRemove: string[] = []
       for (const [connId, conn] of this.sockets.entries()) {
@@ -728,6 +736,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     connectReq: RAEncryptedClientConnectEvent,
   ): Promise<void> {
     try {
+      const extraContext = this.extraContextBySocket.get(controlWs)
       // Create a mock socket and expose it to application via mock server
       const mock = new ServerRAMockWebSocket(
         // onSend: application -> client
@@ -772,6 +781,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
             console.error("Failed to send encrypted ws_event(close):", e)
           }
         },
+        extraContext,
       )
 
       // Track mapping
