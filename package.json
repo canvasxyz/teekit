@@ -2,6 +2,10 @@
   "name": "teekit",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=11.0.0"
+  },
   "scripts": {
     "clean": "rm -rf packages/*/dist/* packages/*/*.tsbuildinfo",
     "build": "npm --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo run build",
