@@ -57,19 +57,28 @@ like Let's Encrypt without custom configuration.
   - A workerd-based runtime that supports arbitrary JS applications,
     executed inside V8 isolates.
 
-## Performance
+## Benchmarks
 
-Benchmarks are based on HTTP requests, and indicative of 1x-3x overhead.
-We have several optimizations for encoding/decoding of large payloads planned.
+The encrypted channel adds ~3x overhead for concurrent requests, and
+~6.5x for large payloads. Some of this increase is because we use
+@noble/ciphers for encryption; Wasm-based cryptography has been tested
+to give us a speedup of ~50-100%.
 
-| Test | Mean (ms) | Median (ms) | 90th % (ms) | Max (ms) |
-|------|--------------|-------------|-------------|-------------|
-| 100 concurrent requests (tunneled) | 67.31 | 67.32 | 67.70 | 69.75 |
-| 100 concurrent requests (no tunnel) | 31.59 | 32.83 | 37.00 | 37.79 |
-| 50 requests (tunneled) | 0.68 | 0.32 | 0.44 | 16.94 |
-| 50 requests (no tunnel) | 0.35 | 0.17 | 0.40 | 6.75 |
-| 50 requests, 1MB up/down (tunneled) | 22.08 | 21.43 | 23.55 | 40.83 |
-| 50 requests, 1MB up/down (no tunnel) | 5.09 | 4.78 | 7.24 | 9.00 |
+### With Tunnel
+
+| Test | Average | Median | 90th % | 99th % | Max |
+|------|---------|--------|--------|--------|-----|
+| 100 concurrent requests | 109.9ms | 109.9ms | 110.47ms | 112.32ms | 112.32ms |
+| 50 serial requests | 0.96ms | 0.38ms | 0.55ms | 28.72ms | 28.72ms |
+| 50 requests with 1MB up/down | 33.64ms | 33.11ms | 34.49ms | 60.4ms | 60.4ms |
+
+### Without Tunnel
+
+| Test | Average | Median | 90th % | 99th % | Max |
+|------|---------|--------|--------|--------|-----|
+| 100 concurrent requests | 32.83ms | 33.28ms | 39.13ms | 45.75ms | 45.75ms |
+| 50 serial requests | 0.37ms | 0.2ms | 0.31ms | 7.67ms | 7.67ms |
+| 50 requests with 1MB up/down | 5.13ms | 4.95ms | 5.56ms | 8.88ms | 8.88ms |
 
 ## Usage
 
