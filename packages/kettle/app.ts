@@ -9,29 +9,7 @@ import type {
   BroadcastMessage,
   BacklogMessage,
 } from "./types.js"
-
-// Workerd types
-interface Fetcher {
-  fetch(request: Request | string, init?: RequestInit): Promise<Response>
-}
-
-interface Env {
-  QUOTE: {
-    getQuote(x25519PublicKey: Uint8Array): Promise<{
-      quote: Uint8Array
-      verifier_data?: {
-        iat: Uint8Array
-        val: Uint8Array
-        signature: Uint8Array
-      }
-      runtime_data?: Uint8Array
-    }>
-  }
-  // Optional libsql over HTTP Hrana bindings provided by demo runner
-  DB_URL?: string
-  DB_TOKEN?: string
-  DB_HTTP?: Fetcher
-}
+import type { Env } from "./worker.js"
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -110,7 +88,8 @@ wss.on("connection", (ws) => {
       }
     } catch (err) {
       console.error("[kettle] Error parsing message:", err)
-      ws.send(data) // just echo on error
+      // Echo anything that doesn't parse as JSON so we can test this
+      ws.send(data)
     }
   })
 })
@@ -155,7 +134,7 @@ app.get("/healthz", async (c) => {
   }
 })
 
-app.post("/quote", async (c) => {
+app.all("/quote", async (c) => {
   try {
     const body = await c.req.json()
     const publicKeyArray = body.publicKey
@@ -213,8 +192,8 @@ function getDb(env: Env): LibsqlClient {
         typeof input === "string"
           ? input
           : input instanceof URL
-            ? input.toString()
-            : (input as Request).url
+          ? input.toString()
+          : (input as Request).url
       const url = new URL(inputUrl, base)
 
       // Extract request components without constructing a Request from a relative URL
