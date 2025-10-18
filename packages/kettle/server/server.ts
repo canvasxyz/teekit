@@ -19,6 +19,7 @@ export interface WorkerConfig {
   workerPort: number
   sqldPort: number
   replicaDbPath?: string
+  encryptionKey?: string
 }
 
 export interface WorkerResult {
@@ -36,7 +37,7 @@ export interface WorkerResult {
 export async function startWorker(
   options: WorkerConfig,
 ): Promise<WorkerResult> {
-  const { dbPath, sqldPort, workerPort, replicaDbPath } = options
+  const { dbPath, sqldPort, workerPort, replicaDbPath, encryptionKey } = options
   const dbToken = randomToken()
   const dbUrl = `http://127.0.0.1:${sqldPort}`
 
@@ -76,6 +77,11 @@ export async function startWorker(
     dbPath,
   ]
 
+  // Enable at-rest encryption for the primary database if a key is provided
+  if (encryptionKey) {
+    sqldArgs.push("--encryption-key", encryptionKey)
+  }
+
   // Add gRPC listener for replication
   if (enableReplication && grpcPort) {
     sqldArgs.push("--grpc-listen-addr", `127.0.0.1:${grpcPort}`)
@@ -111,13 +117,14 @@ export async function startWorker(
       `127.0.0.1:${replicaHttpPort}`,
       "--db-path",
       replicaDbPath,
-      // Enable at-rest encryption for the replica database
-      // Note: requires sqld with encryption support
-      "--db-encryption-key",
-      "test",
       "--primary-grpc-url",
       `http://127.0.0.1:${grpcPort}`,
     ]
+
+    // Enable at-rest encryption for the replica database if a key is provided
+    if (encryptionKey) {
+      replicaArgs.push("--encryption-key", encryptionKey)
+    }
 
     replicaSqld = spawn(sqldBin, replicaArgs, {
       stdio: ["ignore", "pipe", "pipe"],
