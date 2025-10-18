@@ -49,15 +49,21 @@ export async function startWorker(
 
   console.log(
     chalk.yellowBright(
-      `Starting sqld on port ${sqldPort}, workerd on port ${workerPort}`,
+      `[kettle] Starting sqld on port ${sqldPort}, workerd on port ${workerPort}...`,
     ),
   )
   if (enableReplication) {
     replicaHttpPort = await findFreePort()
     console.log(
       chalk.yellowBright(
-        `Starting sqld replica on port ${replicaHttpPort}, gRPC on port ${grpcPort}`,
+        `[kettle] Starting sqld replica on port ${replicaHttpPort}, gRPC on port ${grpcPort}...`,
       ),
+    )
+  }
+  console.log(chalk.yellowBright(`[kettle] sqld path: ${dbPath}`))
+  if (enableReplication) {
+    console.log(
+      chalk.yellowBright(`[kettle] replica sqld path: ${replicaDbPath}`),
     )
   }
 
