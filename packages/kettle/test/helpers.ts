@@ -71,13 +71,7 @@ export async function stopKettleWithTunnel(
   kettle: WorkerResult,
   tunnelClient: TunnelClient,
 ) {
-  try {
-    if (tunnelClient.ws) {
-      tunnelClient.ws.onclose = () => {}
-      tunnelClient.ws.close()
-    }
-  } catch {}
-
+  tunnelClient.close()
   await kettle.stop()
   await new Promise((resolve) => setTimeout(resolve, 500))
 }

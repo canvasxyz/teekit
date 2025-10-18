@@ -90,6 +90,7 @@ export class TunnelClient {
   private reconnectDelay = 1000
   private connectionPromise: Promise<void> | null = null
   private config: TunnelClientConfig
+  private closed = false
 
   WebSocket: new (
     url: string,
@@ -123,6 +124,10 @@ export class TunnelClient {
    * creating a new WebSocket to replace this.ws if necessary.
    */
   public async ensureConnection(): Promise<void> {
+    if (this.closed) {
+      return
+    }
+
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return Promise.resolve()
     }
@@ -179,9 +184,15 @@ export class TunnelClient {
 
         // Drop symmetric key; a new handshake will set it on reconnect
         this.symmetricKey = undefined
-        setTimeout(() => {
+
+        const timer = setTimeout(() => {
+          if (this.closed) return
           this.ensureConnection()
         }, this.reconnectDelay)
+
+        if (typeof timer.unref === "function") {
+          timer.unref()
+        }
       }
 
       this.ws.onerror = (error) => {
@@ -206,9 +217,15 @@ export class TunnelClient {
         // If not open, attempt reconnect soon; close handler will also handle it
         try {
           if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            setTimeout(() => {
+            if (this.closed) return
+
+            const timer = setTimeout(() => {
               this.ensureConnection()
             }, this.reconnectDelay)
+
+            if (typeof timer.unref === "function") {
+              timer.unref()
+            }
           }
         } catch {}
 
@@ -682,5 +699,52 @@ export class TunnelClient {
     if (!x25519key) throw new Error("missing x25519 key")
 
     return await isUserdataBound(quote, nonce, issuedAt, x25519key)
+  }
+
+  /**
+   * Close the control channel and all tunneled WebSockets, and disable reconnection.
+   */
+  public close(code?: number, reason?: string): void {
+    if (this.closed) return
+    this.closed = true
+
+    // Reject any pending HTTP requests
+    try {
+      for (const [, pending] of this.pendingRequests.entries()) {
+        pending.reject(new Error("Tunnel closed"))
+      }
+      this.pendingRequests.clear()
+    } catch {}
+
+    // Notify and clear any tunneled WebSocket connections
+    try {
+      for (const [
+        connectionId,
+        connection,
+      ] of this.webSocketConnections.entries()) {
+        connection.handleTunnelEvent({
+          type: "ws_event",
+          connectionId,
+          eventType: "close",
+          code: code || 1000,
+          reason: reason || "client closed",
+        } as RAEncryptedServerEvent)
+      }
+      this.webSocketConnections.clear()
+    } catch {}
+
+    // Close control channel
+    try {
+      if (
+        this.ws?.readyState === WebSocket.OPEN ||
+        this.ws?.readyState === WebSocket.CONNECTING
+      ) {
+        this.ws.close(code || 1000, reason || "client closed")
+      }
+    } finally {
+      this.ws = null
+      this.connectionPromise = null
+      this.symmetricKey = undefined
+    }
   }
 }

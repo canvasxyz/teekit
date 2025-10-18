@@ -62,19 +62,17 @@ test.serial("tunnel: WebSocket echo", async (t) => {
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
-  // Connect to WebSocket through the tunnel
   const wsUrl = new URL(origin)
   wsUrl.protocol = wsUrl.protocol.replace(/^http/, "ws")
   wsUrl.pathname = "/"
   const ws = new tunnelClient.WebSocket(wsUrl.toString())
 
-  // Wait for open
   await new Promise<void>((resolve) => {
     ws.onopen = () => resolve()
-  }),
-    t.is(ws.readyState, WebSocket.OPEN)
+  })
+  t.is(ws.readyState, WebSocket.OPEN)
 
-  // Send a string; this will fail JSON parsing and be echoeed
+  // Send a string; this will fail JSON parsing and be echoed
   const message1 = "hello world"
   const { promise, resolve } = Promise.withResolvers()
   ws.onmessage = (event) => {
@@ -90,16 +88,19 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
+  const tunnelClient2 = await TunnelClient.initialize(origin, {
+    customVerifyQuote: () => true,
+    customVerifyX25519Binding: () => true,
+  })
+  t.teardown(() => {
+    tunnelClient2.close()
+  })
+
   // Connect to WebSocket through the tunnel
   const wsUrl = new URL(origin)
   wsUrl.protocol = wsUrl.protocol.replace(/^http/, "ws")
   wsUrl.pathname = "/"
   const ws1 = new tunnelClient.WebSocket(wsUrl.toString())
-
-  const tunnelClient2 = await TunnelClient.initialize(origin, {
-    customVerifyQuote: () => true,
-    customVerifyX25519Binding: () => true,
-  })
   const ws2 = new tunnelClient2.WebSocket(wsUrl.toString())
 
   await Promise.all([

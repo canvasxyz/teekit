@@ -11,6 +11,22 @@ import {
   toArrayBuffer,
 } from "./utils/client.js"
 
+// CloseEvent may not be available
+class PolyfillCloseEvent extends Event {
+  code: number
+  reason: string
+  wasClean: boolean
+  constructor(type: string, options: any = {}) {
+    super(type)
+    this.code = options?.code ?? 0
+    this.reason = options?.reason ?? ""
+    this.wasClean = options?.wasClean ?? false
+  }
+}
+const PolyfilledCloseEvent = globalThis.CloseEvent
+  ? CloseEvent
+  : PolyfillCloseEvent
+
 export class ClientRAMockWebSocket extends EventTarget {
   public readonly CONNECTING = 0
   public readonly OPEN = 1
@@ -185,7 +201,7 @@ export class ClientRAMockWebSocket extends EventTarget {
 
       case "close":
         this.readyState = this.CLOSED
-        const closeEvent = new CloseEvent("close", {
+        const closeEvent = new PolyfilledCloseEvent("close", {
           code: event.code || 1000,
           reason: event.reason || "",
           wasClean: true,
