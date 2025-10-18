@@ -136,8 +136,8 @@ app.get("/healthz", async (c) => {
 
 app.all("/quote", async (c) => {
   try {
-    const body = await c.req.json()
-    const publicKeyArray = body.publicKey
+    const publicKeyArray =
+      c.req.method === "POST" ? (await c.req.json()).publicKey : [0]
 
     if (!publicKeyArray || !Array.isArray(publicKeyArray)) {
       return c.json({ error: "publicKey must be an array of numbers" }, 400)
@@ -164,6 +164,7 @@ app.all("/quote", async (c) => {
     }
 
     // Fallback: sample quote for test environments
+    console.log("[kettle] /quote: responding with sample quote")
     const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
     const buf = Uint8Array.from(atob(tappdV4Base64), (c) => c.charCodeAt(0))
     return c.json({ quote: Array.from(buf) })
