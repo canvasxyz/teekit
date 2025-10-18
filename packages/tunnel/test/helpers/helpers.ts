@@ -223,12 +223,7 @@ export async function stopTunnel(
   tunnelServer: TunnelServer,
   tunnelClient: TunnelClient,
 ) {
-  try {
-    if (tunnelClient.ws) {
-      tunnelClient.ws.onclose = () => {}
-      tunnelClient.ws.close()
-    }
-  } catch {}
+  tunnelClient.close()
 
   await new Promise<void>((resolve) => {
     tunnelServer.wss.close(() => resolve())
