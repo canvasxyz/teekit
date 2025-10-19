@@ -21,6 +21,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
   })
   await new Promise((resolve) => setTimeout(resolve, 1000))
   demo1 = { stop: kettle1.stop, workerPort: kettle1.workerPort }
@@ -66,6 +67,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
   })
   demo2 = { stop: kettle2.stop, workerPort: kettle2.workerPort }
   const port2 = kettle2.workerPort

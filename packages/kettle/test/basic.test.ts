@@ -63,8 +63,7 @@ test.serial("bare fetch: POST /quote returns quote data", async (t) => {
   t.is(response.status, 200)
   const data = await response.json()
   t.truthy(data.quote, "quote should be present")
-  t.true(Array.isArray(data.quote), "quote should be an array")
-  t.true(data.quote.length > 0, "quote should not be empty")
+  t.true(typeof data.quote === "string", "quote should be a string")
   t.true(data.quote.length > 100, "quote should be substantial in size")
 })
 

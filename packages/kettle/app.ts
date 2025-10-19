@@ -1,6 +1,8 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { WSEvents } from "hono/ws"
+import { upgradeWebSocket } from "hono/cloudflare-workers"
+import { ContentfulStatusCode } from "hono/utils/http-status"
 import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
 
 import { getDb } from "./db.js"
@@ -13,17 +15,15 @@ import type {
 import type { Env } from "./worker.js"
 
 const app = new Hono<{ Bindings: Env }>()
-
 app.use("/*", cors())
 
-/* ********************************************************************************
- * Begin teekit tunnel code.
- * ******************************************************************************** */
+// Ephemeral global state
+let messages: Message[] = []
+let totalMessageCount = 0
+const MAX_MESSAGES = 30
+const startTime = Date.now()
+let counter = 0
 
-import { upgradeWebSocket } from "hono/cloudflare-workers"
-
-// Attach TunnelServer control channel at bootstrap without generating
-// randomness; keys/quote are deferred until first WS open.
 const { wss } = await TunnelServer.initialize(
   app,
   async () => {
@@ -33,16 +33,6 @@ const { wss } = await TunnelServer.initialize(
   },
   { upgradeWebSocket },
 )
-
-/* ********************************************************************************
- * End teekit tunnel code.
- * ******************************************************************************** */
-
-let messages: Message[] = []
-let totalMessageCount = 0
-const MAX_MESSAGES = 30
-const startTime = Date.now()
-let counter = 0
 
 wss.on("connection", (ws) => {
   // Send backlog on connect
@@ -119,111 +109,79 @@ app.post("/increment", async (c) => {
 })
 
 /* ********************************************************************************
- * Other workerd related fixtures below.
+ * Other routes used to test workerd implementation below.
  * ******************************************************************************** */
 
 app.get("/healthz", async (c) => {
-  try {
-    if (c.env.DB_URL && c.env.DB_TOKEN) {
-      const db = getDb(c.env)
-      await db.execute("SELECT 1")
-    }
-    return c.json({ ok: true })
-  } catch (e: any) {
-    return c.json({ ok: false, error: String(e?.message || e) }, 503)
+  if (c.env.DB_URL && c.env.DB_TOKEN) {
+    const db = getDb(c.env)
+    await db.execute("SELECT 1")
   }
+  return c.json({ ok: true })
 })
 
 app.all("/quote", async (c) => {
-  try {
-    const publicKeyArray =
-      c.req.method === "POST" ? (await c.req.json()).publicKey : [0]
+  const publicKeyArray =
+    c.req.method === "POST" ? (await c.req.json()).publicKey : []
 
-    if (!publicKeyArray || !Array.isArray(publicKeyArray)) {
-      return c.json({ error: "publicKey must be an array of numbers" }, 400)
-    }
-    const publicKey = new Uint8Array(publicKeyArray)
-
-    // Prefer QUOTE binding when available
-    if (c.env.QUOTE && typeof c.env.QUOTE.getQuote === "function") {
-      const quoteData = await c.env.QUOTE.getQuote(publicKey)
-      const response = {
-        quote: Array.from(quoteData.quote),
-        verifier_data: quoteData.verifier_data
-          ? {
-              iat: Array.from(quoteData.verifier_data.iat),
-              val: Array.from(quoteData.verifier_data.val),
-              signature: Array.from(quoteData.verifier_data.signature),
-            }
-          : undefined,
-        runtime_data: quoteData.runtime_data
-          ? Array.from(quoteData.runtime_data)
-          : undefined,
-      }
-      return c.json(response)
-    }
-
-    // Fallback: sample quote for test environments
-    console.log("[kettle] /quote: responding with sample quote")
-    const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
-    const buf = Uint8Array.from(atob(tappdV4Base64), (c) => c.charCodeAt(0))
-    return c.json({ quote: Array.from(buf) })
-  } catch (error) {
-    console.error("[kettle] Error getting quote:", error)
-    return c.json({ error: String(error) }, 500)
+  if (!publicKeyArray || !Array.isArray(publicKeyArray)) {
+    return c.json({ error: "invalid publicKey" }, 400)
   }
+
+  const response = await c.env.QUOTE_SERVICE.fetch(
+    new Request("http://quote-service/quote", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ publicKey: publicKeyArray }),
+    }),
+  )
+
+  if (!response.ok) {
+    const error = await response.json()
+    return c.json(error, response.status as ContentfulStatusCode)
+  }
+
+  const quoteData = await response.json()
+  return c.json(quoteData)
 })
 
 app.post("/db/init", async (c) => {
-  try {
-    const db = getDb(c.env)
-    await db.execute(
-      "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
-    )
-    return c.json({ ok: true })
-  } catch (e) {
-    console.error("[kettle] /db/init error:", e)
-    return c.json({ error: String(e) }, 500)
-  }
+  const db = getDb(c.env)
+  await db.execute(
+    "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
+  )
+  return c.json({ ok: true })
 })
 
 app.post("/db/put", async (c) => {
-  try {
-    const body = await c.req.json()
-    const key = body?.key
-    const value = body?.value
-    if (typeof key !== "string" || typeof value !== "string") {
-      return c.json({ error: "key and value must be strings" }, 400)
-    }
-    const db = getDb(c.env)
-    await db.execute({
-      sql: "INSERT INTO kv(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-      args: [key, value],
-    })
-    return c.json({ ok: true })
-  } catch (e) {
-    console.error("[kettle] /db/put error:", e)
-    return c.json({ error: String(e) }, 500)
+  const body = await c.req.json()
+  const key = body?.key
+  const value = body?.value
+  if (typeof key !== "string" || typeof value !== "string") {
+    return c.json({ error: "key and value must be strings" }, 400)
   }
+  const db = getDb(c.env)
+  await db.execute({
+    sql: "INSERT INTO kv(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    args: [key, value],
+  })
+  return c.json({ ok: true })
 })
 
 app.get("/db/get", async (c) => {
-  try {
-    const key = c.req.query("key")
-    if (!key) return c.json({ error: "key is required" }, 400)
-    const db = getDb(c.env)
-    const rs = await db.execute({
-      sql: "SELECT value FROM kv WHERE key = ?1",
-      args: [key],
-    })
-    const row = rs.rows?.[0]
-    if (!row) return c.json({ error: "not found" }, 404)
-    const value = row.value ?? Object.values(row)[0]
-    return c.json({ key, value })
-  } catch (e) {
-    console.error("[kettle] /db/get error:", e)
-    return c.json({ error: String(e) }, 500)
-  }
+  const key = c.req.query("key")
+  if (!key) return c.json({ error: "key is required" }, 400)
+  const db = getDb(c.env)
+  const rs = await db.execute({
+    sql: "SELECT value FROM kv WHERE key = ?1",
+    args: [key],
+  })
+  const row = rs.rows?.[0]
+  if (!row) return c.json({ error: "not found" }, 404)
+  const value = row.value ?? Object.values(row)[0]
+  return c.json({ key, value })
 })
 
 // bare websocket echo handler

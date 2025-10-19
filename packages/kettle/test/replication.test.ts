@@ -16,6 +16,7 @@ test.serial("replicate data written to primary", async (t) => {
     replicaDbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
   })
 
   t.teardown(async () => {
@@ -91,6 +92,7 @@ test.skip("replicate data written to primary with encryption", async (t) => {
     replicaDbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
     encryptionKey,
   })
 

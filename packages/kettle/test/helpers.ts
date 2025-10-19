@@ -47,6 +47,7 @@ export async function startKettleWithTunnel() {
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
   })
 
   await waitForPortOpen(kettle.workerPort)
@@ -83,6 +84,7 @@ export async function startKettle() {
     dbPath,
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
   })
 
   await waitForPortOpen(kettle.workerPort)

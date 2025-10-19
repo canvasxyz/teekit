@@ -13,11 +13,13 @@ import {
   waitForPortOpen,
 } from "./utils.js"
 import { build } from "esbuild"
+import { startQuoteService } from "./quote.js"
 
 export interface WorkerConfig {
   dbPath: string
   workerPort: number
   sqldPort: number
+  quoteServicePort: number
   replicaDbPath?: string
   encryptionKey?: string
 }
@@ -31,15 +33,24 @@ export interface WorkerResult {
   replicaSqld: ChildProcess | null
   replicaDbPath: string | null
   replicaDbUrl: string | null
+  quoteServiceUrl: string
   stop: () => Promise<any>
 }
 
 export async function startWorker(
   options: WorkerConfig,
 ): Promise<WorkerResult> {
-  const { dbPath, sqldPort, workerPort, replicaDbPath, encryptionKey } = options
+  const {
+    dbPath,
+    sqldPort,
+    workerPort,
+    replicaDbPath,
+    encryptionKey,
+    quoteServicePort,
+  } = options
   const dbToken = randomToken()
   const dbUrl = `http://127.0.0.1:${sqldPort}`
+  const quoteServiceUrl = `http://127.0.0.1:${quoteServicePort}`
 
   // Enable replication if replicaDbPath is provided
   const enableReplication = !!replicaDbPath
@@ -47,6 +58,10 @@ export async function startWorker(
 
   let replicaSqld: ChildProcess | null = null
   let replicaHttpPort: number | null = null
+
+  // Start quote service first
+  const quoteService = startQuoteService(quoteServicePort)
+  await waitForPortOpen(quoteServicePort, 5000)
 
   console.log(
     chalk.yellowBright(
@@ -155,7 +170,6 @@ export async function startWorker(
   const projectDir = fileURLToPath(new URL("..", import.meta.url))
   const WORKER_JS = "dist/worker.js"
   const APP_JS = "dist/app.js"
-  const QUOTE_JS = "dist/bindings/quote.js"
   const tmpConfigPath = join(projectDir, "workerd.config.tmp.capnp")
   const configText = `using Workerd = import "/workerd/workerd.capnp";
 
@@ -173,12 +187,8 @@ const config :Workerd.Config = (
             name = "app.js",
             esModule = embed "${APP_JS}"
           ),
-          (
-            name = "quote",
-            esModule = embed "${QUOTE_JS}"
-          ),
         ],
-        compatibilityDate = "2024-01-01",
+        compatibilityDate = "2024-04-03",
         compatibilityFlags = ["nodejs_compat"],
 
 
@@ -199,6 +209,14 @@ const config :Workerd.Config = (
             name = "HONO_DO",
             durableObjectNamespace = "HonoDurableObject"
           ),
+          (
+            name = "QUOTE_SERVICE_URL",
+            text = "${quoteServiceUrl}"
+          ),
+          (
+            name = "QUOTE_SERVICE",
+            service = "quote"
+          ),
         ],
 
         durableObjectStorage = ( inMemory = void ),
@@ -215,6 +233,12 @@ const config :Workerd.Config = (
       name = "sqld",
       external = (
         address = "127.0.0.1:${sqldPort}"
+      )
+    ),
+    (
+      name = "quote",
+      external = (
+        address = "127.0.0.1:${quoteServicePort}"
       )
     ),
   ],
@@ -276,14 +300,6 @@ const config :Workerd.Config = (
         "app.js",
       ],
     })
-    await build({
-      entryPoints: [join(projectDir, "bindings", "quote.ts")],
-      bundle: true,
-      format: "esm",
-      platform: "node",
-      outfile: join(distDir, "bindings", "quote.js"),
-      external: ["node:*"],
-    })
   } catch (e) {
     console.error("[kettle] Failed to build worker bundle:", e)
     throw e
@@ -326,8 +342,13 @@ const config :Workerd.Config = (
     replicaDbUrl: replicaHttpPort
       ? `http://127.0.0.1:${replicaHttpPort}`
       : null,
-    stop: () => {
-      const stopPromises: Promise<any>[] = [shutdown(workerd), shutdown(sqld)]
+    quoteServiceUrl,
+    stop: async () => {
+      const stopPromises: Promise<any>[] = [
+        shutdown(workerd),
+        shutdown(sqld),
+        quoteService.stop(),
+      ]
       if (replicaSqld) stopPromises.push(shutdown(replicaSqld))
       return Promise.all(stopPromises)
     },
@@ -356,8 +377,9 @@ async function main() {
 
   const { stop } = await startWorker({
     dbPath,
-    sqldPort: await findFreePort(),
     workerPort: port,
+    sqldPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
   })
 
   process.on("SIGINT", () => stop())

@@ -30,17 +30,8 @@ export interface Env {
   DB_URL?: string
   DB_TOKEN?: string
   DB_HTTP?: FetcherLike
-  QUOTE?: {
-    getQuote(x25519PublicKey: Uint8Array): Promise<{
-      quote: Uint8Array
-      verifier_data?: {
-        iat: Uint8Array
-        val: Uint8Array
-        signature: Uint8Array
-      }
-      runtime_data?: Uint8Array
-    }>
-  }
+  QUOTE_SERVICE_URL: string
+  QUOTE_SERVICE: FetcherLike
 }
 
 // wrapper durable object that forwards all requests to the application
