@@ -1,8 +1,9 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { createClient, type Client as LibsqlClient } from "@libsql/client"
 import { WSEvents } from "hono/ws"
 import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
+
+import { getDb } from "./db.js"
 import type {
   Message,
   IncomingChatMessage,
@@ -121,7 +122,6 @@ app.post("/increment", async (c) => {
  * Other workerd related fixtures below.
  * ******************************************************************************** */
 
-// Readiness/liveness probe
 app.get("/healthz", async (c) => {
   try {
     if (c.env.DB_URL && c.env.DB_TOKEN) {
@@ -174,93 +174,6 @@ app.all("/quote", async (c) => {
   }
 })
 
-// libsql helper and routes
-let cachedClient: LibsqlClient | null = null
-function getDb(env: Env): LibsqlClient {
-  if (!env.DB_URL || !env.DB_TOKEN) {
-    throw new Error("Database not configured")
-  }
-  if (cachedClient) return cachedClient
-  let customFetch: typeof fetch = fetch
-
-  console.log("getDb called, no client found in cache")
-
-  if (env.DB_HTTP) {
-    const base = new URL(env.DB_URL)
-
-    customFetch = async (input: string | Request | URL, init?: RequestInit) => {
-      const inputUrl =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : (input as Request).url
-      const url = new URL(inputUrl, base)
-
-      // Extract request components without constructing a Request from a relative URL
-      const method = (init?.method ||
-        (input instanceof Request ? input.method : undefined) ||
-        "GET") as string
-
-      const headers = new Headers()
-      if (init?.headers) {
-        const h = new Headers(init.headers as HeadersInit)
-        h.forEach((v, k) => headers.set(k, v))
-      } else if (input instanceof Request) {
-        input.headers.forEach((v, k) => headers.set(k, v))
-      }
-
-      let body: BodyInit | undefined = init?.body as any
-      if (
-        !body &&
-        input instanceof Request &&
-        method !== "GET" &&
-        method !== "HEAD"
-      ) {
-        body = await input.arrayBuffer()
-      }
-
-      // Route local DB requests via the bound service fetcher, using an absolute URL string
-      if (
-        url.hostname === "127.0.0.1" ||
-        url.hostname === "localhost" ||
-        url.origin === base.origin
-      ) {
-        const absolute = url.toString()
-        const res = await env.DB_HTTP!.fetch(absolute, {
-          method,
-          headers,
-          body,
-        } as RequestInit)
-        try {
-          if (!res.ok) {
-            const preview = await res.clone().text()
-            console.error(
-              `[kettle] DB_HTTP ${method} ${absolute} -> ${res.status} ${
-                res.statusText
-              } :: ${preview.substring(0, 200)}`,
-            )
-          }
-        } catch {}
-        return res
-      }
-
-      // Otherwise, perform a normal fetch to the computed absolute URL
-      return await fetch(url.toString(), {
-        method,
-        headers,
-        body,
-      } as RequestInit)
-    }
-  }
-  cachedClient = createClient({
-    url: env.DB_URL,
-    authToken: env.DB_TOKEN,
-    fetch: customFetch,
-  })
-  return cachedClient
-}
-
 app.post("/db/init", async (c) => {
   try {
     const db = getDb(c.env)
@@ -268,11 +181,8 @@ app.post("/db/init", async (c) => {
       "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
     )
     return c.json({ ok: true })
-  } catch (e: any) {
+  } catch (e) {
     console.error("[kettle] /db/init error:", e)
-    if (String(e?.message || e).includes("Database not configured")) {
-      return c.json({ error: "DB not configured" }, 501)
-    }
     return c.json({ error: String(e) }, 500)
   }
 })
@@ -291,11 +201,8 @@ app.post("/db/put", async (c) => {
       args: [key, value],
     })
     return c.json({ ok: true })
-  } catch (e: any) {
+  } catch (e) {
     console.error("[kettle] /db/put error:", e)
-    if (String(e?.message || e).includes("Database not configured")) {
-      return c.json({ error: "DB not configured" }, 501)
-    }
     return c.json({ error: String(e) }, 500)
   }
 })
@@ -313,11 +220,8 @@ app.get("/db/get", async (c) => {
     if (!row) return c.json({ error: "not found" }, 404)
     const value = row.value ?? Object.values(row)[0]
     return c.json({ key, value })
-  } catch (e: any) {
+  } catch (e) {
     console.error("[kettle] /db/get error:", e)
-    if (String(e?.message || e).includes("Database not configured")) {
-      return c.json({ error: "DB not configured" }, 501)
-    }
     return c.json({ error: String(e) }, 500)
   }
 })
