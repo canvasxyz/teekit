@@ -53,7 +53,7 @@ like Let's Encrypt without custom configuration.
   - A [demo application](https://teekit.vercel.app/) that supports
     HTTPS and WSS requests over the encrypted channel, both with and without
     the embedded ServiceWorker.
-- 🚧 @teekit/kettle:
+- @teekit/kettle:
   - A workerd-based runtime that supports arbitrary JS applications,
     executed inside V8 isolates.
 
@@ -251,4 +251,10 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher.
 
 ## License
 
-MIT (C) 2025
+@teekit/tunnel, @teekit/qvl, and @teekit/demo packages are made
+available under the [MIT License](https://opensource.org/license/mit).
+
+@teekit/kettle is made available under the
+[AGPL V3 License](https://opensource.org/license/agpl-v3).
+
+(C) 2025 Canvas Technologies, Inc.

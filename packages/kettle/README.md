@@ -39,3 +39,7 @@ available on PATH (`which sqld`).
 
 If you are running `sqld` manually, make sure `DB_URL` matches the
 listening address.
+
+## License
+
+AGPL-V3 (C) 2025
