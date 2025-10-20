@@ -170,6 +170,7 @@ export async function startWorker(
   const projectDir = fileURLToPath(new URL("..", import.meta.url))
   const WORKER_JS = "dist/worker.js"
   const APP_JS = "dist/app.js"
+  const distDir = join(projectDir, "dist")
   const tmpConfigPath = join(projectDir, "workerd.config.tmp.capnp")
   const configText = `using Workerd = import "/workerd/workerd.capnp";
 
@@ -217,6 +218,10 @@ const config :Workerd.Config = (
             name = "QUOTE_SERVICE",
             service = "quote"
           ),
+          (
+            name = "STATIC_FILES",
+            service = "static-files"
+          ),
         ],
 
         durableObjectStorage = ( inMemory = void ),
@@ -240,6 +245,10 @@ const config :Workerd.Config = (
       external = (
         address = "127.0.0.1:${quoteServicePort}"
       )
+    ),
+    (
+      name = "static-files",
+      disk = "${distDir}"
     ),
   ],
 

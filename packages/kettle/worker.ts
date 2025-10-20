@@ -32,6 +32,7 @@ export interface Env {
   DB_HTTP?: FetcherLike
   QUOTE_SERVICE_URL: string
   QUOTE_SERVICE: FetcherLike
+  STATIC_FILES?: FetcherLike
 }
 
 // wrapper durable object that forwards all requests to the application

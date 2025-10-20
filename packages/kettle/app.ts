@@ -5,6 +5,7 @@ import { upgradeWebSocket } from "hono/cloudflare-workers"
 import { ContentfulStatusCode } from "hono/utils/http-status"
 import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
 
+import { serveStatic } from "./static.js"
 import { getDb } from "./db.js"
 import type {
   Message,
@@ -225,9 +226,6 @@ app.get(
     }),
   ),
 )
-
-// TODO: Static file serving
-// Note: In workerd, static files should be served via Assets binding configured in workerd.config.capnp
-// For now, we'll just serve the API routes
+app.get("*", serveStatic())
 
 export default app
