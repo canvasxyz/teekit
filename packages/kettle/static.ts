@@ -73,20 +73,6 @@ export const serveStatic = () => {
           }
         }
 
-        // If still not found, serve index.html for SPA routing
-        const indexResponse = await c.env.STATIC_FILES.fetch(
-          new Request("http://dummy/index.html", {
-            method: c.req.method,
-          }),
-        )
-        if (indexResponse.ok) {
-          return c.body(indexResponse.body, {
-            headers: {
-              "Content-Type": "text/html;charset=utf-8",
-            },
-          })
-        }
-
         return c.notFound()
       }
 
