@@ -63,5 +63,7 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+      - name: Build kettle demo
+        run: npm --workspace packages/kettle run build
       - name: Run kettle tests
         run: npm --workspace packages/kettle run test
