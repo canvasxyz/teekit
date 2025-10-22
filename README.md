@@ -11,13 +11,12 @@ _Note: Under active development, has not been audited._
 ## Background
 
 Trusted execution environments make it possible to build private,
-verifiable web services, but web pages in a browser cannot verify
-that they're connected to a TEE. This is beacuse browsers don't
-expose X.509 certificate information required to prove a connection
-terminates inside the secure environment. As a result, proxies like
-Cloudflare can trivially see and modify traffic to TEEs forwarded
-through them, and anyone hosting a TEE app can use a TLS proxy to
-undetectably extract session data and/or impersonate users.
+verifiable web services, but web pages in a browser cannot verify that
+they're connected to a TEE. Browsers don't expose X.509 certificate
+information that proves a connection terminates inside the secure
+environment, so proxies like Cloudflare can trivially see and modify
+traffic to TEEs forwarded through them. Anyone hosting a TEE app
+can use a TLS proxy to extract session data and/or impersonate users.
 
 To work around this, some TEE application hosts implement their own
 proxy in front of the TEE, but this reintroduces trust assumptions
@@ -53,9 +52,6 @@ like Let's Encrypt without custom configuration.
   - A [demo application](https://teekit.vercel.app/) that supports
     HTTPS and WSS requests over the encrypted channel, both with and without
     the embedded ServiceWorker.
-- @teekit/kettle:
-  - A workerd-based runtime that supports arbitrary JS applications,
-    executed inside V8 isolates.
 
 ## Benchmarks
 
