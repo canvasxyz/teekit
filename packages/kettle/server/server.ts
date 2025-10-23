@@ -1,6 +1,12 @@
 import { spawn, ChildProcess } from "child_process"
 import chalk from "chalk"
-import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
+import {
+  mkdtempSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "fs"
 import { join } from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import {
@@ -18,19 +24,22 @@ import { startQuoteService } from "./quote.js"
 const WORKER_JS = "dist/worker.js"
 const APP_JS = "dist/app.js"
 
-export async function buildWorker(projectDir: string) {
+export async function buildWorker(projectDir: string, verbose?: boolean) {
   const distDir = join(projectDir, "dist")
   try {
     if (!existsSync(distDir)) {
       mkdirSync(distDir, { recursive: true })
     }
-    console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
-    await build({
+    if (verbose) {
+      console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
+    }
+    const appBuild = await build({
       entryPoints: [join(projectDir, "app.ts")],
       bundle: true,
       format: "esm",
       platform: "browser",
       outfile: join(distDir, "app.js"),
+      metafile: true,
       external: [
         // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
         "path",
@@ -44,12 +53,20 @@ export async function buildWorker(projectDir: string) {
       ],
     })
 
-    await build({
+    if (appBuild.metafile) {
+      writeFileSync(
+        join(distDir, "app.metafile.json"),
+        JSON.stringify(appBuild.metafile, null, 2),
+      )
+    }
+
+    const workerBuild = await build({
       entryPoints: [join(projectDir, "worker.ts")],
       bundle: true,
       format: "esm",
       platform: "browser",
       outfile: join(distDir, "worker.js"),
+      metafile: true,
       external: [
         // Same externals as app; keep bundle minimal
         "path",
@@ -65,7 +82,23 @@ export async function buildWorker(projectDir: string) {
       ],
     })
 
-    console.log(chalk.yellowBright("[kettle] Built worker.js, app.js"))
+    if (workerBuild.metafile) {
+      writeFileSync(
+        join(distDir, "worker.metafile.json"),
+        JSON.stringify(workerBuild.metafile, null, 2),
+      )
+    }
+
+    const workerSize = readFileSync(join(distDir, "worker.js")).length
+    const appSize = readFileSync(join(distDir, "app.js")).length
+    if (verbose) {
+      console.log(
+        chalk.yellowBright(
+          `[kettle] Built worker.js (${workerSize} bytes), app.js (${appSize} bytes)\n` +
+            `[kettle] Use https://esbuild.github.io/analyze/ on dist/app.metafile.json to analyze bundle size`,
+        ),
+      )
+    }
   } catch (e) {
     console.error("[kettle] Failed to build worker bundle:", e)
     throw e
@@ -386,7 +419,7 @@ async function main(buildOnly?: boolean) {
   if (buildOnly) {
     // build worker
     const projectDir = fileURLToPath(new URL("..", import.meta.url))
-    await buildWorker(projectDir)
+    await buildWorker(projectDir, true)
   } else {
     // start worker
     const port = process.env.PORT ? Number(process.env.PORT) : 3001
