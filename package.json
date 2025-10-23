@@ -17,7 +17,7 @@
     "server": "npm --workspace packages/demo run server",
     "server:express": "npm --workspace packages/demo run server:express",
     "start": "npm --workspace packages/demo run start",
-    "test": "npm --workspaces run test",
+    "test": "node scripts/ensure-sqld.js && npm --workspaces run test",
     "benchmark": "BENCHMARK=1 npm --workspace=packages/tunnel run test -- test/benchmark.test.ts"
   },
   "workspaces": [
