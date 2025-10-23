@@ -23,6 +23,7 @@ import { startQuoteService } from "./quote.js"
 
 const WORKER_JS = "dist/worker.js"
 const APP_JS = "dist/app.js"
+const EXTERNALS_JS = "dist/externals.js"
 
 export async function buildWorker(projectDir: string, verbose?: boolean) {
   const distDir = join(projectDir, "dist")
@@ -33,6 +34,37 @@ export async function buildWorker(projectDir: string, verbose?: boolean) {
     if (verbose) {
       console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
     }
+
+    // Build externals bundle to reduce app.js size
+    const externalsBuild = await build({
+      entryPoints: [join(projectDir, "externals.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(distDir, "externals.js"),
+      metafile: true,
+      external: [
+        // Externalize Node-only deps that appear in optional/dynamic paths
+        "path",
+        "fs",
+        "stream",
+        "buffer",
+        "events",
+        "http",
+        "ws",
+        "node-mocks-http",
+        "net",
+        "querystring",
+      ],
+    })
+
+    if (externalsBuild.metafile) {
+      writeFileSync(
+        join(distDir, "externals.metafile.json"),
+        JSON.stringify(externalsBuild.metafile, null, 2),
+      )
+    }
+
     const appBuild = await build({
       entryPoints: [join(projectDir, "app.ts")],
       bundle: true,
@@ -50,6 +82,31 @@ export async function buildWorker(projectDir: string, verbose?: boolean) {
         "http",
         "ws",
         "node-mocks-http",
+        // Externalize large packages to reduce app.js size - workerd will resolve to externals.js module
+        "hono",
+        "hono/cors",
+        "hono/ws",
+        "hono/cloudflare-workers",
+        "hono/utils/http-status",
+        "@libsql/client",
+        "@teekit/tunnel",
+        "@teekit/tunnel/samples",
+        "@teekit/qvl",
+        "@teekit/qvl/utils",
+        "cbor-x",
+        "@noble/ciphers",
+        "@noble/ciphers/salsa",
+        "@noble/hashes",
+        "@noble/hashes/sha256",
+        "@noble/hashes/sha512",
+        "@noble/hashes/blake2b",
+        "@noble/hashes/crypto",
+        "@noble/hashes/sha1",
+        "@noble/hashes/sha2",
+        "@noble/hashes/utils",
+        "@noble/curves",
+        "@noble/curves/ed25519",
+        "@scure/base",
       ],
     })
 
@@ -91,10 +148,11 @@ export async function buildWorker(projectDir: string, verbose?: boolean) {
 
     const workerSize = readFileSync(join(distDir, "worker.js")).length
     const appSize = readFileSync(join(distDir, "app.js")).length
+    const externalsSize = readFileSync(join(distDir, "externals.js")).length
     if (verbose) {
       console.log(
         chalk.yellowBright(
-          `[kettle] Built worker.js (${workerSize} bytes), app.js (${appSize} bytes)\n` +
+          `[kettle] Built worker.js (${workerSize} bytes), app.js (${appSize} bytes), externals.js (${externalsSize} bytes)\n` +
             `[kettle] Use https://esbuild.github.io/analyze/ on dist/app.metafile.json to analyze bundle size`,
         ),
       )
@@ -280,6 +338,107 @@ const config :Workerd.Config = (
           (
             name = "app.js",
             esModule = embed "${APP_JS}"
+          ),
+          (
+            name = "externals.js",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          # Map package imports to externals.js for transparent externalization
+          (
+            name = "hono",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "hono/cors",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "hono/ws",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "hono/cloudflare-workers",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "hono/utils/http-status",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@libsql/client",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@teekit/tunnel",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@teekit/tunnel/samples",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@teekit/qvl",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@teekit/qvl/utils",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "cbor-x",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/ciphers",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/ciphers/salsa",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes/sha256",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes/sha512",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes/blake2b",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes/crypto",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes/sha1",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes/sha2",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/hashes/utils",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/curves",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@noble/curves/ed25519",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
+            name = "@scure/base",
+            esModule = embed "${EXTERNALS_JS}"
           ),
         ],
         compatibilityDate = "2024-04-03",
