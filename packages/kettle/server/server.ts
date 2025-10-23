@@ -15,6 +15,63 @@ import {
 import { build } from "esbuild"
 import { startQuoteService } from "./quote.js"
 
+const WORKER_JS = "dist/worker.js"
+const APP_JS = "dist/app.js"
+
+export async function buildWorker(projectDir: string) {
+  const distDir = join(projectDir, "dist")
+  try {
+    if (!existsSync(distDir)) {
+      mkdirSync(distDir, { recursive: true })
+    }
+    console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
+    await build({
+      entryPoints: [join(projectDir, "app.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(distDir, "app.js"),
+      external: [
+        // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
+        "path",
+        "fs",
+        "stream",
+        "buffer",
+        "events",
+        "http",
+        "ws",
+        "node-mocks-http",
+      ],
+    })
+
+    await build({
+      entryPoints: [join(projectDir, "worker.ts")],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: join(distDir, "worker.js"),
+      external: [
+        // Same externals as app; keep bundle minimal
+        "path",
+        "fs",
+        "stream",
+        "buffer",
+        "events",
+        "http",
+        "ws",
+        "node-mocks-http",
+        // Treat embedded module as external so it's resolved at runtime by workerd
+        "app.js",
+      ],
+    })
+
+    console.log(chalk.yellowBright("[kettle] Built worker.js, app.js"))
+  } catch (e) {
+    console.error("[kettle] Failed to build worker bundle:", e)
+    throw e
+  }
+}
+
 export interface WorkerConfig {
   dbPath: string
   workerPort: number
@@ -22,6 +79,7 @@ export interface WorkerConfig {
   quoteServicePort: number
   replicaDbPath?: string
   encryptionKey?: string
+  projectDir?: string
 }
 
 export interface WorkerResult {
@@ -51,6 +109,8 @@ export async function startWorker(
   const dbToken = randomToken()
   const dbUrl = `http://127.0.0.1:${sqldPort}`
   const quoteServiceUrl = `http://127.0.0.1:${quoteServicePort}`
+  const projectDir =
+    options.projectDir ?? fileURLToPath(new URL("..", import.meta.url))
 
   // Enable replication if replicaDbPath is provided
   const enableReplication = !!replicaDbPath
@@ -167,9 +227,9 @@ export async function startWorker(
 
   // Start workerd
   // Resolve the project directory (packages/kettle) regardless of process.cwd()
-  const projectDir = fileURLToPath(new URL("..", import.meta.url))
-  const WORKER_JS = "dist/worker.js"
-  const APP_JS = "dist/app.js"
+  // Always (re)build worker bundle for tests/local runs to pick up changes
+  await buildWorker(projectDir)
+
   const distDir = join(projectDir, "dist")
   const tmpConfigPath = join(projectDir, "workerd.config.tmp.capnp")
   const configText = `using Workerd = import "/workerd/workerd.capnp";
@@ -264,56 +324,6 @@ const config :Workerd.Config = (
 `
   writeFileSync(tmpConfigPath, configText, "utf-8")
 
-  // Always (re)build worker bundle for tests/local runs to pick up changes
-  try {
-    const distDir = join(projectDir, "dist")
-    console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
-    // Build the Hono app (used inside the Durable Object)
-    await build({
-      entryPoints: [join(projectDir, "app.ts")],
-      bundle: true,
-      format: "esm",
-      platform: "browser",
-      outfile: join(distDir, "app.js"),
-      external: [
-        // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
-        "path",
-        "fs",
-        "stream",
-        "buffer",
-        "events",
-        "http",
-        "ws",
-        "node-mocks-http",
-      ],
-    })
-
-    // Build the Worker entrypoint that proxies to the Durable Object
-    await build({
-      entryPoints: [join(projectDir, "worker.ts")],
-      bundle: true,
-      format: "esm",
-      platform: "browser",
-      outfile: join(distDir, "worker.js"),
-      external: [
-        // Same externals as app; keep bundle minimal
-        "path",
-        "fs",
-        "stream",
-        "buffer",
-        "events",
-        "http",
-        "ws",
-        "node-mocks-http",
-        // Treat embedded module as external so it's resolved at runtime by workerd
-        "app.js",
-      ],
-    })
-  } catch (e) {
-    console.error("[kettle] Failed to build worker bundle:", e)
-    throw e
-  }
-
   const workerdBin = resolveWorkerdBinary()
   console.log(chalk.yellowBright("[kettle] Starting workerd..."))
   const workerd = spawn(
@@ -372,29 +382,37 @@ const config :Workerd.Config = (
   return result
 }
 
-async function main() {
-  const port = process.env.PORT ? Number(process.env.PORT) : 3001
+async function main(buildOnly?: boolean) {
+  if (buildOnly) {
+    // build worker
+    const projectDir = fileURLToPath(new URL("..", import.meta.url))
+    await buildWorker(projectDir)
+  } else {
+    // start worker
+    const port = process.env.PORT ? Number(process.env.PORT) : 3001
 
-  const baseDir =
-    process.env.DB_DIR ??
-    mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
-  if (!existsSync(baseDir)) {
-    mkdirSync(baseDir, { recursive: true })
+    const baseDir =
+      process.env.DB_DIR ??
+      mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
+    if (!existsSync(baseDir)) {
+      mkdirSync(baseDir, { recursive: true })
+    }
+
+    const dbPath = join(baseDir, "app.sqlite")
+
+    const { stop } = await startWorker({
+      dbPath,
+      workerPort: port,
+      sqldPort: await findFreePort(),
+      quoteServicePort: await findFreePort(),
+    })
+
+    process.on("SIGINT", () => stop())
+    process.on("SIGTERM", () => stop())
   }
-
-  const dbPath = join(baseDir, "app.sqlite")
-
-  const { stop } = await startWorker({
-    dbPath,
-    workerPort: port,
-    sqldPort: await findFreePort(),
-    quoteServicePort: await findFreePort(),
-  })
-
-  process.on("SIGINT", () => stop())
-  process.on("SIGTERM", () => stop())
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main()
+  const buildOnly = process.argv[2] === "build-worker"
+  main(buildOnly)
 }

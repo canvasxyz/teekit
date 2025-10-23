@@ -8,6 +8,7 @@
     "build": "vite build",
     "server": "tsx server/server.ts",
     "quote-service": "tsx server/quote-service.ts",
+    "build:worker": "tsx server/server.ts build-worker",
     "start": "npm run demo",
     "test": "ava --serial"
   },
