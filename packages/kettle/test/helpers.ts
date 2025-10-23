@@ -1,7 +1,7 @@
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { startWorker, WorkerResult } from "../server/server.js"
+import { startWorker, WorkerResult } from "../server/startWorker.js"
 import {
   findFreePort,
   waitForPortClosed,

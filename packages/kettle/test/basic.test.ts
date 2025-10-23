@@ -1,5 +1,5 @@
 import test from "ava"
-import { WorkerResult } from "../server/server.js"
+import { WorkerResult } from "../server/startWorker.js"
 import { WebSocket } from "ws"
 import { connectWebSocket, startKettle, stopKettle } from "./helpers.js"
 

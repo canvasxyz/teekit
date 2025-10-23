@@ -1,12 +1,6 @@
 import { spawn, ChildProcess } from "child_process"
 import chalk from "chalk"
-import {
-  mkdtempSync,
-  writeFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from "fs"
+import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
 import { join } from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import {
@@ -18,150 +12,12 @@ import {
   shutdown,
   waitForPortOpen,
 } from "./utils.js"
-import { build } from "esbuild"
-import { startQuoteService } from "./quote.js"
+import { startQuoteService } from "./startQuoteService.js"
+import { buildWorker } from "./buildWorker.js"
 
 const WORKER_JS = "dist/worker.js"
 const APP_JS = "dist/app.js"
 const EXTERNALS_JS = "dist/externals.js"
-
-export async function buildWorker(projectDir: string, verbose?: boolean) {
-  const distDir = join(projectDir, "dist")
-  try {
-    if (!existsSync(distDir)) {
-      mkdirSync(distDir, { recursive: true })
-    }
-    if (verbose) {
-      console.log(chalk.yellowBright("[kettle] Building worker bundle..."))
-    }
-
-    // Build externals bundle to reduce app.js size
-    const externalsBuild = await build({
-      entryPoints: [join(projectDir, "externals.ts")],
-      bundle: true,
-      format: "esm",
-      platform: "browser",
-      outfile: join(distDir, "externals.js"),
-      metafile: true,
-      external: [
-        // Externalize Node-only deps that appear in optional/dynamic paths
-        "path",
-        "fs",
-        "stream",
-        "buffer",
-        "events",
-        "http",
-        "ws",
-        "node-mocks-http",
-        "net",
-        "querystring",
-      ],
-    })
-
-    if (externalsBuild.metafile) {
-      writeFileSync(
-        join(distDir, "externals.metafile.json"),
-        JSON.stringify(externalsBuild.metafile, null, 2),
-      )
-    }
-
-    const appBuild = await build({
-      entryPoints: [join(projectDir, "app.ts")],
-      bundle: true,
-      format: "esm",
-      platform: "browser",
-      outfile: join(distDir, "app.js"),
-      metafile: true,
-      external: [
-        // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
-        "path",
-        "fs",
-        "stream",
-        "buffer",
-        "events",
-        "http",
-        "ws",
-        "node-mocks-http",
-        // Externalize large packages to reduce app.js size - workerd will resolve to externals.js module
-        "hono",
-        "hono/cors",
-        "hono/ws",
-        "hono/cloudflare-workers",
-        "hono/utils/http-status",
-        "@libsql/client",
-        "@teekit/tunnel",
-        "@teekit/tunnel/samples",
-        "@teekit/qvl",
-        "@teekit/qvl/utils",
-        "cbor-x",
-        "@noble/ciphers",
-        "@noble/ciphers/salsa",
-        "@noble/hashes",
-        "@noble/hashes/sha256",
-        "@noble/hashes/sha512",
-        "@noble/hashes/blake2b",
-        "@noble/hashes/crypto",
-        "@noble/hashes/sha1",
-        "@noble/hashes/sha2",
-        "@noble/hashes/utils",
-        "@noble/curves",
-        "@noble/curves/ed25519",
-        "@scure/base",
-      ],
-    })
-
-    if (appBuild.metafile) {
-      writeFileSync(
-        join(distDir, "app.metafile.json"),
-        JSON.stringify(appBuild.metafile, null, 2),
-      )
-    }
-
-    const workerBuild = await build({
-      entryPoints: [join(projectDir, "worker.ts")],
-      bundle: true,
-      format: "esm",
-      platform: "browser",
-      outfile: join(distDir, "worker.js"),
-      metafile: true,
-      external: [
-        // Same externals as app; keep bundle minimal
-        "path",
-        "fs",
-        "stream",
-        "buffer",
-        "events",
-        "http",
-        "ws",
-        "node-mocks-http",
-        // Treat embedded module as external so it's resolved at runtime by workerd
-        "app.js",
-      ],
-    })
-
-    if (workerBuild.metafile) {
-      writeFileSync(
-        join(distDir, "worker.metafile.json"),
-        JSON.stringify(workerBuild.metafile, null, 2),
-      )
-    }
-
-    const workerSize = readFileSync(join(distDir, "worker.js")).length
-    const appSize = readFileSync(join(distDir, "app.js")).length
-    const externalsSize = readFileSync(join(distDir, "externals.js")).length
-    if (verbose) {
-      console.log(
-        chalk.yellowBright(
-          `[kettle] Built worker.js (${workerSize} bytes), app.js (${appSize} bytes), externals.js (${externalsSize} bytes)\n` +
-            `[kettle] Use https://esbuild.github.io/analyze/ on dist/app.metafile.json to analyze bundle size`,
-        ),
-      )
-    }
-  } catch (e) {
-    console.error("[kettle] Failed to build worker bundle:", e)
-    throw e
-  }
-}
 
 export interface WorkerConfig {
   dbPath: string
@@ -315,11 +171,6 @@ export async function startWorker(
     await waitForPortOpen(replicaHttpPort, 10000)
     await new Promise((r) => setTimeout(r, 1000))
   }
-
-  // Start workerd
-  // Resolve the project directory (packages/kettle) regardless of process.cwd()
-  // Always (re)build worker bundle for tests/local runs to pick up changes
-  await buildWorker(projectDir)
 
   const distDir = join(projectDir, "dist")
   const tmpConfigPath = join(projectDir, "workerd.config.tmp.capnp")
@@ -574,37 +425,33 @@ const config :Workerd.Config = (
   return result
 }
 
-async function main(buildOnly?: boolean) {
-  if (buildOnly) {
-    // build worker
-    const projectDir = fileURLToPath(new URL("..", import.meta.url))
-    await buildWorker(projectDir, true)
-  } else {
-    // start worker
-    const port = process.env.PORT ? Number(process.env.PORT) : 3001
+async function main() {
+  const port = process.env.PORT ? Number(process.env.PORT) : 3001
 
-    const baseDir =
-      process.env.DB_DIR ??
-      mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
-    if (!existsSync(baseDir)) {
-      mkdirSync(baseDir, { recursive: true })
-    }
-
-    const dbPath = join(baseDir, "app.sqlite")
-
-    const { stop } = await startWorker({
-      dbPath,
-      workerPort: port,
-      sqldPort: await findFreePort(),
-      quoteServicePort: await findFreePort(),
-    })
-
-    process.on("SIGINT", () => stop())
-    process.on("SIGTERM", () => stop())
+  // Store worker data in /tmp
+  const baseDir =
+    process.env.DB_DIR ??
+    mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
+  if (!existsSync(baseDir)) {
+    mkdirSync(baseDir, { recursive: true })
   }
+  const dbPath = join(baseDir, "app.sqlite")
+
+  // Always (re)build worker bundle for tests/local runs to pick up changes
+  const projectDir = fileURLToPath(new URL("..", import.meta.url))
+  await buildWorker(projectDir)
+
+  const { stop } = await startWorker({
+    dbPath,
+    workerPort: port,
+    sqldPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
+  })
+
+  process.on("SIGINT", () => stop())
+  process.on("SIGTERM", () => stop())
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const buildOnly = process.argv[2] === "build-worker"
-  main(buildOnly)
+  main()
 }

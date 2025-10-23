@@ -2,7 +2,7 @@ import test from "ava"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { startWorker } from "../server/server.js"
+import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { createClient } from "@libsql/client"
 

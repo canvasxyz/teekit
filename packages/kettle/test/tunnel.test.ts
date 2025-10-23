@@ -1,5 +1,5 @@
 import test from "ava"
-import { WorkerResult } from "../server/server.js"
+import { WorkerResult } from "../server/startWorker.js"
 import { TunnelClient } from "@teekit/tunnel"
 import { startKettleWithTunnel, stopKettleWithTunnel } from "./helpers.js"
 

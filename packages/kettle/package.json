@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "server": "tsx server/server.ts",
-    "quote-service": "tsx server/quote-service.ts",
-    "build:worker": "tsx server/server.ts build-worker",
+    "server": "tsx server/startWorker.ts",
+    "quote-service": "tsx server/startQuoteService.ts",
+    "build:worker": "tsx server/buildWorker.ts",
     "start": "npm run demo",
     "test": "ava --serial"
   },
