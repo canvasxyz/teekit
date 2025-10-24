@@ -34,3 +34,4 @@ done
 
 rm package-lock.json
 npm i
+npm run build
