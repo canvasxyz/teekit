@@ -1,57 +1,57 @@
 {
-  "name": "@teekit/tunnel",
-  "version": "0.0.1",
-  "type": "module",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "scripts": {
-    "dev": "concurrently -n ts,sw -c green,cyan  \"tsc --watch\" \"esbuild src/sw.ts --bundle --watch --outfile=lib/sw.build.js\"",
-    "build": "tsc && esbuild src/sw.ts --bundle --outfile=lib/sw.build.js",
-    "test": "ava --serial"
-  },
-  "exports": {
-    ".": "./lib/index.js",
-    "./sw": "./lib/swMiddleware.js",
-    "./register": "./lib/registerServiceWorker.js",
-    "./samples": "./lib/samples.js"
-  },
-  "dependencies": {
-    "@cloudflare/workers-types": "^4.20251011.0",
-    "@noble/ciphers": "^2.0.1",
-    "@noble/curves": "^2.0.1",
-    "@noble/hashes": "^1.8.0",
-    "@teekit/qvl": "0.0.1",
-    "cbor-x": "^1.6.0",
-    "isomorphic-ws": "^5.0.0",
-    "node-mocks-http": "^1.17.2",
-    "uint8array-extras": "^1.5.0",
-    "ws": "^8.18.3"
-  },
-  "devDependencies": {
-    "@hono/node-server": "^1.19.5",
-    "@hono/node-ws": "^1.2.0",
-    "@types/express": "^5.0.3",
-    "@types/node": "^24.3.1",
-    "@types/ws": "^8.18.1",
-    "ava": "^6.4.1",
-    "concurrently": "^9.2.1",
-    "express": "^5.1.0",
-    "hono": "^4.6.9",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
-  },
-  "ava": {
-    "extensions": [
-      "ts"
-    ],
-    "nodeArguments": [
-      "--import=tsx"
-    ],
-    "files": [
-      "test/**/*.test.ts"
-    ]
-  }
+	"name": "@teekit/tunnel",
+	"version": "0.0.2",
+	"type": "module",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"scripts": {
+		"dev": "concurrently -n ts,sw -c green,cyan  \"tsc --watch\" \"esbuild src/sw.ts --bundle --watch --outfile=lib/sw.build.js\"",
+		"build": "tsc && esbuild src/sw.ts --bundle --outfile=lib/sw.build.js",
+		"test": "ava --serial"
+	},
+	"exports": {
+		".": "./lib/index.js",
+		"./sw": "./lib/swMiddleware.js",
+		"./register": "./lib/registerServiceWorker.js",
+		"./samples": "./lib/samples.js"
+	},
+	"dependencies": {
+		"@cloudflare/workers-types": "^4.20251011.0",
+		"@noble/ciphers": "^2.0.1",
+		"@noble/curves": "^2.0.1",
+		"@noble/hashes": "^1.8.0",
+		"@teekit/qvl": "0.0.2",
+		"cbor-x": "^1.6.0",
+		"isomorphic-ws": "^5.0.0",
+		"node-mocks-http": "^1.17.2",
+		"uint8array-extras": "^1.5.0",
+		"ws": "^8.18.3"
+	},
+	"devDependencies": {
+		"@hono/node-server": "^1.19.5",
+		"@hono/node-ws": "^1.2.0",
+		"@types/express": "^5.0.3",
+		"@types/node": "^24.3.1",
+		"@types/ws": "^8.18.1",
+		"ava": "^6.4.1",
+		"concurrently": "^9.2.1",
+		"express": "^5.1.0",
+		"hono": "^4.6.9",
+		"tsx": "^4.20.5",
+		"typescript": "^5.9.2"
+	},
+	"ava": {
+		"extensions": [
+			"ts"
+		],
+		"nodeArguments": [
+			"--import=tsx"
+		],
+		"files": [
+			"test/**/*.test.ts"
+		]
+	}
 }

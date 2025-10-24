@@ -1,43 +1,44 @@
 {
-  "name": "teekit",
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=22.0.0",
-    "npm": ">=11.0.0"
-  },
-  "scripts": {
-    "clean": "rm -rf packages/*/dist/* packages/*/*.tsbuildinfo",
-    "build": "npm --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo --workspace packages/kettle run build && npm --workspace packages/kettle run build:worker",
-    "lint": "eslint .",
-    "publish": "npm run clean && npm run build && npm publish -w=packages/ --access public",
-    "dev": "tsc --build --watch",
-    "dev:demo": "npm --workspace packages/demo run dev",
-    "preview": "npm --workspace packages/demo run preview",
-    "server": "npm --workspace packages/demo run server",
-    "server:express": "npm --workspace packages/demo run server:express",
-    "start": "npm --workspace packages/demo run start",
-    "test": "node scripts/ensure-sqld.js && npm --workspaces run test",
-    "benchmark": "BENCHMARK=1 npm --workspace=packages/tunnel run test -- test/benchmark.test.ts"
-  },
-  "workspaces": [
-    "packages/*"
-  ],
-  "ava": {
-    "extensions": [
-      "ts"
-    ],
-    "nodeArguments": [
-      "--import=tsx"
-    ],
-    "files": [
-      "test/**/*.test.ts"
-    ]
-  },
-  "dependencies": {
-    "debug": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/debug": "^4.1.12"
-  }
+	"name": "teekit",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=22.0.0",
+		"npm": ">=11.0.0"
+	},
+	"scripts": {
+		"clean": "rm -rf packages/*/dist/* packages/*/*.tsbuildinfo",
+		"build": "npm --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo --workspace packages/kettle run build && npm --workspace packages/kettle run build:worker",
+		"lint": "eslint .",
+		"publish": "npm run clean && npm run build && npm publish -w=packages/ --access public",
+		"dev": "tsc --build --watch",
+		"dev:demo": "npm --workspace packages/demo run dev",
+		"preview": "npm --workspace packages/demo run preview",
+		"server": "npm --workspace packages/demo run server",
+		"server:express": "npm --workspace packages/demo run server:express",
+		"start": "npm --workspace packages/demo run start",
+		"test": "node scripts/ensure-sqld.js && npm --workspaces run test",
+		"benchmark": "BENCHMARK=1 npm --workspace=packages/tunnel run test -- test/benchmark.test.ts"
+	},
+	"workspaces": [
+		"packages/*"
+	],
+	"ava": {
+		"extensions": [
+			"ts"
+		],
+		"nodeArguments": [
+			"--import=tsx"
+		],
+		"files": [
+			"test/**/*.test.ts"
+		]
+	},
+	"dependencies": {
+		"debug": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/debug": "^4.1.12"
+	},
+	"version": "0.0.2"
 }

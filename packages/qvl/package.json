@@ -1,56 +1,56 @@
 {
-  "name": "@teekit/qvl",
-  "version": "0.0.1",
-  "type": "module",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "exports": {
-    ".": {
-      "types": "./lib/index.d.ts",
-      "import": "./lib/index.js",
-      "default": "./lib/index.js"
-    },
-    "./utils": {
-      "types": "./lib/utils.d.ts",
-      "import": "./lib/utils.js",
-      "default": "./lib/utils.js"
-    },
-    "./tcb": {
-      "types": "./lib/tcb.d.ts",
-      "import": "./lib/tcb.js",
-      "default": "./lib/tcb.js"
-    }
-  },
-  "scripts": {
-    "dev": "tsc --watch -p tsconfig.json",
-    "build": "tsc -p tsconfig.json",
-    "test": "ava --serial"
-  },
-  "dependencies": {
-    "@scure/base": "^2.0.0",
-    "asn1js": "^3.0.5",
-    "pkijs": "^3.0.18",
-    "restructure": "^3.0.2",
-    "uint8array-extras": "^1.5.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.3.1",
-    "ava": "^6.4.1",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
-  },
-  "ava": {
-    "extensions": [
-      "ts"
-    ],
-    "nodeArguments": [
-      "--import=tsx"
-    ],
-    "files": [
-      "test/**/*.test.ts"
-    ]
-  }
+	"name": "@teekit/qvl",
+	"version": "0.0.2",
+	"type": "module",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"exports": {
+		".": {
+			"types": "./lib/index.d.ts",
+			"import": "./lib/index.js",
+			"default": "./lib/index.js"
+		},
+		"./utils": {
+			"types": "./lib/utils.d.ts",
+			"import": "./lib/utils.js",
+			"default": "./lib/utils.js"
+		},
+		"./tcb": {
+			"types": "./lib/tcb.d.ts",
+			"import": "./lib/tcb.js",
+			"default": "./lib/tcb.js"
+		}
+	},
+	"scripts": {
+		"dev": "tsc --watch -p tsconfig.json",
+		"build": "tsc -p tsconfig.json",
+		"test": "ava --serial"
+	},
+	"dependencies": {
+		"@scure/base": "^2.0.0",
+		"asn1js": "^3.0.5",
+		"pkijs": "^3.0.18",
+		"restructure": "^3.0.2",
+		"uint8array-extras": "^1.5.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.3.1",
+		"ava": "^6.4.1",
+		"tsx": "^4.20.5",
+		"typescript": "^5.9.2"
+	},
+	"ava": {
+		"extensions": [
+			"ts"
+		],
+		"nodeArguments": [
+			"--import=tsx"
+		],
+		"files": [
+			"test/**/*.test.ts"
+		]
+	}
 }
