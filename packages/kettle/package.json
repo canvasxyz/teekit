@@ -13,7 +13,7 @@
 		"test": "ava --serial"
 	},
 	"dependencies": {
-		"@libsql/client": "^0.11.0",
+		"@libsql/client": "^0.15.15",
 		"@scure/base": "^2.0.0",
 		"@teekit/qvl": "0.0.2",
 		"@teekit/tunnel": "0.0.2",
@@ -44,7 +44,8 @@
 		"ws": "^8.18.3"
 	},
 	"optionalDependencies": {
-		"@rollup/rollup-linux-x64-gnu": "^4.50.1"
+		"@rollup/rollup-linux-x64-gnu": "^4.50.1",
+    "@libsql/linux-x64-gnu": "^0.5.22"
 	},
 	"ava": {
 		"concurrency": 1,
