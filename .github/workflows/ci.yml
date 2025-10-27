@@ -61,9 +61,11 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
-      - name: Build
-        run: npm run build
+      - name: Build dependencies
+        run: npm --workspace packages/qvl --workspace packages/tunnel run build
       - name: Build kettle demo
         run: npm --workspace packages/kettle run build
+      - name: Build kettle worker
+        run: npm --workspace packages/kettle run build:worker
       - name: Run kettle tests
         run: npm --workspace packages/kettle run test
