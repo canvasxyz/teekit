@@ -1,9 +1,15 @@
 ## @teekit/tunnel
 
 @teekit/tunnel is an encrypted channel that relays HTTP fetch requests
-and WebSockets over a WebSocket, terminating inside a Trusted
-Execution Environment. It uses @teekit/qvl for quote validation, and
-additionally allows providing custom verifiers and TCB validation.
+and WebSockets over an encrypted WebSocket.
+
+It can be used to create browser-based applications that verify
+connections terminate securely inside a Trusted Execution Environment
+(TEE).
+
+It uses @teekit/qvl for quote validation, and allows the user to specify
+custom verification logic, TCB freshness validation, and custom
+certificate revocation logs.
 
 ## Usage
 
