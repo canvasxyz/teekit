@@ -26,3 +26,6 @@ packages/*/dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# TDX config file
+config.json
