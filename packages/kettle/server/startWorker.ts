@@ -418,11 +418,11 @@ const config :Workerd.Config = (
     quoteServiceUrl,
     stop: async () => {
       const stopPromises: Promise<any>[] = [
-        shutdown(workerd),
-        shutdown(sqld),
+        shutdown(workerd, 1000), // Reduce timeout for workerd
+        shutdown(sqld, 1000), // Reduce timeout for sqld
         quoteService.stop(),
       ]
-      if (replicaSqld) stopPromises.push(shutdown(replicaSqld))
+      if (replicaSqld) stopPromises.push(shutdown(replicaSqld, 1000))
       return Promise.all(stopPromises)
     },
   }

@@ -89,6 +89,8 @@ test.serial("bare ws: echo message", async (t) => {
   })
 
   t.is(echoReceived, testMessage, "Server should echo the message back")
+  ws.close()
+  ws.terminate()
 })
 
 test.serial("bare ws: binary message echo", async (t) => {
@@ -118,6 +120,8 @@ test.serial("bare ws: binary message echo", async (t) => {
     Array.from(testData),
     "Server should echo binary data correctly",
   )
+  ws.close()
+  ws.terminate()
 })
 
 test.serial("bare ws: multiple messages", async (t) => {
@@ -155,6 +159,8 @@ test.serial("bare ws: multiple messages", async (t) => {
     messages,
     "All messages should be echoed in order",
   )
+  ws.close()
+  ws.terminate()
 })
 
 test.serial("bare ws: concurrent connections", async (t) => {
@@ -242,6 +248,8 @@ test.serial("bare ws: large message handling", async (t) => {
 
   t.is(echo.length, largeMessage.length, "Large message should be echoed")
   t.is(echo, largeMessage, "Large message content should match")
+  ws.close()
+  ws.terminate()
 })
 
 test.serial("static: GET / returns index.html", async (t) => {

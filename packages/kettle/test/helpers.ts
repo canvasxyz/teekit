@@ -13,6 +13,17 @@ import { hex, parseTdxQuote } from "@teekit/qvl"
 import { tappdV4Base64 } from "@teekit/tunnel/samples"
 import { WebSocket } from "ws"
 import { fileURLToPath } from "url"
+import whyIsNodeRunning from "why-is-node-running"
+
+export function logWithTimestamp(message: string) {
+  const timestamp = new Date().toISOString()
+  console.log(`[${timestamp}] ${message}`)
+}
+
+export function debugNodeRunning(label: string) {
+  logWithTimestamp(`=== Checking why Node is still running: ${label} ===`)
+  whyIsNodeRunning()
+}
 
 // Create a WebSocket connection, but timeout if connection fails
 export async function connectWebSocket(

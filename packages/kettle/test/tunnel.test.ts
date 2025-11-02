@@ -82,6 +82,7 @@ test.serial("tunnel: WebSocket echo", async (t) => {
   const result = await promise
 
   t.deepEqual(result, message1)
+  ws.close()
 })
 
 test.serial("tunnel: WebSocket chat messages", async (t) => {
@@ -135,4 +136,6 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
   t.is(result2.type, "message")
   t.is(result2.message.username, message1.username)
   t.is(result2.message.text, message1.text)
+  ws1.close()
+  ws2.close()
 })
