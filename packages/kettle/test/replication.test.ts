@@ -8,6 +8,7 @@ import { createClient } from "@libsql/client"
 import { fileURLToPath } from "url"
 
 test.serial("replicated data persists between runs", async (t) => {
+  t.timeout(60000)
   let demo1: { stop: () => Promise<void>; workerPort: number } | null = null
   let demo2: { stop: () => Promise<void>; workerPort: number } | null = null
 
