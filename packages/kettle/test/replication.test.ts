@@ -1,4 +1,5 @@
 import test from "ava"
+import { registerTestLogging } from "./setup-logging.js"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -6,6 +7,8 @@ import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { createClient } from "@libsql/client"
 import { fileURLToPath } from "url"
+
+registerTestLogging(test)
 
 test.serial("replicate data written to primary", async (t) => {
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-test-"))

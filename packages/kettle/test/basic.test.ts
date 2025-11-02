@@ -1,7 +1,10 @@
 import test from "ava"
+import { registerTestLogging } from "./setup-logging.js"
 import { WorkerResult } from "../server/startWorker.js"
 import { WebSocket } from "ws"
 import { connectWebSocket, startKettle, stopKettle } from "./helpers.js"
+
+registerTestLogging(test)
 
 let shared: WorkerResult | null = null
 

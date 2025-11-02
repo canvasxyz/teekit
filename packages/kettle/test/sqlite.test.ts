@@ -1,10 +1,13 @@
 import test from "ava"
+import { registerTestLogging } from "./setup-logging.js"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { fileURLToPath } from "url"
+
+registerTestLogging(test)
 
 test.serial("sqlite: create, update, persist between runs", async (t) => {
   let demo1: { stop: () => Promise<void>; workerPort: number } | null = null

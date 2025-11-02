@@ -1,7 +1,10 @@
 import test from "ava"
+import { registerTestLogging } from "./setup-logging.js"
 import { WorkerResult } from "../server/startWorker.js"
 import { TunnelClient } from "@teekit/tunnel"
 import { startKettleWithTunnel, stopKettleWithTunnel } from "./helpers.js"
+
+registerTestLogging(test)
 
 let shared: {
   kettle: WorkerResult
