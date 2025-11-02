@@ -3,7 +3,7 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-    "clean": "rm -rf dist/* test/lib/* *.tsbuildinfo",
+		"clean": "rm -rf dist/* test/lib/* *.tsbuildinfo",
 		"dev": "vite",
 		"build": "vite build",
 		"server": "tsx server/startWorker.ts",
@@ -44,8 +44,8 @@
 		"ws": "^8.18.3"
 	},
 	"optionalDependencies": {
-		"@rollup/rollup-linux-x64-gnu": "^4.50.1",
-    "@libsql/linux-x64-gnu": "^0.5.22"
+		"@libsql/linux-x64-gnu": "^0.5.22",
+		"@rollup/rollup-linux-x64-gnu": "^4.50.1"
 	},
 	"ava": {
 		"concurrency": 1,

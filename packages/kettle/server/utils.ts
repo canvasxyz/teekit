@@ -19,12 +19,15 @@ export async function waitForPortOpen(
         resolve(true)
       })
       socket.once("error", () => resolve(false))
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         socket.destroy()
         resolve(false)
       }, 300)
+      timer.unref?.()
     })
     if (connected) return
+    const timer = setTimeout(() => {}, 100)
+    timer.unref?.()
     await new Promise((r) => setTimeout(r, 100))
   }
   throw new Error(`Port ${port} did not open in ${timeoutMs}ms`)
@@ -42,12 +45,15 @@ export async function waitForPortClosed(
         resolve(true)
       })
       socket.once("error", () => resolve(false))
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         socket.destroy()
         resolve(false)
       }, 200)
+      timer.unref?.()
     })
     if (!isOpen) return
+    const timer = setTimeout(() => {}, 100)
+    timer.unref?.()
     await new Promise((r) => setTimeout(r, 100))
   }
   throw new Error(`Port ${port} did not close in ${timeoutMs}ms`)
@@ -81,6 +87,8 @@ export function shutdown(child: ChildProcess, timeoutMs = 3000): Promise<void> {
         child.kill("SIGKILL")
       } catch {}
     }, timeoutMs)
+    // Don't keep the event loop alive waiting for the kill timeout
+    killTimer.unref?.()
 
     child.once("exit", () => {
       clearTimeout(killTimer)

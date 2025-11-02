@@ -68,6 +68,7 @@ export class QuoteBinding {
 
 export function startQuoteService(port: number = DEFAULT_PORT) {
   const quoteBinding = new QuoteBinding()
+  const connections = new Set<any>()
 
   const server = createServer(async (req, res) => {
     // Enable CORS
@@ -158,10 +159,29 @@ export function startQuoteService(port: number = DEFAULT_PORT) {
     )
   })
 
+  // Track connections so we can close them on shutdown
+  server.on("connection", (conn) => {
+    connections.add(conn)
+    conn.on("close", () => {
+      connections.delete(conn)
+    })
+  })
+
+  // Don't keep the event loop alive just for the server
+  server.unref()
+
   return {
     server,
     port,
-    stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    stop: () =>
+      new Promise<void>((resolve) => {
+        // Forcefully close all connections
+        for (const conn of connections) {
+          conn.destroy()
+        }
+        connections.clear()
+        server.close(() => resolve())
+      }),
   }
 }
 
