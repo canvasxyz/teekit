@@ -450,17 +450,22 @@ async function main() {
 
   // Always (re)build worker bundle for tests/local runs to pick up changes
   const projectDir = fileURLToPath(new URL("..", import.meta.url))
-  const targetDir = join(projectDir, "dist")
   console.log(chalk.yellowBright("[kettle] Building..."))
-  await buildKettleApp({ projectDir, targetDir })
-  await buildKettleExternals({ projectDir, targetDir })
+  await buildKettleApp({
+    source: join(projectDir, "app.ts"),
+    targetDir: join(projectDir, "dist"),
+  })
+  await buildKettleExternals({
+    sourceDir: projectDir,
+    targetDir: join(projectDir, "dist"),
+  })
 
   const { stop } = await startWorker({
     dbPath,
     workerPort: port,
     sqldPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
-    bundleDir: targetDir,
+    bundleDir: join(projectDir, "dist"),
   })
 
   process.on("SIGINT", () => stop())

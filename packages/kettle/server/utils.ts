@@ -7,23 +7,6 @@ export function randomToken(len = 48): string {
   return Buffer.from(bytes).toString("base64url")
 }
 
-export function resolveSqldBinary(): string {
-  const candidates = [
-    process.env.SQLD_BIN,
-    "sqld",
-    "/home/linuxbrew/.linuxbrew/bin/sqld",
-    "/opt/homebrew/bin/sqld",
-    "/usr/local/bin/sqld",
-    "/usr/bin/sqld",
-  ].filter(Boolean) as string[]
-  for (const bin of candidates) {
-    try {
-      if (existsSync(bin)) return bin
-    } catch {}
-  }
-  return candidates[0]!
-}
-
 export async function waitForPortOpen(
   port: number,
   timeoutMs = 10000,
@@ -112,6 +95,23 @@ export function shutdown(child: ChildProcess, timeoutMs = 3000): Promise<void> {
       resolve()
     }
   })
+}
+
+export function resolveSqldBinary(): string {
+  const candidates = [
+    process.env.SQLD_BIN,
+    "sqld",
+    "/home/linuxbrew/.linuxbrew/bin/sqld",
+    "/opt/homebrew/bin/sqld",
+    "/usr/local/bin/sqld",
+    "/usr/bin/sqld",
+  ].filter(Boolean) as string[]
+  for (const bin of candidates) {
+    try {
+      if (existsSync(bin)) return bin
+    } catch {}
+  }
+  return candidates[0]!
 }
 
 export function resolveWorkerdBinary(): string {

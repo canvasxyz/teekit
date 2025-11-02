@@ -1,44 +1,36 @@
 # @teekit/kettle
 
-## Installing sqld
+@teekit/kettle is a simple workerd-based JS runtime for confidential
+workers. It provides to JS dependencies required for @teekit/tunnel,
+quote generation, and sqlite (via libsql/sqld, optionally encrypted).
 
-sqld is the libsql server that exposes a SQLite database over the
-Hrana HTTP protocol. The demo script and tests expect `sqld` to be
-available on your PATH.
+## Usage
 
-### macOS
+**startWorker** will start the quote generation service, sqld service,
+and a single-process JS worker VM.
 
+It expects app.js, externals.js, and worker.js to be in the bundle
+directory. To build the bundle, follow the steps provided below:
+
+```ts
+import { startWorker, findFreePort, buildKettleApp, buildKettleExternals } from "@teekit/kettle"
+
+await buildKettleApp({
+    source: '/home/app.ts',
+    targetDir: '/home/build'
+})
+await buildKettleExternals({
+    targetDir: '/home/build'
+})
+
+const { stop } = await startWorker({
+    bundleDir: '/home/build',
+    dbPath: '/tmp/myapp.sqlite',
+    quoteServicePort: await findFreePort(),
+    sqldPort: await findFreePort(),
+    workerPort: 8000,
+})
 ```
-brew tap libsql/sqld
-brew install sqld
-```
-
-### Linux
-
-If `brew` is not installed:
-```
-NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
-eval "$('/home/linuxbrew/.linuxbrew/bin/brew' shellenv)"
-```
-
-Then install `sqld`:
-```
-brew tap libsql/sqld
-brew install sqld
-```
-
-## Run tests
-
-```
-npm test
-```
-
-If you see errors about `sqld` not found, ensure it’s installed and
-available on PATH (`which sqld`).
-
-If you are running `sqld` manually, make sure `DB_URL` matches the
-listening address.
 
 ## License
 

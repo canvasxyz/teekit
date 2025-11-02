@@ -5,20 +5,26 @@ import { build } from "esbuild"
 import { fileURLToPath, pathToFileURL } from "url"
 
 type BuildConfig = {
-  projectDir: string
+  source: string
+  targetDir: string
+  verbose?: boolean
+}
+
+type BuildExternalsConfig = {
+  sourceDir?: string
   targetDir: string
   verbose?: boolean
 }
 
 export async function buildKettleApp(options: BuildConfig) {
-  const { projectDir, targetDir, verbose } = options
+  const { source, targetDir, verbose } = options
 
   if (!existsSync(targetDir)) {
     mkdirSync(targetDir, { recursive: true })
   }
 
   const appBuild = await build({
-    entryPoints: [join(projectDir, "app.ts")],
+    entryPoints: [source],
     bundle: true,
     format: "esm",
     platform: "browser",
@@ -76,8 +82,10 @@ export async function buildKettleApp(options: BuildConfig) {
   }
 }
 
-export async function buildKettleExternals(options: BuildConfig) {
-  const { projectDir, targetDir, verbose } = options
+export async function buildKettleExternals(options: BuildExternalsConfig) {
+  const { targetDir, verbose } = options
+  const sourceDir =
+    options.sourceDir ?? join(fileURLToPath(new URL("..", import.meta.url)))
 
   if (!existsSync(targetDir)) {
     mkdirSync(targetDir, { recursive: true })
@@ -85,7 +93,7 @@ export async function buildKettleExternals(options: BuildConfig) {
 
   // Build externals bundle to reduce app.js size
   const externalsBuild = await build({
-    entryPoints: [join(projectDir, "externals.ts")],
+    entryPoints: [join(sourceDir, "externals.ts")],
     bundle: true,
     format: "esm",
     platform: "browser",
@@ -114,7 +122,7 @@ export async function buildKettleExternals(options: BuildConfig) {
   }
 
   const workerBuild = await build({
-    entryPoints: [join(projectDir, "worker.ts")],
+    entryPoints: [join(sourceDir, "worker.ts")],
     bundle: true,
     format: "esm",
     platform: "browser",
@@ -157,11 +165,17 @@ export async function buildKettleExternals(options: BuildConfig) {
 
 async function main() {
   const projectDir = fileURLToPath(new URL("..", import.meta.url))
-  const targetDir = join(projectDir, "dist")
 
   console.log(chalk.yellowBright("[kettle] Building..."))
-  await buildKettleApp({ projectDir, targetDir, verbose: true })
-  await buildKettleExternals({ projectDir, targetDir, verbose: true })
+  await buildKettleApp({
+    source: join(projectDir, "app.ts"),
+    targetDir: join(projectDir, "dist"),
+    verbose: true,
+  })
+  await buildKettleExternals({
+    targetDir: join(projectDir, "dist"),
+    verbose: true,
+  })
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
