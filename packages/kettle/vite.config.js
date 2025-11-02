@@ -5,4 +5,7 @@ import { includeRaServiceWorker } from "@teekit/tunnel/sw"
 
 export default defineConfig({
   plugins: [react(), nodePolyfills(), includeRaServiceWorker()],
+  build: {
+    outDir: 'dist/static'
+  }
 })

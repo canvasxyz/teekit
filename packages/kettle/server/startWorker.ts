@@ -57,6 +57,7 @@ export async function startWorker(
   const WORKER_JS = "worker.js"
   const APP_JS = "app.js"
   const EXTERNALS_JS = "externals.js"
+  const STATIC_DIR = "static"
 
   // Check for existence of bundle components
   if (!existsSync(join(bundleDir, APP_JS))) throw new Error("missing app.js")
@@ -64,6 +65,11 @@ export async function startWorker(
     throw new Error("missing worker.js")
   if (!existsSync(join(bundleDir, EXTERNALS_JS)))
     throw new Error("missing externals.js")
+
+  const staticDir = join(bundleDir, STATIC_DIR)
+  if (!existsSync(staticDir)) {
+    mkdirSync(staticDir, { recursive: true })
+  }
 
   // Enable replication if replicaDbPath is provided
   const enableReplication = !!replicaDbPath
@@ -356,7 +362,7 @@ const config :Workerd.Config = (
     ),
     (
       name = "static-files",
-      disk = "${bundleDir}"
+      disk = "${staticDir}"
     ),
   ],
 
