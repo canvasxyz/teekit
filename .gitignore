@@ -29,3 +29,5 @@ packages/*/dist-ssr
 
 # TDX config file
 config.json
+
+.env
