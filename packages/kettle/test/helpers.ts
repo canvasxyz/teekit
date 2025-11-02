@@ -72,34 +72,14 @@ export async function startKettleWithTunnel() {
 
 export async function stopKettleWithTunnel(
   kettle: WorkerResult,
-  tunnelClient: TunnelClient,
+  tunnelClient?: TunnelClient,
 ) {
-  tunnelClient.close()
-  await kettle.stop()
-  await new Promise((resolve) => setTimeout(resolve, 500))
-}
-
-export async function startKettle() {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const kettle = await startWorker({
-    dbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-    quoteServicePort: await findFreePort(),
-    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
-  })
-
-  await waitForPortOpen(kettle.workerPort)
-  await new Promise((resolve) => setTimeout(resolve, 100))
-
-  return kettle
-}
-
-export async function stopKettle(kettle: WorkerResult) {
-  const port = kettle.workerPort
+  if (tunnelClient) {
+    tunnelClient.close()
+  }
   await kettle.stop()
   // Wait for the port to actually close, but don't block forever
+  const port = kettle.workerPort
   try {
     await waitForPortClosed(port)
   } catch (err) {
