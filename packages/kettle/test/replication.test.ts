@@ -6,8 +6,10 @@ import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { createClient } from "@libsql/client"
 import { fileURLToPath } from "url"
+import { logWithTimestamp, checkWhyNodeRunning } from "./helpers.js"
 
 test.serial("replicate data written to primary", async (t) => {
+  logWithTimestamp("Test: replicate data written to primary - START")
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-test-"))
   const dbPath = join(baseDir, "app.sqlite")
   const replicaDbPath = join(baseDir, "app.replica.db")
@@ -22,8 +24,12 @@ test.serial("replicate data written to primary", async (t) => {
   })
 
   t.teardown(async () => {
+    logWithTimestamp("replication.test.ts: teardown - Starting cleanup")
     await kettle.stop()
+    logWithTimestamp("replication.test.ts: teardown - Kettle stopped")
     await new Promise((resolve) => setTimeout(resolve, 500))
+    logWithTimestamp("replication.test.ts: teardown - Cleanup complete")
+    await checkWhyNodeRunning()
   })
 
   const port = kettle.workerPort
@@ -81,6 +87,7 @@ test.serial("replicate data written to primary", async (t) => {
   t.truthy(result.rows.length > 0, "replica should contain the written data")
   const replicaValue = result.rows[0].value ?? Object.values(result.rows[0])[0]
   t.is(replicaValue, "test-value", "replica should contain the correct value")
+  logWithTimestamp("Test: replicate data written to primary - END")
 })
 
 test.skip("replicate data written to primary with encryption", async (t) => {

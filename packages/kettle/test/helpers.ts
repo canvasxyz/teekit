@@ -14,6 +14,33 @@ import { tappdV4Base64 } from "@teekit/tunnel/samples"
 import { WebSocket } from "ws"
 import { fileURLToPath } from "url"
 
+// Logging utility with timestamps
+export function logWithTimestamp(message: string): void {
+  const timestamp = new Date().toISOString()
+  console.log(`[${timestamp}] ${message}`)
+}
+
+// Check why node is still running after a delay
+export async function checkWhyNodeRunning(delayMs = 2000): Promise<void> {
+  logWithTimestamp(`Waiting ${delayMs}ms before checking why Node.js is running...`)
+  await new Promise((resolve) => setTimeout(resolve, delayMs))
+  
+  try {
+    const whyIsNodeRunning = await import("why-is-node-running")
+    logWithTimestamp("=== Why is Node.js still running? ===")
+    // why-is-node-running exports a default function or can be called directly
+    const fn = whyIsNodeRunning.default || whyIsNodeRunning
+    if (typeof fn === "function") {
+      fn()
+    } else {
+      logWithTimestamp("why-is-node-running export is not a function")
+    }
+    logWithTimestamp("=== End of why-is-node-running output ===")
+  } catch (error) {
+    logWithTimestamp(`Failed to import or use why-is-node-running: ${error}`)
+  }
+}
+
 // Create a WebSocket connection, but timeout if connection fails
 export async function connectWebSocket(
   url: string,
@@ -74,9 +101,14 @@ export async function stopKettleWithTunnel(
   kettle: WorkerResult,
   tunnelClient: TunnelClient,
 ) {
+  logWithTimestamp("stopKettleWithTunnel: Starting cleanup")
   tunnelClient.close()
+  logWithTimestamp("stopKettleWithTunnel: Tunnel client closed")
   await kettle.stop()
+  logWithTimestamp("stopKettleWithTunnel: Kettle stopped")
   await new Promise((resolve) => setTimeout(resolve, 500))
+  logWithTimestamp("stopKettleWithTunnel: Cleanup complete")
+  await checkWhyNodeRunning()
 }
 
 export async function startKettle() {
@@ -97,13 +129,19 @@ export async function startKettle() {
 }
 
 export async function stopKettle(kettle: WorkerResult) {
+  logWithTimestamp("stopKettle: Starting cleanup")
   const port = kettle.workerPort
   await kettle.stop()
+  logWithTimestamp("stopKettle: Kettle stopped")
   // Wait for the port to actually close, but don't block forever
   try {
     await waitForPortClosed(port)
+    logWithTimestamp("stopKettle: Port closed successfully")
   } catch (err) {
     // Port didn't close cleanly, force a delay
+    logWithTimestamp(`stopKettle: Port didn't close cleanly, waiting: ${err}`)
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
+  logWithTimestamp("stopKettle: Cleanup complete")
+  await checkWhyNodeRunning()
 }

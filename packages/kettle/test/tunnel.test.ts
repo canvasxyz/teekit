@@ -1,7 +1,11 @@
 import test from "ava"
 import { WorkerResult } from "../server/startWorker.js"
 import { TunnelClient } from "@teekit/tunnel"
-import { startKettleWithTunnel, stopKettleWithTunnel } from "./helpers.js"
+import {
+  startKettleWithTunnel,
+  stopKettleWithTunnel,
+  logWithTimestamp,
+} from "./helpers.js"
 
 let shared: {
   kettle: WorkerResult
@@ -10,18 +14,23 @@ let shared: {
 } | null = null
 
 test.before(async () => {
+  logWithTimestamp("tunnel.test.ts: before - Starting shared kettle with tunnel")
   shared = await startKettleWithTunnel()
+  logWithTimestamp("tunnel.test.ts: before - Shared kettle with tunnel started")
 })
 
 test.after.always(async () => {
+  logWithTimestamp("tunnel.test.ts: after.always - Starting cleanup")
   if (shared) {
     const { kettle, tunnelClient } = shared
     shared = null
     await stopKettleWithTunnel(kettle, tunnelClient)
   }
+  logWithTimestamp("tunnel.test.ts: after.always - Cleanup complete")
 })
 
 test.serial("tunnel: GET /uptime", async (t) => {
+  logWithTimestamp("Test: tunnel: GET /uptime - START")
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient } = shared!
 
@@ -33,9 +42,11 @@ test.serial("tunnel: GET /uptime", async (t) => {
   t.truthy(data.uptime)
   t.truthy(data.uptime.formatted)
   t.regex(data.uptime.formatted, /\d+m \d+/)
+  logWithTimestamp("Test: tunnel: GET /uptime - END")
 })
 
 test.serial("tunnel: POST /increment", async (t) => {
+  logWithTimestamp("Test: tunnel: POST /increment - START")
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient } = shared!
 
@@ -56,9 +67,11 @@ test.serial("tunnel: POST /increment", async (t) => {
   })
   const data2 = await response2.json()
   t.is(data2.counter, counter1 + 1)
+  logWithTimestamp("Test: tunnel: POST /increment - END")
 })
 
 test.serial("tunnel: WebSocket echo", async (t) => {
+  logWithTimestamp("Test: tunnel: WebSocket echo - START")
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
@@ -82,9 +95,11 @@ test.serial("tunnel: WebSocket echo", async (t) => {
   const result = await promise
 
   t.deepEqual(result, message1)
+  logWithTimestamp("Test: tunnel: WebSocket echo - END")
 })
 
 test.serial("tunnel: WebSocket chat messages", async (t) => {
+  logWithTimestamp("Test: tunnel: WebSocket chat messages - START")
   if (!shared) t.fail("shared tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
@@ -135,4 +150,5 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
   t.is(result2.type, "message")
   t.is(result2.message.username, message1.username)
   t.is(result2.message.text, message1.text)
+  logWithTimestamp("Test: tunnel: WebSocket chat messages - END")
 })

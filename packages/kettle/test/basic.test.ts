@@ -1,23 +1,33 @@
 import test from "ava"
 import { WorkerResult } from "../server/startWorker.js"
 import { WebSocket } from "ws"
-import { connectWebSocket, startKettle, stopKettle } from "./helpers.js"
+import {
+  connectWebSocket,
+  startKettle,
+  stopKettle,
+  logWithTimestamp,
+} from "./helpers.js"
 
 let shared: WorkerResult | null = null
 
 test.before(async () => {
+  logWithTimestamp("basic.test.ts: before - Starting shared kettle")
   shared = await startKettle()
+  logWithTimestamp("basic.test.ts: before - Shared kettle started")
 })
 
 test.after.always(async () => {
+  logWithTimestamp("basic.test.ts: after.always - Starting cleanup")
   if (shared) {
     const kettle = shared
     shared = null
     await stopKettle(kettle)
   }
+  logWithTimestamp("basic.test.ts: after.always - Cleanup complete")
 })
 
 test.serial("bare fetch: GET /uptime returns uptime data", async (t) => {
+  logWithTimestamp("Test: bare fetch: GET /uptime returns uptime data - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -27,9 +37,11 @@ test.serial("bare fetch: GET /uptime returns uptime data", async (t) => {
   t.truthy(data.uptime)
   t.truthy(data.uptime.formatted)
   t.regex(data.uptime.formatted, /\d+m \d+/)
+  logWithTimestamp("Test: bare fetch: GET /uptime returns uptime data - END")
 })
 
 test.serial("bare fetch: POST /increment increments counter", async (t) => {
+  logWithTimestamp("Test: bare fetch: POST /increment increments counter - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -48,9 +60,11 @@ test.serial("bare fetch: POST /increment increments counter", async (t) => {
   )
   const data2 = await response2.json()
   t.is(data2.counter, counter1 + 1)
+  logWithTimestamp("Test: bare fetch: POST /increment increments counter - END")
 })
 
 test.serial("bare fetch: POST /quote returns quote data", async (t) => {
+  logWithTimestamp("Test: bare fetch: POST /quote returns quote data - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -65,9 +79,11 @@ test.serial("bare fetch: POST /quote returns quote data", async (t) => {
   t.truthy(data.quote, "quote should be present")
   t.true(typeof data.quote === "string", "quote should be a string")
   t.true(data.quote.length > 100, "quote should be substantial in size")
+  logWithTimestamp("Test: bare fetch: POST /quote returns quote data - END")
 })
 
 test.serial("bare ws: echo message", async (t) => {
+  logWithTimestamp("Test: bare ws: echo message - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -89,9 +105,11 @@ test.serial("bare ws: echo message", async (t) => {
   })
 
   t.is(echoReceived, testMessage, "Server should echo the message back")
+  logWithTimestamp("Test: bare ws: echo message - END")
 })
 
 test.serial("bare ws: binary message echo", async (t) => {
+  logWithTimestamp("Test: bare ws: binary message echo - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -118,9 +136,11 @@ test.serial("bare ws: binary message echo", async (t) => {
     Array.from(testData),
     "Server should echo binary data correctly",
   )
+  logWithTimestamp("Test: bare ws: binary message echo - END")
 })
 
 test.serial("bare ws: multiple messages", async (t) => {
+  logWithTimestamp("Test: bare ws: multiple messages - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -155,9 +175,11 @@ test.serial("bare ws: multiple messages", async (t) => {
     messages,
     "All messages should be echoed in order",
   )
+  logWithTimestamp("Test: bare ws: multiple messages - END")
 })
 
 test.serial("bare ws: concurrent connections", async (t) => {
+  logWithTimestamp("Test: bare ws: concurrent connections - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -196,9 +218,11 @@ test.serial("bare ws: concurrent connections", async (t) => {
   ws1.close()
   ws2.close()
   ws3.close()
+  logWithTimestamp("Test: bare ws: concurrent connections - END")
 })
 
 test.serial("bare ws: close event handling", async (t) => {
+  logWithTimestamp("Test: bare ws: close event handling - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -218,9 +242,11 @@ test.serial("bare ws: close event handling", async (t) => {
     ws.readyState === ws.CLOSING || ws.readyState === ws.CLOSED,
     `WebSocket should be in CLOSING or CLOSED state, got ${ws.readyState}`,
   )
+  logWithTimestamp("Test: bare ws: close event handling - END")
 })
 
 test.serial("bare ws: large message handling", async (t) => {
+  logWithTimestamp("Test: bare ws: large message handling - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -242,9 +268,11 @@ test.serial("bare ws: large message handling", async (t) => {
 
   t.is(echo.length, largeMessage.length, "Large message should be echoed")
   t.is(echo, largeMessage, "Large message content should match")
+  logWithTimestamp("Test: bare ws: large message handling - END")
 })
 
 test.serial("static: GET / returns index.html", async (t) => {
+  logWithTimestamp("Test: static: GET / returns index.html - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -254,9 +282,11 @@ test.serial("static: GET / returns index.html", async (t) => {
   const html = await response.text()
   t.true(html.includes("<!doctype html>") || html.includes("<!DOCTYPE html>"))
   t.true(html.length > 0)
+  logWithTimestamp("Test: static: GET / returns index.html - END")
 })
 
 test.serial("static: GET /index.html returns index.html", async (t) => {
+  logWithTimestamp("Test: static: GET /index.html returns index.html - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -267,9 +297,11 @@ test.serial("static: GET /index.html returns index.html", async (t) => {
   t.is(response.headers.get("content-type"), "text/html;charset=utf-8")
   const html = await response.text()
   t.true(html.includes("<!doctype html>") || html.includes("<!DOCTYPE html>"))
+  logWithTimestamp("Test: static: GET /index.html returns index.html - END")
 })
 
 test.serial("static: GET /vite.svg returns SVG", async (t) => {
+  logWithTimestamp("Test: static: GET /vite.svg returns SVG - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -278,9 +310,11 @@ test.serial("static: GET /vite.svg returns SVG", async (t) => {
   t.is(response.headers.get("content-type"), "image/svg+xml;charset=utf-8")
   const svg = await response.text()
   t.true(svg.includes("<svg"))
+  logWithTimestamp("Test: static: GET /vite.svg returns SVG - END")
 })
 
 test.serial("static: GET /assets/* returns JavaScript file", async (t) => {
+  logWithTimestamp("Test: static: GET /assets/* returns JavaScript file - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -301,9 +335,11 @@ test.serial("static: GET /assets/* returns JavaScript file", async (t) => {
   t.is(response.headers.get("content-type"), "text/javascript;charset=utf-8")
   const js = await response.text()
   t.true(js.length > 0)
+  logWithTimestamp("Test: static: GET /assets/* returns JavaScript file - END")
 })
 
 test.serial("static: GET /assets/* returns CSS file", async (t) => {
+  logWithTimestamp("Test: static: GET /assets/* returns CSS file - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -326,18 +362,22 @@ test.serial("static: GET /assets/* returns CSS file", async (t) => {
   t.is(response.headers.get("content-type"), "text/css;charset=utf-8")
   const css = await response.text()
   t.true(css.length > 0)
+  logWithTimestamp("Test: static: GET /assets/* returns CSS file - END")
 })
 
 test.serial("static: unknown paths return 404", async (t) => {
+  logWithTimestamp("Test: static: unknown paths return 404 - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
   const response = await fetch(
     `http://localhost:${kettle.workerPort}/some/random/path`,
   )
   t.is(response.status, 404)
+  logWithTimestamp("Test: static: unknown paths return 404 - END")
 })
 
 test.serial("static: API routes still work", async (t) => {
+  logWithTimestamp("Test: static: API routes still work - START")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 
@@ -347,4 +387,5 @@ test.serial("static: API routes still work", async (t) => {
   const data = await response.json()
   t.truthy(data.uptime)
   t.truthy(data.uptime.formatted)
+  logWithTimestamp("Test: static: API routes still work - END")
 })
