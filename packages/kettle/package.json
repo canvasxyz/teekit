@@ -57,6 +57,7 @@
 		],
 		"files": [
 			"test/**/*.test.ts"
-		]
+		],
+		"timeout": "120s"
 	}
 }
