@@ -6,8 +6,14 @@ import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { createClient } from "@libsql/client"
 import { fileURLToPath } from "url"
+import { checkWhyNodeRunning } from "./helpers.js"
+
+const log = (msg: string) => {
+  console.log(`[${new Date().toISOString()}] ${msg}`)
+}
 
 test.serial("replicate data written to primary", async (t) => {
+  log("test start: replicate data written to primary")
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-test-"))
   const dbPath = join(baseDir, "app.sqlite")
   const replicaDbPath = join(baseDir, "app.replica.db")
@@ -22,8 +28,11 @@ test.serial("replicate data written to primary", async (t) => {
   })
 
   t.teardown(async () => {
+    log("teardown: replicate data written to primary")
     await kettle.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
+    log("teardown: replicate data written to primary - complete")
+    await checkWhyNodeRunning(2000)
   })
 
   const port = kettle.workerPort

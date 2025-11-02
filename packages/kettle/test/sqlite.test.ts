@@ -5,14 +5,23 @@ import { join } from "path"
 import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { fileURLToPath } from "url"
+import { checkWhyNodeRunning } from "./helpers.js"
+
+const log = (msg: string) => {
+  console.log(`[${new Date().toISOString()}] ${msg}`)
+}
 
 test.serial("sqlite: create, update, persist between runs", async (t) => {
+  log("test start: sqlite: create, update, persist between runs")
   let demo1: { stop: () => Promise<void>; workerPort: number } | null = null
   let demo2: { stop: () => Promise<void>; workerPort: number } | null = null
 
   t.teardown(async () => {
+    log("teardown: sqlite: create, update, persist between runs")
     if (demo1) await demo1.stop()
     if (demo2) await demo2.stop()
+    log("teardown: sqlite: create, update, persist between runs - complete")
+    await checkWhyNodeRunning(2000)
   })
 
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-sqlite-test-"))

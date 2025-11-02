@@ -1,7 +1,7 @@
 import test from "ava"
 import { WorkerResult } from "../server/startWorker.js"
 import { TunnelClient } from "@teekit/tunnel"
-import { startKettleWithTunnel, stopKettleWithTunnel } from "./helpers.js"
+import { startKettleWithTunnel, stopKettleWithTunnel, checkWhyNodeRunning } from "./helpers.js"
 
 let shared: {
   kettle: WorkerResult
@@ -19,6 +19,7 @@ test.after.always(async () => {
     shared = null
     await stopKettleWithTunnel(kettle, tunnelClient)
   }
+  await checkWhyNodeRunning(2000)
 })
 
 test.serial("tunnel: GET /uptime", async (t) => {

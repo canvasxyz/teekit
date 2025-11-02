@@ -1,23 +1,35 @@
 import test from "ava"
 import { WorkerResult } from "../server/startWorker.js"
 import { WebSocket } from "ws"
-import { connectWebSocket, startKettle, stopKettle } from "./helpers.js"
+import { connectWebSocket, startKettle, stopKettle, checkWhyNodeRunning } from "./helpers.js"
 
 let shared: WorkerResult | null = null
 
+const log = (msg: string) => {
+  console.log(`[${new Date().toISOString()}] ${msg}`)
+}
+
 test.before(async () => {
+  log("test.before: starting")
   shared = await startKettle()
+  log("test.before: started")
 })
 
 test.after.always(async () => {
+  log("test.after.always: starting cleanup")
   if (shared) {
     const kettle = shared
     shared = null
     await stopKettle(kettle)
+    log("test.after.always: cleanup complete")
+  } else {
+    log("test.after.always: nothing to cleanup")
   }
+  await checkWhyNodeRunning(2000)
 })
 
 test.serial("bare fetch: GET /uptime returns uptime data", async (t) => {
+  log("test start: bare fetch: GET /uptime returns uptime data")
   if (!shared) t.fail("shared worker not initialized")
   const kettle = shared!
 

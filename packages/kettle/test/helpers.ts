@@ -14,6 +14,22 @@ import { tappdV4Base64 } from "@teekit/tunnel/samples"
 import { WebSocket } from "ws"
 import { fileURLToPath } from "url"
 
+const log = (msg: string) => {
+  console.log(`[${new Date().toISOString()}] ${msg}`)
+}
+
+export async function checkWhyNodeRunning(delayMs = 2000) {
+  try {
+    const whyIsNodeRunning = await import("why-is-node-running")
+    log(`Waiting ${delayMs}ms before checking why Node.js is running...`)
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+    log("Checking why Node.js is running...")
+    whyIsNodeRunning.default()
+  } catch (err) {
+    log(`Failed to check why Node.js is running: ${err}`)
+  }
+}
+
 // Create a WebSocket connection, but timeout if connection fails
 export async function connectWebSocket(
   url: string,
@@ -42,6 +58,7 @@ export async function connectWebSocket(
 }
 
 export async function startKettleWithTunnel() {
+  log("startKettleWithTunnel: starting")
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-tunnel-test-"))
   const dbPath = join(baseDir, "app.sqlite")
   const kettle = await startWorker({
@@ -51,9 +68,11 @@ export async function startKettleWithTunnel() {
     quoteServicePort: await findFreePort(),
     bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
+  log("startKettleWithTunnel: worker started")
 
   await waitForPortOpen(kettle.workerPort)
   await new Promise((resolve) => setTimeout(resolve, 1000))
+  log("startKettleWithTunnel: port open")
 
   const origin = `http://localhost:${kettle.workerPort}`
 
@@ -67,6 +86,7 @@ export async function startKettleWithTunnel() {
     customVerifyX25519Binding: () => true,
   })
 
+  log("startKettleWithTunnel: complete")
   return { kettle, tunnelClient, origin }
 }
 
@@ -74,12 +94,17 @@ export async function stopKettleWithTunnel(
   kettle: WorkerResult,
   tunnelClient: TunnelClient,
 ) {
+  log("stopKettleWithTunnel: starting")
   tunnelClient.close()
+  log("stopKettleWithTunnel: tunnelClient.close() called")
   await kettle.stop()
+  log("stopKettleWithTunnel: kettle.stop() completed")
   await new Promise((resolve) => setTimeout(resolve, 500))
+  log("stopKettleWithTunnel: complete")
 }
 
 export async function startKettle() {
+  log("startKettle: starting")
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-test-"))
   const dbPath = join(baseDir, "app.sqlite")
   const kettle = await startWorker({
@@ -89,21 +114,28 @@ export async function startKettle() {
     quoteServicePort: await findFreePort(),
     bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
+  log("startKettle: worker started")
 
   await waitForPortOpen(kettle.workerPort)
   await new Promise((resolve) => setTimeout(resolve, 100))
+  log("startKettle: port open, ready")
 
   return kettle
 }
 
 export async function stopKettle(kettle: WorkerResult) {
+  log("stopKettle: starting")
   const port = kettle.workerPort
   await kettle.stop()
+  log("stopKettle: kettle.stop() completed")
   // Wait for the port to actually close, but don't block forever
   try {
     await waitForPortClosed(port)
+    log("stopKettle: port closed")
   } catch (err) {
     // Port didn't close cleanly, force a delay
+    log("stopKettle: port didn't close cleanly, waiting 500ms")
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
+  log("stopKettle: complete")
 }

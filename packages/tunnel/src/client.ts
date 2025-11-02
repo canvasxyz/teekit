@@ -91,6 +91,7 @@ export class TunnelClient {
   private connectionPromise: Promise<void> | null = null
   private config: TunnelClientConfig
   private closed = false
+  private activeTimers = new Set<ReturnType<typeof setTimeout>>()
 
   WebSocket: new (
     url: string,
@@ -186,10 +187,12 @@ export class TunnelClient {
         this.symmetricKey = undefined
 
         const timer = setTimeout(() => {
+          this.activeTimers.delete(timer)
           if (this.closed) return
           this.ensureConnection()
         }, this.reconnectDelay)
 
+        this.activeTimers.add(timer)
         if (typeof timer.unref === "function") {
           timer.unref()
         }
@@ -220,9 +223,11 @@ export class TunnelClient {
             if (this.closed) return
 
             const timer = setTimeout(() => {
+              this.activeTimers.delete(timer)
               this.ensureConnection()
             }, this.reconnectDelay)
 
+            this.activeTimers.add(timer)
             if (typeof timer.unref === "function") {
               timer.unref()
             }
@@ -657,12 +662,14 @@ export class TunnelClient {
 
         // Time out fetch requests after 30 seconds.
         const timer = setTimeout(() => {
+          this.activeTimers.delete(timer)
           if (this.pendingRequests.has(requestId)) {
             this.pendingRequests.delete(requestId)
             reject(new Error("Request timeout"))
           }
         }, 30000)
 
+        this.activeTimers.add(timer)
         if (typeof timer.unref === "function") {
           timer.unref()
         }
@@ -707,6 +714,12 @@ export class TunnelClient {
   public close(code?: number, reason?: string): void {
     if (this.closed) return
     this.closed = true
+
+    // Clear all active timers
+    for (const timer of this.activeTimers) {
+      clearTimeout(timer)
+    }
+    this.activeTimers.clear()
 
     // Reject any pending HTTP requests
     try {
