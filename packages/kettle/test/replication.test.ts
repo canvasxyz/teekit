@@ -3,11 +3,13 @@ import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker } from "../server/startWorker.js"
+import { buildKettleApp, buildKettleExternals } from "../server/buildWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { createClient } from "@libsql/client"
 import { fileURLToPath } from "url"
 
 test.serial("replicated data persists between runs", async (t) => {
+  t.timeout(60000) // 60 second timeout
   let demo1: { stop: () => Promise<void>; workerPort: number } | null = null
   let demo2: { stop: () => Promise<void>; workerPort: number } | null = null
 
@@ -15,6 +17,18 @@ test.serial("replicated data persists between runs", async (t) => {
     if (demo1) await demo1.stop()
     if (demo2) await demo2.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
+  })
+
+  // Build the bundle before starting workers
+  const projectDir = fileURLToPath(new URL("..", import.meta.url))
+  const bundleDir = join(projectDir, "dist")
+  await buildKettleApp({
+    source: join(projectDir, "app.ts"),
+    targetDir: bundleDir,
+  })
+  await buildKettleExternals({
+    sourceDir: projectDir,
+    targetDir: bundleDir,
   })
 
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-test-"))
@@ -28,7 +42,7 @@ test.serial("replicated data persists between runs", async (t) => {
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
-    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
+    bundleDir,
   })
   await new Promise((resolve) => setTimeout(resolve, 1000))
   demo1 = { stop: kettle1.stop, workerPort: kettle1.workerPort }
@@ -36,11 +50,20 @@ test.serial("replicated data persists between runs", async (t) => {
   await waitForPortOpen(port)
 
   // Probe readiness of worker + DB
+  let healthOk = false
   for (let i = 0; i < 10; i++) {
-    const r = await fetch(`http://localhost:${port}/healthz`)
-    if (r.ok) break
+    try {
+      const r = await fetch(`http://localhost:${port}/healthz`)
+      if (r.ok) {
+        healthOk = true
+        break
+      }
+    } catch (e) {
+      // Connection error, retry
+    }
     await new Promise((r) => setTimeout(r, 100))
   }
+  t.truthy(healthOk, "worker should be healthy")
 
   // Test increment endpoint
   let resp = await fetch(`http://localhost:${port}/increment`, {
@@ -108,16 +131,25 @@ test.serial("replicated data persists between runs", async (t) => {
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
-    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
+    bundleDir,
   })
   demo2 = { stop: kettle2.stop, workerPort: kettle2.workerPort }
   const port2 = kettle2.workerPort
   await waitForPortOpen(port2)
+  let healthOk2 = false
   for (let i = 0; i < 10; i++) {
-    const r = await fetch(`http://localhost:${port2}/healthz`)
-    if (r.ok) break
+    try {
+      const r = await fetch(`http://localhost:${port2}/healthz`)
+      if (r.ok) {
+        healthOk2 = true
+        break
+      }
+    } catch (e) {
+      // Connection error, retry
+    }
     await new Promise((r) => setTimeout(r, 100))
   }
+  t.truthy(healthOk2, "second worker should be healthy")
 
   // Verify the table still exists (no need to init again)
   resp = await fetch(`http://localhost:${port2}/db/init`, {
