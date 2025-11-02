@@ -4,6 +4,7 @@ import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
+import { fileURLToPath } from "url"
 
 test.serial("sqlite: create, update, persist between runs", async (t) => {
   let demo1: { stop: () => Promise<void>; workerPort: number } | null = null
@@ -22,6 +23,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
+    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
   await new Promise((resolve) => setTimeout(resolve, 1000))
   demo1 = { stop: kettle1.stop, workerPort: kettle1.workerPort }
@@ -68,6 +70,7 @@ test.serial("sqlite: create, update, persist between runs", async (t) => {
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
+    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
   demo2 = { stop: kettle2.stop, workerPort: kettle2.workerPort }
   const port2 = kettle2.workerPort

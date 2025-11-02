@@ -13,11 +13,7 @@ import {
   waitForPortOpen,
 } from "./utils.js"
 import { startQuoteService } from "./startQuoteService.js"
-import { buildWorker } from "./buildWorker.js"
-
-const WORKER_JS = "dist/worker.js"
-const APP_JS = "dist/app.js"
-const EXTERNALS_JS = "dist/externals.js"
+import { buildKettleApp, buildKettleExternals } from "./buildWorker.js"
 
 export interface WorkerConfig {
   dbPath: string
@@ -26,7 +22,7 @@ export interface WorkerConfig {
   quoteServicePort: number
   replicaDbPath?: string
   encryptionKey?: string
-  projectDir?: string
+  bundleDir: string
 }
 
 export interface WorkerResult {
@@ -52,12 +48,22 @@ export async function startWorker(
     replicaDbPath,
     encryptionKey,
     quoteServicePort,
+    bundleDir,
   } = options
   const dbToken = randomToken()
   const dbUrl = `http://127.0.0.1:${sqldPort}`
   const quoteServiceUrl = `http://127.0.0.1:${quoteServicePort}`
-  const projectDir =
-    options.projectDir ?? fileURLToPath(new URL("..", import.meta.url))
+
+  const WORKER_JS = "worker.js"
+  const APP_JS = "app.js"
+  const EXTERNALS_JS = "externals.js"
+
+  // Check for existence of bundle components
+  if (!existsSync(join(bundleDir, APP_JS))) throw new Error("missing app.js")
+  if (!existsSync(join(bundleDir, WORKER_JS)))
+    throw new Error("missing worker.js")
+  if (!existsSync(join(bundleDir, EXTERNALS_JS)))
+    throw new Error("missing externals.js")
 
   // Enable replication if replicaDbPath is provided
   const enableReplication = !!replicaDbPath
@@ -172,8 +178,7 @@ export async function startWorker(
     await new Promise((r) => setTimeout(r, 1000))
   }
 
-  const distDir = join(projectDir, "dist")
-  const tmpConfigPath = join(projectDir, "workerd.config.tmp.capnp")
+  const tmpConfigPath = join(bundleDir, "workerd.config.tmp.capnp")
   const configText = `using Workerd = import "/workerd/workerd.capnp";
 
 const config :Workerd.Config = (
@@ -351,7 +356,7 @@ const config :Workerd.Config = (
     ),
     (
       name = "static-files",
-      disk = "${distDir}"
+      disk = "${bundleDir}"
     ),
   ],
 
@@ -439,13 +444,17 @@ async function main() {
 
   // Always (re)build worker bundle for tests/local runs to pick up changes
   const projectDir = fileURLToPath(new URL("..", import.meta.url))
-  await buildWorker(projectDir)
+  const targetDir = join(projectDir, "dist")
+  console.log(chalk.yellowBright("[kettle] Building..."))
+  await buildKettleApp({ projectDir, targetDir })
+  await buildKettleExternals({ projectDir, targetDir })
 
   const { stop } = await startWorker({
     dbPath,
     workerPort: port,
     sqldPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
+    bundleDir: targetDir,
   })
 
   process.on("SIGINT", () => stop())

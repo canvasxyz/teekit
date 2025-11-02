@@ -5,6 +5,7 @@ import { join } from "path"
 import { startWorker } from "../server/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../server/utils.js"
 import { createClient } from "@libsql/client"
+import { fileURLToPath } from "url"
 
 test.serial("replicate data written to primary", async (t) => {
   const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-test-"))
@@ -17,6 +18,7 @@ test.serial("replicate data written to primary", async (t) => {
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
+    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
 
   t.teardown(async () => {
@@ -94,6 +96,7 @@ test.skip("replicate data written to primary with encryption", async (t) => {
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
     encryptionKey,
+    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
 
   t.teardown(async () => {

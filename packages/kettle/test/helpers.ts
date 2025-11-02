@@ -12,6 +12,7 @@ import { base64 } from "@scure/base"
 import { hex, parseTdxQuote } from "@teekit/qvl"
 import { tappdV4Base64 } from "@teekit/tunnel/samples"
 import { WebSocket } from "ws"
+import { fileURLToPath } from "url"
 
 // Create a WebSocket connection, but timeout if connection fails
 export async function connectWebSocket(
@@ -48,6 +49,7 @@ export async function startKettleWithTunnel() {
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
+    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
 
   await waitForPortOpen(kettle.workerPort)
@@ -85,6 +87,7 @@ export async function startKettle() {
     sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
+    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
 
   await waitForPortOpen(kettle.workerPort)
