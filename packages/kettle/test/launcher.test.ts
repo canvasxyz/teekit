@@ -1,9 +1,10 @@
 import test from "ava"
-import { mkdtempSync, copyFileSync, writeFileSync, existsSync } from "fs"
+import { mkdtempSync, copyFileSync, writeFileSync, existsSync, readFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { spawn, ChildProcess } from "child_process"
 import { fileURLToPath } from "url"
+import { createHash } from "crypto"
 import { connectWebSocket } from "./helpers.js"
 import {
   findFreePort,
@@ -133,10 +134,15 @@ test.before(async (t) => {
 
   const targetAppPath = join(tempDir, "app.ts")
 
+  // Calculate SHA256 hash of the app file
+  const appFileContent = readFileSync(targetAppPath)
+  const sha256Hash = createHash("sha256").update(appFileContent).digest("hex")
+
   // Generate manifest file
   const manifestPath = join(tempDir, "manifest.json")
   const manifest = {
     app: `file://${targetAppPath}`,
+    sha256: sha256Hash,
   }
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8")
 
@@ -350,4 +356,74 @@ test.serial("launcher: tunnel websocket endpoint exists", async (t) => {
   t.is(ws.readyState, ws.OPEN, "WebSocket should be in OPEN state")
 
   ws.close()
+})
+
+test("launcher: fails when SHA256 hash does not match", async (t) => {
+  // Create temp directory for test
+  const tempDir = mkdtempSync(join(tmpdir(), "kettle-launcher-hash-test-"))
+
+  // Copy app.ts to temp directory
+  const kettleDir = fileURLToPath(new URL("..", import.meta.url))
+  const sourceAppPath = join(kettleDir, "app.ts")
+  const targetAppPath = join(tempDir, "app.ts")
+  copyFileSync(sourceAppPath, targetAppPath)
+
+  // Calculate actual SHA256 hash
+  const appFileContent = readFileSync(targetAppPath)
+  const actualHash = createHash("sha256").update(appFileContent).digest("hex")
+
+  // Create manifest with incorrect hash
+  const manifestPath = join(tempDir, "manifest.json")
+  const wrongHash = "a" + actualHash.slice(1) // Change first character
+  const manifest = {
+    app: `file://${targetAppPath}`,
+    sha256: wrongHash,
+  }
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8")
+
+  // Try to start launcher - should fail
+  const kettleDir2 = fileURLToPath(new URL("..", import.meta.url))
+  const launcherPath = join(kettleDir2, "server", "launcher.ts")
+  const testPort = await findFreePort()
+
+  const result = await new Promise<{ exitCode: number | null; stderr: string }>(
+    (resolve) => {
+      const proc = spawn(
+        "tsx",
+        [launcherPath, "--manifest", manifestPath, "--port", testPort.toString()],
+        {
+          stdio: ["ignore", "pipe", "pipe"],
+          cwd: kettleDir2,
+        },
+      )
+
+      let stderr = ""
+
+      proc.stderr.on("data", (data) => {
+        stderr += data.toString()
+      })
+
+      proc.on("exit", (code) => {
+        resolve({ exitCode: code, stderr })
+      })
+
+      // Set a timeout in case the process hangs
+      setTimeout(() => {
+        proc.kill()
+        resolve({ exitCode: null, stderr })
+      }, 10000)
+    },
+  )
+
+  // Verify that the launcher failed
+  t.truthy(
+    result.exitCode !== 0,
+    "Launcher should exit with non-zero code when hash doesn't match",
+  )
+  t.truthy(
+    result.stderr.includes("SHA256 hash mismatch") ||
+      result.stderr.includes("sha256") ||
+      result.stderr.includes("hash"),
+    "Error message should mention SHA256 hash mismatch",
+  )
 })

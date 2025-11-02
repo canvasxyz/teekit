@@ -3,6 +3,7 @@ import { join } from "path"
 import { fileURLToPath } from "url"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
+import { createHash } from "crypto"
 import chalk from "chalk"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
@@ -13,6 +14,7 @@ import { findFreePort } from "./utils.js"
 
 interface Manifest {
   app: string
+  sha256: string
 }
 
 function parseManifest(manifestPath: string): Manifest {
@@ -44,10 +46,28 @@ function parseManifest(manifestPath: string): Manifest {
     throw new Error("Manifest must contain an 'app' field with a file:/// URL")
   }
 
+  if (!manifest.sha256 || typeof manifest.sha256 !== "string") {
+    throw new Error("Manifest must contain a 'sha256' field with a string value")
+  }
+
   const appPath = fileURLToPath(manifest.app)
 
   if (!existsSync(appPath)) {
     throw new Error(`App file not found: ${appPath}`)
+  }
+
+  // Read the app file and calculate its SHA256 hash
+  const appFileContent = readFileSync(appPath)
+  const calculatedHash = createHash("sha256").update(appFileContent).digest("hex")
+
+  // Normalize the hashes (convert to lowercase for comparison)
+  const expectedHash = manifest.sha256.toLowerCase()
+  const actualHash = calculatedHash.toLowerCase()
+
+  if (expectedHash !== actualHash) {
+    throw new Error(
+      `SHA256 hash mismatch: expected ${expectedHash}, got ${actualHash}`,
+    )
   }
 
   return { app: appPath }
