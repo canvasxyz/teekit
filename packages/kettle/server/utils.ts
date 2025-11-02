@@ -26,9 +26,10 @@ export async function waitForPortOpen(
       timer.unref?.()
     })
     if (connected) return
-    const timer = setTimeout(() => {}, 100)
-    timer.unref?.()
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => {
+      const timer = setTimeout(r, 100)
+      timer.unref?.()
+    })
   }
   throw new Error(`Port ${port} did not open in ${timeoutMs}ms`)
 }
@@ -52,9 +53,10 @@ export async function waitForPortClosed(
       timer.unref?.()
     })
     if (!isOpen) return
-    const timer = setTimeout(() => {}, 100)
-    timer.unref?.()
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => {
+      const timer = setTimeout(r, 100)
+      timer.unref?.()
+    })
   }
   throw new Error(`Port ${port} did not close in ${timeoutMs}ms`)
 }

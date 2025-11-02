@@ -42,6 +42,7 @@
 		"typescript": "^5.9.2",
 		"vite": "^7.1.2",
 		"vite-plugin-node-polyfills": "^0.24.0",
+		"why-is-node-running": "^3.2.2",
 		"workerd": "^1.20250107.0",
 		"ws": "^8.18.3"
 	},

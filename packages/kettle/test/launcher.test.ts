@@ -71,6 +71,7 @@ async function startLauncher(
                   proc.kill("SIGKILL")
                   resolve()
                 }, 5000)
+                exitTimeout.unref?.()
                 proc.once("exit", () => {
                   clearTimeout(exitTimeout)
                   resolve()
@@ -163,6 +164,7 @@ test.after.always(async () => {
       await new Promise((r) => setTimeout(r, 500))
     }
   }
+
 })
 
 test.serial("launcher: GET /uptime returns uptime data", async (t) => {

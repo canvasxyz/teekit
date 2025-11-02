@@ -181,7 +181,10 @@ export async function startWorker(
 
     // Give replica additional time to connect and start syncing
     await waitForPortOpen(replicaHttpPort, 10000)
-    await new Promise((r) => setTimeout(r, 1000))
+    await new Promise((r) => {
+      const timer = setTimeout(r, 1000)
+      timer.unref?.()
+    })
   }
 
   const tmpConfigPath = join(bundleDir, "workerd.config.tmp.capnp")
@@ -392,6 +395,10 @@ const config :Workerd.Config = (
     { stdio: ["ignore", "pipe", "pipe"] },
   )
 
+  // Do not keep the event loop alive because of child stdio
+  ;(workerd.stdout as any)?.unref?.()
+  ;(workerd.stderr as any)?.unref?.()
+
   workerd.stdout.on("data", (d) => {
     console.log(chalk.greenBright(String(d)))
   })
@@ -402,7 +409,10 @@ const config :Workerd.Config = (
   // Wait for workerd to be ready before returning
   await waitForPortOpen(workerPort, 15000)
   // Give workerd additional time to fully initialize
-  await new Promise((r) => setTimeout(r, 500))
+  await new Promise((r) => {
+    const timer = setTimeout(r, 500)
+    timer.unref?.()
+  })
 
   const result: WorkerResult = {
     workerPort,
