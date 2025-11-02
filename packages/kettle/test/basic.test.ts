@@ -1,12 +1,13 @@
 import test from "ava"
 import { WorkerResult } from "../server/startWorker.js"
 import { WebSocket } from "ws"
-import { connectWebSocket, startKettle, stopKettle } from "./helpers.js"
+import { connectWebSocket, startKettleWithTunnel, stopKettle } from "./helpers.js"
 
 let shared: WorkerResult | null = null
 
 test.before(async () => {
-  shared = await startKettle()
+  const { kettle } = await startKettleWithTunnel()
+  shared = kettle
 })
 
 test.after.always(async () => {
