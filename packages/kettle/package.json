@@ -21,7 +21,8 @@
 		"chalk": "^4.1.2",
 		"hono": "^4.7.5",
 		"react": "^19.1.1",
-		"react-dom": "^19.1.1"
+		"react-dom": "^19.1.1",
+		"yargs": "^18.0.0"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.33.0",
@@ -29,6 +30,7 @@
 		"@types/react": "^19.1.10",
 		"@types/react-dom": "^19.1.7",
 		"@types/ws": "^8.18.1",
+		"@types/yargs": "^17.0.34",
 		"@vitejs/plugin-react": "^5.0.0",
 		"ava": "^6.2.0",
 		"esbuild": "^0.24.0",
