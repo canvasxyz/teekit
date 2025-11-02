@@ -243,3 +243,108 @@ test.serial("bare ws: large message handling", async (t) => {
   t.is(echo.length, largeMessage.length, "Large message should be echoed")
   t.is(echo, largeMessage, "Large message content should match")
 })
+
+test.serial("static: GET / returns index.html", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+
+  const response = await fetch(`http://localhost:${kettle.workerPort}/`)
+  t.is(response.status, 200)
+  t.is(response.headers.get("content-type"), "text/html;charset=utf-8")
+  const html = await response.text()
+  t.true(html.includes("<!doctype html>") || html.includes("<!DOCTYPE html>"))
+  t.true(html.length > 0)
+})
+
+test.serial("static: GET /index.html returns index.html", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+
+  const response = await fetch(
+    `http://localhost:${kettle.workerPort}/index.html`,
+  )
+  t.is(response.status, 200)
+  t.is(response.headers.get("content-type"), "text/html;charset=utf-8")
+  const html = await response.text()
+  t.true(html.includes("<!doctype html>") || html.includes("<!DOCTYPE html>"))
+})
+
+test.serial("static: GET /vite.svg returns SVG", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+
+  const response = await fetch(`http://localhost:${kettle.workerPort}/vite.svg`)
+  t.is(response.status, 200)
+  t.is(response.headers.get("content-type"), "image/svg+xml;charset=utf-8")
+  const svg = await response.text()
+  t.true(svg.includes("<svg"))
+})
+
+test.serial("static: GET /assets/* returns JavaScript file", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+
+  // First get index.html to find the asset path
+  const indexResponse = await fetch(`http://localhost:${kettle.workerPort}/`)
+  const html = await indexResponse.text()
+
+  // Extract the JS asset path from index.html
+  const jsMatch = html.match(/\/assets\/index-[^"]+\.js/)
+  if (!jsMatch) {
+    t.fail("Could not find JS asset in index.html")
+    return
+  }
+
+  const jsPath = jsMatch[0]
+  const response = await fetch(`http://localhost:${kettle.workerPort}${jsPath}`)
+  t.is(response.status, 200)
+  t.is(response.headers.get("content-type"), "text/javascript;charset=utf-8")
+  const js = await response.text()
+  t.true(js.length > 0)
+})
+
+test.serial("static: GET /assets/* returns CSS file", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+
+  // First get index.html to find the asset path
+  const indexResponse = await fetch(`http://localhost:${kettle.workerPort}/`)
+  const html = await indexResponse.text()
+
+  // Extract the CSS asset path from index.html
+  const cssMatch = html.match(/\/assets\/index-[^"]+\.css/)
+  if (!cssMatch) {
+    t.fail("Could not find CSS asset in index.html")
+    return
+  }
+
+  const cssPath = cssMatch[0]
+  const response = await fetch(
+    `http://localhost:${kettle.workerPort}${cssPath}`,
+  )
+  t.is(response.status, 200)
+  t.is(response.headers.get("content-type"), "text/css;charset=utf-8")
+  const css = await response.text()
+  t.true(css.length > 0)
+})
+
+test.serial("static: unknown paths return 404", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+  const response = await fetch(
+    `http://localhost:${kettle.workerPort}/some/random/path`,
+  )
+  t.is(response.status, 404)
+})
+
+test.serial("static: API routes still work", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+
+  // Ensure API routes are not overridden by static file middleware
+  const response = await fetch(`http://localhost:${kettle.workerPort}/uptime`)
+  t.is(response.status, 200)
+  const data = await response.json()
+  t.truthy(data.uptime)
+  t.truthy(data.uptime.formatted)
+})
