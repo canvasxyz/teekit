@@ -7,7 +7,7 @@
 		"npm": ">=11.0.0"
 	},
 	"scripts": {
-		"clean": "rm -rf packages/*/dist/* packages/*/*.tsbuildinfo",
+		"clean": "rm -rf packages/*/dist/* packages/*/test/lib/* packages/*/*.tsbuildinfo",
 		"build": "npm --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo --workspace packages/kettle run build && npm --workspace packages/kettle run build:worker",
 		"lint": "eslint .",
 		"publish": "npm run clean && npm run build && npm publish -w=packages/ --access public",

@@ -4,6 +4,7 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
+    "clean": "rm -rf dist/* test/lib/* *.tsbuildinfo",
 		"dev": "vite",
 		"build": "vite build",
 		"server": "tsx server/startWorker.ts",
