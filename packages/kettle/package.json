@@ -7,10 +7,10 @@
 		"build": "npm run build:worker && npm run build:client",
 		"build:client": "vite build",
 		"build:client:watch": "vite",
-		"build:worker": "tsc --build server && tsx server/buildWorker.ts",
-		"start:worker": "tsx server/startWorker.ts",
-		"start:launcher": "tsx server/buildManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
-		"start:launcher:remote": "tsx server/buildRemoteManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
+		"build:worker": "tsc --build server && node server/lib/buildWorker.js",
+		"start:worker": "node server/lib/startWorker.js",
+		"start:launcher": "node server/lib/buildManifest.js app.ts && node server/lib/launcher.js --manifest manifest.json",
+		"start:launcher:remote": "node server/lib/buildRemoteManifest.js app.ts && node server/lib/launcher.js --manifest manifest.json",
 		"test": "ava --serial"
 	},
 	"exports": {

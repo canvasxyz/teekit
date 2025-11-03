@@ -86,7 +86,7 @@ export async function buildKettleApp(options: BuildConfig) {
 export async function buildKettleExternals(options: BuildExternalsConfig) {
   const { targetDir, verbose } = options
   const sourceDir =
-    options.sourceDir ?? join(fileURLToPath(new URL("..", import.meta.url)))
+    options.sourceDir ?? join(fileURLToPath(new URL("../..", import.meta.url)))
 
   if (!existsSync(targetDir)) {
     mkdirSync(targetDir, { recursive: true })
@@ -165,7 +165,7 @@ export async function buildKettleExternals(options: BuildExternalsConfig) {
 }
 
 async function main() {
-  const projectDir = fileURLToPath(new URL("..", import.meta.url))
+  const projectDir = fileURLToPath(new URL("../..", import.meta.url))
 
   console.log(chalk.yellowBright("[kettle] Building..."))
   await buildKettleApp({

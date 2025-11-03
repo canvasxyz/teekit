@@ -160,7 +160,7 @@ async function parseManifest(
 
     // Write to kettle directory so relative imports can be resolved
     // Get the kettle package directory
-    const kettleDir = fileURLToPath(new URL("..", import.meta.url))
+    const kettleDir = fileURLToPath(new URL("../..", import.meta.url))
     appPath = join(kettleDir, "app-remote.tmp.ts")
     writeFileSync(appPath, appFileContent)
   } else if (manifestObj.app.startsWith("file://")) {
@@ -243,7 +243,7 @@ async function main() {
   })
 
   // Build externals and worker
-  const kettlePackageDir = fileURLToPath(new URL("..", import.meta.url))
+  const kettlePackageDir = fileURLToPath(new URL("../..", import.meta.url))
   await buildKettleExternals({
     sourceDir: kettlePackageDir,
     targetDir: buildDir,

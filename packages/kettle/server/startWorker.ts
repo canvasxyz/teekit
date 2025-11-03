@@ -451,7 +451,7 @@ async function main() {
   const dbPath = join(baseDir, "app.sqlite")
 
   // Always (re)build worker bundle for tests/local runs to pick up changes
-  const projectDir = fileURLToPath(new URL("..", import.meta.url))
+  const projectDir = fileURLToPath(new URL("../..", import.meta.url))
   console.log(chalk.yellowBright("[kettle] Building..."))
   await buildKettleApp({
     source: join(projectDir, "app.ts"),

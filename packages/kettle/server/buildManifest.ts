@@ -8,13 +8,17 @@ async function main() {
   // Get filename from command-line argument
   const filename = process.argv[2]
   if (!filename) {
-    console.error(chalk.red("[kettle] Error: Please provide a filename or relative path"))
-    console.error(chalk.red("[kettle] Usage: tsx server/buildManifest.ts <filename>"))
+    console.error(
+      chalk.red("[kettle] Error: Please provide a filename or relative path"),
+    )
+    console.error(
+      chalk.red("[kettle] Usage: tsx server/buildManifest.ts <filename>"),
+    )
     process.exit(1)
   }
 
   // Get the kettle package directory
-  const kettleDir = fileURLToPath(new URL("..", import.meta.url))
+  const kettleDir = fileURLToPath(new URL("../..", import.meta.url))
   const appPath = join(kettleDir, filename)
   const manifestPath = join(kettleDir, "manifest.json")
 

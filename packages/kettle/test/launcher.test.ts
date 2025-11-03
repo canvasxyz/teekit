@@ -29,11 +29,11 @@ async function startLauncher(
   port: number,
 ): Promise<LauncherProcess> {
   const kettleDir = fileURLToPath(new URL("..", import.meta.url))
-  const launcherPath = join(kettleDir, "server", "launcher.ts")
+  const launcherPath = join(kettleDir, "server", "lib", "launcher.js")
 
   return new Promise((resolve, reject) => {
     const proc = spawn(
-      "tsx",
+      "node",
       [launcherPath, "--manifest", manifestPath, "--port", port.toString()],
       {
         stdio: ["ignore", "pipe", "pipe"],
