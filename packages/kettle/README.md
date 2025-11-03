@@ -7,10 +7,14 @@ quote generation, and sqlite (via libsql/sqld, optionally encrypted).
 ## Usage
 
 ```
-npm run build:worker
+npm run build:worker            # Builds dist from app.ts (default)
+npm run build:worker -- app.ts  # You can pass a relative path
 npm run start:launcher         # Start an orchestrated kettle VM using a file:/// url
 npm run start:launcher:remote  # Start an orchestrated remote kettle VM, that fetches app.ts from Github Gists
+npm run start:worker -- app.ts # Directly run local worker from a specific app path
 ```
+
+Both `buildWorker` and `startWorker` CLIs accept an optional relative path to your `app.ts`. If omitted, they default to `app.ts` at the package root.
 
 You will need to set GITHUB_TOKEN to start a remote kettle VM.
 Follow the instructions when you run `npm run start:launcher:remote`.

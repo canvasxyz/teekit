@@ -18,9 +18,7 @@ import { buildKettleApp, buildKettleExternals } from "./buildWorker.js"
 const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
 const PACKAGE_ROOT =
-  DIR_NAME === "lib"
-    ? join(CURRENT_DIR, "..", "..")
-    : join(CURRENT_DIR, "..")
+  DIR_NAME === "lib" ? join(CURRENT_DIR, "..", "..") : join(CURRENT_DIR, "..")
 
 export interface WorkerConfig {
   dbPath: string
@@ -457,9 +455,14 @@ async function main() {
 
   // Always (re)build worker bundle for tests/local runs to pick up changes
   const projectDir = PACKAGE_ROOT
+
+  const filenameArg = process.argv[2]
+  const appSourcePath = filenameArg
+    ? join(projectDir, filenameArg)
+    : join(projectDir, "app.ts")
   console.log(chalk.yellowBright("[kettle] Building..."))
   await buildKettleApp({
-    source: join(projectDir, "app.ts"),
+    source: appSourcePath,
     targetDir: join(projectDir, "dist"),
   })
   await buildKettleExternals({

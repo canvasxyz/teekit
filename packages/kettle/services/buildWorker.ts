@@ -7,9 +7,7 @@ import { fileURLToPath, pathToFileURL } from "url"
 const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
 const PACKAGE_ROOT =
-  DIR_NAME === "lib"
-    ? join(CURRENT_DIR, "..", "..")
-    : join(CURRENT_DIR, "..")
+  DIR_NAME === "lib" ? join(CURRENT_DIR, "..", "..") : join(CURRENT_DIR, "..")
 
 type BuildConfig = {
   source: string
@@ -174,8 +172,13 @@ async function main() {
   const projectDir = PACKAGE_ROOT
 
   console.log(chalk.yellowBright("[kettle] Building..."))
+
+  const filenameArg = process.argv[2]
+  const appSourcePath = filenameArg
+    ? join(projectDir, filenameArg)
+    : join(projectDir, "app.ts")
   await buildKettleApp({
-    source: join(projectDir, "app.ts"),
+    source: appSourcePath,
     targetDir: join(projectDir, "dist"),
     verbose: true,
   })
