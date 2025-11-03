@@ -4,12 +4,11 @@
 	"type": "module",
 	"scripts": {
 		"clean": "rm -rf dist/* test/lib/* *.tsbuildinfo",
-		"dev": "vite",
-		"build": "vite build",
-		"server": "tsx server/startWorker.ts",
-		"quote-service": "tsx server/startQuoteService.ts",
+		"build": "npm run build:worker && npm run build:client",
+		"build:client": "vite build",
+		"build:client:watch": "vite",
 		"build:worker": "tsx server/buildWorker.ts",
-		"start": "npm run demo",
+		"start:worker": "tsx server/startWorker.ts",
 		"start:launcher": "tsx server/buildManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
 		"start:launcher:remote": "tsx server/buildRemoteManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
 		"test": "ava --serial"
