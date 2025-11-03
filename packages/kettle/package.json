@@ -10,8 +10,8 @@
 		"quote-service": "tsx server/startQuoteService.ts",
 		"build:worker": "tsx server/buildWorker.ts",
 		"start": "npm run demo",
-		"start:launcher": "tsx server/buildManifest.ts && tsx server/launcher.ts --manifest manifest.json",
-		"start:launcher:remote": "tsx server/buildRemoteManifest.ts && tsx server/launcher.ts --manifest manifest.json",
+		"start:launcher": "tsx server/buildManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
+		"start:launcher:remote": "tsx server/buildRemoteManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
 		"test": "ava --serial"
 	},
 	"dependencies": {

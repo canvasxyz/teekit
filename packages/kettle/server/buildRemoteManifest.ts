@@ -7,7 +7,12 @@ import chalk from "chalk"
 const GITHUB_TOKEN_URL =
   "https://github.com/settings/tokens/new?description=Kettle&scopes=gist&default_expires_at=90"
 
-async function createGist(appContent: string, token: string): Promise<string> {
+async function createGist(
+  appContent: string,
+  token: string,
+  filename: string,
+): Promise<string> {
+  const basename = filename.split(/[/\\]/).pop() || filename
   const response = await fetch("https://api.github.com/gists", {
     method: "POST",
     headers: {
@@ -16,10 +21,10 @@ async function createGist(appContent: string, token: string): Promise<string> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      description: "Kettle app.ts",
+      description: `Kettle ${basename}`,
       public: false,
       files: {
-        "app.ts": {
+        [basename]: {
           content: appContent,
         },
       },
@@ -48,7 +53,7 @@ async function createGist(appContent: string, token: string): Promise<string> {
   }
 
   const gist = await response.json()
-  const rawUrl = gist.files["app.ts"].raw_url
+  const rawUrl = gist.files[basename].raw_url
 
   if (!rawUrl) {
     throw new Error("Failed to get raw URL from Gist response")
@@ -58,9 +63,21 @@ async function createGist(appContent: string, token: string): Promise<string> {
 }
 
 async function main() {
+  // Get filename from command-line argument
+  const filename = process.argv[2]
+  if (!filename) {
+    console.error(
+      chalk.red("[remote-manifest] Error: Please provide a filename or relative path"),
+    )
+    console.error(
+      chalk.red("[remote-manifest] Usage: tsx server/buildRemoteManifest.ts <filename>"),
+    )
+    process.exit(1)
+  }
+
   // Get the kettle package directory
   const kettleDir = fileURLToPath(new URL("..", import.meta.url))
-  const appPath = join(kettleDir, "app.ts")
+  const appPath = join(kettleDir, filename)
   const manifestPath = join(kettleDir, "manifest.json")
 
   // Prefer GITHUB_TOKEN from .env over process.env
@@ -102,7 +119,7 @@ async function main() {
   console.log(chalk.blueBright("[remote-manifest] Creating Gist..."))
   let gistRawUrl: string
   try {
-    gistRawUrl = await createGist(appFileContent, token)
+    gistRawUrl = await createGist(appFileContent, token, filename)
     console.log(
       chalk.blueBright(`[remote-manifest] Created Gist: ${gistRawUrl}`),
     )
