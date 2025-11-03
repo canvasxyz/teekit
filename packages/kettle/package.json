@@ -2,6 +2,9 @@
 	"name": "@teekit/kettle",
 	"version": "0.0.2",
 	"type": "module",
+	"bin": {
+		"kettle": "server/lib/launcher.js"
+	},
 	"scripts": {
 		"clean": "rm -rf dist/* server/lib/* test/lib/* *.tsbuildinfo",
 		"build": "npm run build:worker && npm run build:client",
