@@ -12,7 +12,7 @@ async function main() {
       chalk.red("[kettle] Error: Please provide a filename or relative path"),
     )
     console.error(
-      chalk.red("[kettle] Usage: tsx server/buildManifest.ts <filename>"),
+      chalk.red("[kettle] Usage: tsx services/buildManifest.ts <filename>"),
     )
     process.exit(1)
   }

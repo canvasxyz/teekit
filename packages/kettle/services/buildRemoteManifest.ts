@@ -73,7 +73,7 @@ async function main() {
     )
     console.error(
       chalk.red(
-        "[remote-manifest] Usage: tsx server/buildRemoteManifest.ts <filename>",
+        "[remote-manifest] Usage: tsx services/buildRemoteManifest.ts <filename>",
       ),
     )
     process.exit(1)

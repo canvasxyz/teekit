@@ -327,27 +327,17 @@ const config :Workerd.Config = (
             durableObjectNamespace = "HonoDurableObject"
           ),
           (
-            name = "QUOTE_SERVICE_URL",
+            name = "QUOTE_URL",
             text = "${quoteServiceUrl}"
           ),
-          (
-            name = "QUOTE_SERVICE",
-            service = "quote"
-          ),
-          (
-            name = "STATIC_FILES",
-            service = "static-files"
-          ),
-        ],
-
-        durableObjectStorage = ( inMemory = void ),
-
-        durableObjectNamespaces = [
-          (
-            className = "HonoDurableObject",
-            uniqueKey = "kettle-hono-do"
-          )
-        ],
+        ]
+      ),
+    ),
+    (
+      name = "HonoDurableObject",
+      durableObject = (
+        className = "HonoDurableObject",
+        scriptName = "main"
       )
     ),
     (

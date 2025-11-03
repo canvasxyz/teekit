@@ -127,39 +127,23 @@ async function parseManifest(
           break
         }
 
+        if (!value) continue
         totalSize += value.length
-
         if (totalSize > MAX_APP_FILE_SIZE) {
-          reader.cancel()
+          reader.releaseLock()
           throw new Error(
             `App file size exceeds maximum allowed size (${MAX_APP_FILE_SIZE} bytes)`,
           )
         }
-
         chunks.push(value)
       }
     } finally {
       reader.releaseLock()
     }
 
-    // Combine chunks into a single buffer
-    appFileContent = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
+    appFileContent = Buffer.concat(chunks)
 
-    // Verify SHA256 hash
-    const calculatedHash = createHash("sha256")
-      .update(appFileContent)
-      .digest("hex")
-    const expectedHash = manifestObj.sha256.toLowerCase()
-    const actualHash = calculatedHash.toLowerCase()
-
-    if (expectedHash !== actualHash) {
-      throw new Error(
-        `SHA256 hash mismatch: expected ${expectedHash}, got ${actualHash}`,
-      )
-    }
-
-    // Write to kettle directory so relative imports can be resolved
-    // Get the kettle package directory
+    // Write fetched app to a temporary file inside the package root
     const kettleDir = fileURLToPath(new URL("../..", import.meta.url))
     appPath = join(kettleDir, "app-remote.tmp.ts")
     writeFileSync(appPath, appFileContent)

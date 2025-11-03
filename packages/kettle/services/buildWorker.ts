@@ -123,7 +123,7 @@ export async function buildKettleExternals(options: BuildExternalsConfig) {
   }
 
   const workerBuild = await build({
-    entryPoints: [join(sourceDir, "server", "worker", "worker.ts")],
+    entryPoints: [join(sourceDir, "services", "worker", "worker.ts")],
     bundle: true,
     format: "esm",
     platform: "browser",

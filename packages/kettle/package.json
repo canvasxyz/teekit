@@ -3,22 +3,22 @@
 	"version": "0.0.2",
 	"type": "module",
 	"bin": {
-		"kettle": "server/lib/launcher.js"
+		"kettle": "services/lib/launcher.js"
 	},
 	"scripts": {
-		"clean": "rm -rf dist/* server/lib/* test/lib/* *.tsbuildinfo",
+		"clean": "rm -rf dist/* services/lib/* test/lib/* *.tsbuildinfo",
 		"build": "npm run build:worker && npm run build:client",
 		"build:client": "vite build",
 		"build:client:watch": "vite",
-		"build:worker": "tsc --build server && node server/lib/buildWorker.js",
-		"start:worker": "node server/lib/startWorker.js",
-		"start:launcher": "node server/lib/buildManifest.js app.ts && node server/lib/launcher.js --manifest manifest.json",
-		"start:launcher:remote": "node server/lib/buildRemoteManifest.js app.ts && node server/lib/launcher.js --manifest manifest.json",
+		"build:worker": "tsc --build services && node services/lib/buildWorker.js",
+		"start:worker": "node services/lib/startWorker.js",
+		"start:launcher": "node services/lib/buildManifest.js app.ts && node services/lib/launcher.js --manifest manifest.json",
+		"start:launcher:remote": "node services/lib/buildRemoteManifest.js app.ts && node services/lib/launcher.js --manifest manifest.json",
 		"test": "ava --serial"
 	},
 	"exports": {
-		".": "./server/lib/index.js",
-		"./worker": "./server/lib/worker/index.js"
+		".": "./services/lib/index.js",
+		"./worker": "./services/lib/worker/index.js"
 	},
 	"dependencies": {
 		"@libsql/client": "^0.15.15",

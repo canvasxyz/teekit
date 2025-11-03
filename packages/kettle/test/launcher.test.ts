@@ -16,7 +16,7 @@ import {
   findFreePort,
   waitForPortOpen,
   waitForPortClosed,
-} from "../server/utils.js"
+} from "../services/utils.js"
 
 interface LauncherProcess {
   process: ChildProcess
@@ -29,7 +29,7 @@ async function startLauncher(
   port: number,
 ): Promise<LauncherProcess> {
   const kettleDir = fileURLToPath(new URL("..", import.meta.url))
-  const launcherPath = join(kettleDir, "server", "lib", "launcher.js")
+  const launcherPath = join(kettleDir, "services", "lib", "launcher.js")
 
   return new Promise((resolve, reject) => {
     const proc = spawn(
@@ -389,7 +389,7 @@ test("launcher: fails when SHA256 hash does not match", async (t) => {
 
   // Try to start launcher - should fail
   const kettleDir2 = fileURLToPath(new URL("..", import.meta.url))
-  const launcherPath = join(kettleDir2, "server", "launcher.ts")
+  const launcherPath = join(kettleDir2, "services", "launcher.ts")
   const testPort = await findFreePort()
 
   const result = await new Promise<{ exitCode: number | null; stderr: string }>(

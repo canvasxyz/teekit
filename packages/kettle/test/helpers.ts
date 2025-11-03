@@ -1,12 +1,12 @@
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { startWorker, WorkerResult } from "../server/startWorker.js"
+import { startWorker, WorkerResult } from "../services/startWorker.js"
 import {
   findFreePort,
   waitForPortClosed,
   waitForPortOpen,
-} from "../server/utils.js"
+} from "../services/utils.js"
 import { TunnelClient } from "@teekit/tunnel"
 import { base64 } from "@scure/base"
 import { hex, parseTdxQuote } from "@teekit/qvl"

@@ -48,9 +48,7 @@ export const serveStatic = () => {
     try {
       // Fetch path directly
       const response = await c.env.STATIC_FILES.fetch(
-        new Request(`http://dummy${path}`, {
-          method: c.req.method,
-        }),
+        new Request(`http://dummy${path}`),
       )
 
       if (!response.ok) {
@@ -58,9 +56,7 @@ export const serveStatic = () => {
         if (response.status === 404 && !path.endsWith(".html")) {
           const htmlPath = path + ".html"
           const htmlResponse = await c.env.STATIC_FILES.fetch(
-            new Request(`http://dummy${htmlPath}`, {
-              method: c.req.method,
-            }),
+            new Request(`http://dummy${htmlPath}`),
           )
           if (htmlResponse.ok) {
             const filename = htmlPath.split("/").pop() || "index.html"
