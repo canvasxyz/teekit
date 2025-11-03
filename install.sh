@@ -9,7 +9,7 @@ if test -f "$INSTALL_PATH"; then
     if [[ $REPLY =~ ^[Yy]$ ]]
     then
         # Overwrite any past install
-        unlink ${$INSTALL_PATH}
+        unlink ${INSTALL_PATH}
         echo "#!/usr/bin/env sh" > ${INSTALL_PATH}
     else
         echo
@@ -21,7 +21,7 @@ else
     touch ${INSTALL_PATH}
     echo "#!/usr/bin/env sh" >> ${INSTALL_PATH}
 fi
-echo "node ${PWD}/packages/kettle/server/lib/launcher.js \$@" >> ${INSTALL_PATH}
+echo "node ${PWD}/packages/kettle/services/lib/launcher.js \$@" >> ${INSTALL_PATH}
 chmod +x ${INSTALL_PATH}
 echo
 echo "Done!"
