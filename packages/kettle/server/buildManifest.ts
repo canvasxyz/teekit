@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { fileURLToPath } from "url"
 import { createHash } from "crypto"
+import chalk from "chalk"
 
 async function main() {
   // Get the kettle package directory
@@ -20,10 +21,12 @@ async function main() {
   }
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8")
 
-  console.log(`[start-launcher] Generated manifest at ${manifestPath}`)
+  console.log(
+    chalk.blueBright(`[kettle] Generated manifest at ${manifestPath}`),
+  )
 }
 
 main().catch((err) => {
-  console.error("[start-launcher] Error:", err)
+  console.error(chalk.red("[kettle] Error:"), err)
   process.exit(1)
 })

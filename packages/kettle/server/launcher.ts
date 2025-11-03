@@ -213,24 +213,33 @@ async function main() {
       type: "string",
       description: "Directory to store the database",
     })
+    .option("verbose", {
+      type: "boolean",
+      description: "Include verbose logging",
+    })
     .help()
     .alias("help", "h")
     .parse()
 
-  console.log(chalk.yellowBright("[launcher] Loading manifest..."))
   const manifest = await parseManifest(argv.manifest)
-  console.log(chalk.greenBright(`[launcher] App source: ${manifest.app}`))
+  if (argv.verbose) {
+    console.log(chalk.yellowBright(`[launcher] App source: ${manifest.app}`))
+  }
 
   // Create temporary build directory
   const buildDir = mkdtempSync(join(tmpdir(), "kettle-launcher-build-"))
-  console.log(chalk.yellowBright(`[launcher] Build directory: ${buildDir}`))
+  if (argv.verbose) {
+    console.log(chalk.yellowBright(`[launcher] Build directory: ${buildDir}`))
+  }
 
   // Build the app
-  console.log(chalk.yellowBright("[launcher] Building app..."))
+  if (argv.verbose) {
+    console.log(chalk.yellowBright("[launcher] Building app..."))
+  }
   await buildKettleApp({
     source: manifest.app,
     targetDir: buildDir,
-    verbose: true,
+    verbose: argv.verbose,
   })
 
   // Build externals and worker
@@ -238,7 +247,7 @@ async function main() {
   await buildKettleExternals({
     sourceDir: kettlePackageDir,
     targetDir: buildDir,
-    verbose: true,
+    verbose: argv.verbose,
   })
 
   // Set up database directory
@@ -249,20 +258,16 @@ async function main() {
   }
   const dbPath = join(baseDir, "app.sqlite")
 
-  console.log(chalk.yellowBright("[launcher] Starting worker..."))
-  const { stop, workerPort } = await startWorker({
+  if (argv.verbose) {
+    console.log(chalk.yellowBright("[launcher] Starting worker..."))
+  }
+  const { stop } = await startWorker({
     dbPath,
     workerPort: argv.port,
     sqldPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
     bundleDir: buildDir,
   })
-
-  console.log(
-    chalk.yellowBright(
-      `[launcher] Worker running at http://localhost:${workerPort}`,
-    ),
-  )
 
   // Handle graceful shutdown
   const shutdown = async () => {

@@ -84,7 +84,7 @@ async function main() {
   if (!token) {
     console.error(
       chalk.red(
-        `[buildRemoteManifest] GITHUB_TOKEN environment variable not found.\n` +
+        `[remote-manifest] GITHUB_TOKEN environment variable not found.\n` +
           `Please create a GitHub personal access token at:\n${GITHUB_TOKEN_URL}\n` +
           `Then set it in your .env file or provide it as GITHUB_TOKEN=<token>`,
       ),
@@ -93,35 +93,32 @@ async function main() {
   }
 
   // Read app.ts and calculate SHA256 hash
-  console.log(chalk.yellowBright("[buildRemoteManifest] Reading app.ts..."))
   const appFileContent = readFileSync(appPath, "utf-8")
   const sha256Hash = createHash("sha256")
     .update(appFileContent, "utf-8")
     .digest("hex")
 
   // Create Gist
-  console.log(chalk.yellowBright("[buildRemoteManifest] Creating Gist..."))
+  console.log(chalk.blueBright("[remote-manifest] Creating Gist..."))
   let gistRawUrl: string
   try {
     gistRawUrl = await createGist(appFileContent, token)
     console.log(
-      chalk.greenBright(`[buildRemoteManifest] Created Gist: ${gistRawUrl}`),
+      chalk.blueBright(`[remote-manifest] Created Gist: ${gistRawUrl}`),
     )
   } catch (err) {
     if (err instanceof Error) {
-      console.error(
-        chalk.yellowBright(`[buildRemoteManifest] Error: ${err.message}`),
-      )
+      console.error(chalk.blueBright(`[remote-manifest] Error: ${err.message}`))
       if (err.message.includes("token")) {
         console.error(
-          chalk.yellowBright(
+          chalk.blueBright(
             `\nPlease create a new GitHub personal access token at:\n${GITHUB_TOKEN_URL}`,
           ),
         )
       }
     } else {
       console.error(
-        chalk.yellowBright(`[buildRemoteManifest] Unexpected error:`, err),
+        chalk.blueBright(`[remote-manifest] Unexpected error:`, err),
       )
     }
     process.exit(1)
@@ -134,17 +131,10 @@ async function main() {
   }
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8")
 
-  console.log(
-    chalk.greenBright(
-      `[buildRemoteManifest] Generated manifest at ${manifestPath}`,
-    ),
-  )
-  console.log(
-    chalk.greenBright(`[buildRemoteManifest] Manifest app URL: ${gistRawUrl}`),
-  )
+  console.log(chalk.blueBright(`[remote-manifest] Saved to ${manifestPath}`))
 }
 
 main().catch((err) => {
-  console.error(chalk.red("[buildRemoteManifest] Error:"), err)
+  console.error(chalk.red("[remote-manifest] Error:"), err)
   process.exit(1)
 })

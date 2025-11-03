@@ -95,11 +95,9 @@ export async function startWorker(
       ),
     )
   }
-  console.log(chalk.yellowBright(`[kettle] sqld path: ${dbPath}`))
+  console.log(chalk.yellowBright(`[kettle] Database: ${dbPath}`))
   if (enableReplication) {
-    console.log(
-      chalk.yellowBright(`[kettle] replica sqld path: ${replicaDbPath}`),
-    )
+    console.log(chalk.yellowBright(`[kettle] Replica: ${replicaDbPath}`))
   }
 
   // Start main sqld
