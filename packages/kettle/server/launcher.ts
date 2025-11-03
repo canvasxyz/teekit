@@ -17,14 +17,18 @@ interface Manifest {
   sha256: string
 }
 
-function parseManifest(manifestPath: string): Manifest {
+interface ParsedManifest {
+  app: string
+}
+
+function parseManifest(manifestPath: string): ParsedManifest {
   if (!existsSync(manifestPath)) {
     throw new Error(`Manifest file not found: ${manifestPath}`)
   }
 
   const content = readFileSync(manifestPath, "utf-8")
 
-  let manifest
+  let manifest: unknown
   try {
     manifest = JSON.parse(content)
   } catch (err) {
@@ -38,19 +42,21 @@ function parseManifest(manifestPath: string): Manifest {
     throw new Error("Manifest must be a JSON object")
   }
 
-  if (!manifest.app || typeof manifest.app !== "string") {
+  const manifestObj = manifest as Partial<Manifest>
+
+  if (!manifestObj.app || typeof manifestObj.app !== "string") {
     throw new Error("Manifest must contain an 'app' field with a string value")
   }
 
-  if (!manifest.app.startsWith("file://")) {
+  if (!manifestObj.app.startsWith("file://")) {
     throw new Error("Manifest must contain an 'app' field with a file:/// URL")
   }
 
-  if (!manifest.sha256 || typeof manifest.sha256 !== "string") {
+  if (!manifestObj.sha256 || typeof manifestObj.sha256 !== "string") {
     throw new Error("Manifest must contain a 'sha256' field with a string value")
   }
 
-  const appPath = fileURLToPath(manifest.app)
+  const appPath = fileURLToPath(manifestObj.app)
 
   if (!existsSync(appPath)) {
     throw new Error(`App file not found: ${appPath}`)
@@ -61,7 +67,7 @@ function parseManifest(manifestPath: string): Manifest {
   const calculatedHash = createHash("sha256").update(appFileContent).digest("hex")
 
   // Normalize the hashes (convert to lowercase for comparison)
-  const expectedHash = manifest.sha256.toLowerCase()
+  const expectedHash = manifestObj.sha256.toLowerCase()
   const actualHash = calculatedHash.toLowerCase()
 
   if (expectedHash !== actualHash) {
