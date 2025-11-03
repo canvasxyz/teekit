@@ -14,6 +14,7 @@
 		"start:worker": "node services/lib/startWorker.js",
 		"start:launcher": "node services/lib/buildManifest.js app.ts && node services/lib/launcher.js --manifest manifest.json",
 		"start:launcher:remote": "node services/lib/buildRemoteManifest.js app.ts && node services/lib/launcher.js --manifest manifest.json",
+		"pretest": "npm run build",
 		"test": "ava --serial"
 	},
 	"exports": {

@@ -27,6 +27,7 @@
 	"scripts": {
 		"dev": "tsc --watch -p tsconfig.json",
 		"build": "tsc -p tsconfig.json",
+		"pretest": "npm run build",
 		"test": "ava --serial"
 	},
 	"dependencies": {
