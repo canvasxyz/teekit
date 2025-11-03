@@ -337,15 +337,23 @@ const config :Workerd.Config = (
             name = "QUOTE_URL",
             text = "${quoteServiceUrl}"
           ),
-        ]
+          (
+            name = "QUOTE_SERVICE",
+            service = "quote"
+          ),
+          (
+            name = "STATIC_FILES",
+            service = "static-files"
+          ),
+        ],
+        durableObjectNamespaces = [
+          (
+            className = "HonoDurableObject",
+            uniqueKey = "hono-durable-object"
+          ),
+        ],
+        durableObjectStorage = (inMemory = void),
       ),
-    ),
-    (
-      name = "HonoDurableObject",
-      durableObject = (
-        className = "HonoDurableObject",
-        scriptName = "main"
-      )
     ),
     (
       name = "sqld",
