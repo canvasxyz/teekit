@@ -1,8 +1,15 @@
 import { readFileSync, writeFileSync, existsSync } from "fs"
-import { join } from "path"
+import { join, basename } from "path"
 import { fileURLToPath } from "url"
 import { createHash } from "crypto"
 import chalk from "chalk"
+
+const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
+const DIR_NAME = basename(CURRENT_DIR)
+const KETTLE_DIR =
+  DIR_NAME === "lib"
+    ? join(CURRENT_DIR, "..", "..")
+    : join(CURRENT_DIR, "..")
 
 const GITHUB_TOKEN_URL =
   "https://github.com/settings/tokens/new?description=Kettle&scopes=gist&default_expires_at=90"
@@ -80,7 +87,7 @@ async function main() {
   }
 
   // Get the kettle package directory
-  const kettleDir = fileURLToPath(new URL("../..", import.meta.url))
+  const kettleDir = KETTLE_DIR
   const appPath = join(kettleDir, filename)
   const manifestPath = join(kettleDir, "manifest.json")
 

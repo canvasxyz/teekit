@@ -1,8 +1,15 @@
 import chalk from "chalk"
 import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs"
-import { join } from "path"
+import { join, basename } from "path"
 import { build } from "esbuild"
 import { fileURLToPath, pathToFileURL } from "url"
+
+const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
+const DIR_NAME = basename(CURRENT_DIR)
+const PACKAGE_ROOT =
+  DIR_NAME === "lib"
+    ? join(CURRENT_DIR, "..", "..")
+    : join(CURRENT_DIR, "..")
 
 type BuildConfig = {
   source: string
@@ -85,8 +92,7 @@ export async function buildKettleApp(options: BuildConfig) {
 
 export async function buildKettleExternals(options: BuildExternalsConfig) {
   const { targetDir, verbose } = options
-  const sourceDir =
-    options.sourceDir ?? join(fileURLToPath(new URL("../..", import.meta.url)))
+  const sourceDir = options.sourceDir ?? PACKAGE_ROOT
 
   if (!existsSync(targetDir)) {
     mkdirSync(targetDir, { recursive: true })
@@ -165,7 +171,7 @@ export async function buildKettleExternals(options: BuildExternalsConfig) {
 }
 
 async function main() {
-  const projectDir = fileURLToPath(new URL("../..", import.meta.url))
+  const projectDir = PACKAGE_ROOT
 
   console.log(chalk.yellowBright("[kettle] Building..."))
   await buildKettleApp({

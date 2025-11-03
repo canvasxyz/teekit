@@ -1,5 +1,5 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs"
-import { join } from "path"
+import { join, basename } from "path"
 import { fileURLToPath } from "url"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
@@ -11,6 +11,13 @@ import { hideBin } from "yargs/helpers"
 import { startWorker } from "./startWorker.js"
 import { buildKettleApp, buildKettleExternals } from "./buildWorker.js"
 import { findFreePort } from "./utils.js"
+
+const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
+const DIR_NAME = basename(CURRENT_DIR)
+const KETTLE_DIR =
+  DIR_NAME === "lib"
+    ? join(CURRENT_DIR, "..", "..")
+    : join(CURRENT_DIR, "..")
 
 interface Manifest {
   app: string
@@ -144,7 +151,7 @@ async function parseManifest(
     appFileContent = Buffer.concat(chunks)
 
     // Write fetched app to a temporary file inside the package root
-    const kettleDir = fileURLToPath(new URL("../..", import.meta.url))
+    const kettleDir = KETTLE_DIR
     appPath = join(kettleDir, "app-remote.tmp.ts")
     writeFileSync(appPath, appFileContent)
   } else if (manifestObj.app.startsWith("file://")) {
@@ -227,7 +234,7 @@ async function main() {
   })
 
   // Build externals and worker
-  const kettlePackageDir = fileURLToPath(new URL("../..", import.meta.url))
+  const kettlePackageDir = KETTLE_DIR
   await buildKettleExternals({
     sourceDir: kettlePackageDir,
     targetDir: buildDir,

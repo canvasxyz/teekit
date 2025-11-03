@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from "child_process"
 import chalk from "chalk"
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
-import { join } from "path"
+import { join, basename } from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import {
   findFreePort,
@@ -14,6 +14,13 @@ import {
 } from "./utils.js"
 import { startQuoteService } from "./startQuoteService.js"
 import { buildKettleApp, buildKettleExternals } from "./buildWorker.js"
+
+const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
+const DIR_NAME = basename(CURRENT_DIR)
+const PACKAGE_ROOT =
+  DIR_NAME === "lib"
+    ? join(CURRENT_DIR, "..", "..")
+    : join(CURRENT_DIR, "..")
 
 export interface WorkerConfig {
   dbPath: string
@@ -441,7 +448,7 @@ async function main() {
   const dbPath = join(baseDir, "app.sqlite")
 
   // Always (re)build worker bundle for tests/local runs to pick up changes
-  const projectDir = fileURLToPath(new URL("../..", import.meta.url))
+  const projectDir = PACKAGE_ROOT
   console.log(chalk.yellowBright("[kettle] Building..."))
   await buildKettleApp({
     source: join(projectDir, "app.ts"),
