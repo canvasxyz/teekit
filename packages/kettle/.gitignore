@@ -1,3 +1,4 @@
 workerd.config.tmp.capnp
 data.sqld/
 manifest.json
+app-remote.tmp.ts
