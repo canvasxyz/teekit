@@ -1,3 +1,4 @@
+server/lib/
 workerd.config.tmp.capnp
 data.sqld/
 manifest.json

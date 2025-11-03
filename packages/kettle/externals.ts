@@ -9,6 +9,7 @@ export { type ContentfulStatusCode } from "hono/utils/http-status"
 export * from "@libsql/client"
 
 // Re-export @teekit packages
+export * from "@teekit/kettle/worker"
 export * from "@teekit/tunnel"
 export * from "@teekit/tunnel/samples"
 export * from "@teekit/qvl"

@@ -229,6 +229,10 @@ const config :Workerd.Config = (
             esModule = embed "${EXTERNALS_JS}"
           ),
           (
+            name = "@teekit/kettle/worker",
+            esModule = embed "${EXTERNALS_JS}"
+          ),
+          (
             name = "@teekit/tunnel",
             esModule = embed "${EXTERNALS_JS}"
           ),

@@ -3,15 +3,19 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"clean": "rm -rf dist/* test/lib/* *.tsbuildinfo",
+		"clean": "rm -rf dist/* server/lib/* test/lib/* *.tsbuildinfo",
 		"build": "npm run build:worker && npm run build:client",
 		"build:client": "vite build",
 		"build:client:watch": "vite",
-		"build:worker": "tsx server/buildWorker.ts",
+		"build:worker": "tsc --build server && tsx server/buildWorker.ts",
 		"start:worker": "tsx server/startWorker.ts",
 		"start:launcher": "tsx server/buildManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
 		"start:launcher:remote": "tsx server/buildRemoteManifest.ts app.ts && tsx server/launcher.ts --manifest manifest.json",
 		"test": "ava --serial"
+	},
+	"exports": {
+		".": "./server/lib/index.js",
+		"./worker": "./server/lib/worker/index.js"
 	},
 	"dependencies": {
 		"@libsql/client": "^0.15.15",

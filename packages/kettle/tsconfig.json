@@ -1,8 +1,8 @@
 {
 	"extends": "../../tsconfig.base.json",
-	"include": ["src", "./app.ts", "./worker.ts", "./types.ts", "./db.ts", "./static.ts", "server", "shared"],
+	"include": ["src", "./app.ts", "./types.ts"],
 	"compilerOptions": {
 		"noEmit": true
 	},
-	"references": [{ "path": "../qvl" }, { "path": "../tunnel" }]
+	"references": [{ "path": "./server" }, { "path": "../qvl" }, { "path": "../tunnel" }]
 }

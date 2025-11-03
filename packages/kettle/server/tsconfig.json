@@ -1,0 +1,9 @@
+{
+	"exclude": ["lib"],
+	"extends": "../../../tsconfig.base.json",
+	"include": ["*.ts", "worker/*.ts"],
+	"compilerOptions": {
+		"outDir": "lib",
+  },
+	"references": [{ "path": "../../qvl" }, { "path": "../../tunnel" }]
+}

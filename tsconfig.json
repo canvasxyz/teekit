@@ -5,6 +5,7 @@
 		{ "path": "./packages/demo" },
 		{ "path": "./packages/demo/test" },
 		{ "path": "./packages/kettle" },
+		{ "path": "./packages/kettle/server" },
 		{ "path": "./packages/kettle/test" },
 		{ "path": "./packages/qvl" },
 		{ "path": "./packages/qvl/test" },

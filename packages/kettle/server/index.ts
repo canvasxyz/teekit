@@ -7,3 +7,7 @@ export {
   resolveWorkerdBinary,
   resolveSqldBinary,
 } from "./utils.js"
+
+export { getDb } from "./worker/db.js"
+export { serveStatic } from "./worker/static.js"
+export type { Env } from "./worker/worker.js"

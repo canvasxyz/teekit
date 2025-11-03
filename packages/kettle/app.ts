@@ -5,15 +5,13 @@ import { upgradeWebSocket } from "hono/cloudflare-workers"
 import { ContentfulStatusCode } from "hono/utils/http-status"
 import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
 
-import { serveStatic } from "./static.js"
-import { getDb } from "./db.js"
+import { serveStatic, getDb, type Env } from "@teekit/kettle/worker"
 import type {
   Message,
   IncomingChatMessage,
   BroadcastMessage,
   BacklogMessage,
 } from "./types.js"
-import type { Env } from "./worker.js"
 
 const app = new Hono<{ Bindings: Env }>()
 app.use("/*", cors())

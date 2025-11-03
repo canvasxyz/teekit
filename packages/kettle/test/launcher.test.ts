@@ -1,5 +1,11 @@
 import test from "ava"
-import { mkdtempSync, copyFileSync, writeFileSync, existsSync, readFileSync } from "fs"
+import {
+  mkdtempSync,
+  copyFileSync,
+  writeFileSync,
+  existsSync,
+  readFileSync,
+} from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { spawn, ChildProcess } from "child_process"
@@ -118,7 +124,7 @@ test.before(async (t) => {
   const kettleDir = fileURLToPath(new URL("..", import.meta.url))
 
   // Files to copy: app.ts and its local dependencies
-  const filesToCopy = ["app.ts", "static.ts", "db.ts", "types.ts"]
+  const filesToCopy = ["app.ts", "types.ts"]
 
   for (const file of filesToCopy) {
     const sourcePath = join(kettleDir, file)
@@ -390,7 +396,13 @@ test("launcher: fails when SHA256 hash does not match", async (t) => {
     (resolve) => {
       const proc = spawn(
         "tsx",
-        [launcherPath, "--manifest", manifestPath, "--port", testPort.toString()],
+        [
+          launcherPath,
+          "--manifest",
+          manifestPath,
+          "--port",
+          testPort.toString(),
+        ],
         {
           stdio: ["ignore", "pipe", "pipe"],
           cwd: kettleDir2,
