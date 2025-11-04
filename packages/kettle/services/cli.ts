@@ -14,7 +14,7 @@ async function main() {
     .scriptName("kettle")
     .wrap(90)
     .command(
-      "publish [file]",
+      "publish <file>",
       "Generate an app manifest, by publishing to GitHub",
       (yargs) => {
         return yargs.positional("file", {
@@ -26,7 +26,7 @@ async function main() {
       buildRemoteManifestCommand,
     )
     .command(
-      "publish-local [file]",
+      "publish-local <file>",
       "Generate an app manifest, using a file:/// url",
       (yargs) => {
         return yargs.positional("file", {
@@ -38,14 +38,13 @@ async function main() {
       buildManifestCommand,
     )
     .command(
-      "launch",
+      "launch <manifest>",
       "Start app runtime from a manifest file",
       (yargs) => {
         return yargs
-          .option("manifest", {
-            alias: "m",
+          .positional("manifest", {
+            describe: "Manifest identifier (path, file:/// or http/https URL)",
             type: "string",
-            description: "Path to the manifest JSON file",
             demandOption: true,
           })
           .option("port", {

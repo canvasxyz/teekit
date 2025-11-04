@@ -29,21 +29,13 @@ async function startLauncher(
   manifestPath: string,
   port: number,
 ): Promise<LauncherProcess> {
-  console.log(chalk.gray("[launcher] starting..."))
   const kettleDir = fileURLToPath(new URL("..", import.meta.url))
   const cliPath = join(kettleDir, "services", "lib", "cli.js")
 
   return new Promise((resolve, reject) => {
     const proc = spawn(
       "node",
-      [
-        cliPath,
-        "launcher",
-        "--manifest",
-        manifestPath,
-        "--port",
-        port.toString(),
-      ],
+      [cliPath, "launch", manifestPath, "--port", port.toString()],
       {
         stdio: ["ignore", "pipe", "pipe"],
         cwd: kettleDir,
@@ -111,7 +103,7 @@ async function startLauncher(
     })
 
     proc.on("exit", (code) => {
-      console.log(chalk.gray("[launcher] exited"))
+      console.log(chalk.gray("[launcher] waiting to exit..."))
       if (!resolved && code !== 0) {
         clearTimeout(timeout)
         reject(
@@ -410,14 +402,7 @@ test("launcher: fails when SHA256 hash does not match", async (t) => {
     (resolve) => {
       const proc = spawn(
         "node",
-        [
-          cliPath,
-          "launcher",
-          "--manifest",
-          manifestPath,
-          "--port",
-          testPort.toString(),
-        ],
+        [cliPath, "launch", manifestPath, "--port", testPort.toString()],
         {
           stdio: ["ignore", "pipe", "pipe"],
           cwd: kettleDir2,
