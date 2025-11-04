@@ -5,29 +5,31 @@ Dstack with external manifest configuration.
 
 ## Deployment Steps
 
-0. **Configuration**:
+1. **Generate a manifest**:
 
-    Set `KETTLE_MANIFEST` to a URL or file path:
-    - Remote manifest: `KETTLE_MANIFEST=https://example.com/manifest.json`
-    - Local file: `KETTLE_MANIFEST=file:///app/manifest.json`
+   Build a manifest file for your application. If you have not done
+   so already, this will prompt you to create a GitHub personal access
+   token and store it as GITHUB_TOKEN.
 
-1. **Build the Docker image**:
+   ```
+   kettle publish app.ts
+   ```
 
-   **Important**: The Dockerfile must be built from the monorepo root, not from the `packages/images-dstack` directory, because it needs access to workspace dependencies (`qvl`, `tunnel`, and `kettle`).
+2. **Build the Docker image**:
+
+   The Dockerfile must be built from the monorepo root, not from the
+   `packages/images-dstack` directory, because it needs access to
+   workspace dependencies (`qvl`, `tunnel`, and `kettle`).
 
    ```
    ./packages/images-dstack/docker-build.sh
    ```
 
-2. **Push to registry**:
-   ```bash
-   docker push your-registry/kettle-launcher:latest
-   ```
-
 3. **Run with docker-compose**:
-   ```bash
+
+   ```
    # Option A: Using environment variable
-   export KETTLE_MANIFEST="https://example.com/manifest.json"
+   export KETTLE_MANIFEST="https://gist.githubusercontent.com/.../manifest.json"
    docker-compose -f packages/images-dstack/docker-compose.yml up
 
    # Option B: Using mounted file
@@ -36,6 +38,7 @@ Dstack with external manifest configuration.
    ```
 
 4. **Deploy to Dstack**:
+   - Push the image to a registry: `docker push registry/kettle-launcher:latest`
    - Upload `docker-compose.yml` to Phala Cloud/Dstack
    - Configure the `KETTLE_MANIFEST` environment variable
    - Deploy and obtain attestation measurements
