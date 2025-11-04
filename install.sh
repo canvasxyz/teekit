@@ -21,7 +21,7 @@ else
     touch ${INSTALL_PATH}
     echo "#!/usr/bin/env sh" >> ${INSTALL_PATH}
 fi
-echo "node ${PWD}/packages/kettle/services/lib/launcher.js \$@" >> ${INSTALL_PATH}
+echo "node ${PWD}/packages/kettle/services/lib/cli.js \$@" >> ${INSTALL_PATH}
 chmod +x ${INSTALL_PATH}
 echo
 echo "Done!"
