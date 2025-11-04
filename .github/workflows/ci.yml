@@ -12,12 +12,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Cache node_modules
+        id: cache-qvl-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            packages/**/node_modules
+          key: ${{ runner.os }}-qvl-node-${{ hashFiles('package-lock.json') }}
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22.x'
           cache: 'npm'
       - name: Install dependencies
+        if: steps.cache-qvl-node-modules.outputs.cache-hit != 'true'
         run: npm ci
       - name: Build
         run: npm run build
@@ -30,12 +39,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Cache node_modules
+        id: cache-tunnel-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            packages/**/node_modules
+          key: ${{ runner.os }}-tunnel-node-${{ hashFiles('package-lock.json') }}
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22.x'
           cache: 'npm'
       - name: Install dependencies
+        if: steps.cache-tunnel-node-modules.outputs.cache-hit != 'true'
         run: npm ci
       - name: Build
         run: npm run build
@@ -50,6 +68,14 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Homebrew
         uses: homebrew/actions/setup-homebrew@master
+      - name: Cache Homebrew downloads
+        id: cache-homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/Homebrew
+            ~/Library/Caches/Homebrew
+          key: ${{ runner.os }}-homebrew-${{ hashFiles('package-lock.json') }}
       - name: Install sqld
         run: |
           brew tap libsql/sqld
@@ -59,7 +85,16 @@ jobs:
         with:
           node-version: '22.x'
           cache: 'npm'
+      - name: Cache node_modules
+        id: cache-kettle-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            packages/**/node_modules
+          key: ${{ runner.os }}-kettle-node-${{ hashFiles('package-lock.json') }}
       - name: Install dependencies
+        if: steps.cache-kettle-node-modules.outputs.cache-hit != 'true'
         run: npm ci
       - name: Build dependencies
         run: npm --workspace packages/qvl --workspace packages/tunnel run build
