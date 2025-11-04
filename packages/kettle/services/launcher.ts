@@ -5,8 +5,6 @@ import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { createHash } from "crypto"
 import chalk from "chalk"
-import yargs from "yargs"
-import { hideBin } from "yargs/helpers"
 
 import { startWorker } from "./startWorker.js"
 import { buildKettleApp, buildKettleExternals } from "./buildWorker.js"
@@ -246,96 +244,6 @@ export async function launcherCommand(argv: any) {
   process.on("SIGTERM", shutdown)
 }
 
-async function main() {
-  const argv = await yargs(hideBin(process.argv))
-    .option("manifest", {
-      alias: "m",
-      type: "string",
-      description: "Path to the manifest JSON file",
-      demandOption: true,
-    })
-    .option("port", {
-      alias: "p",
-      type: "number",
-      description: "Port for the worker HTTP server",
-      default: 3001,
-    })
-    .option("db-dir", {
-      type: "string",
-      description: "Directory to store the database",
-    })
-    .option("verbose", {
-      type: "boolean",
-      description: "Include verbose logging",
-    })
-    .help()
-    .alias("help", "h")
-    .parse()
-
-  const manifest = await parseManifest(argv.manifest)
-  if (argv.verbose) {
-    console.log(chalk.yellowBright(`[launcher] App source: ${manifest.app}`))
-  }
-
-  // Create temporary build directory
-  const buildDir = mkdtempSync(join(tmpdir(), "kettle-launcher-build-"))
-  if (argv.verbose) {
-    console.log(chalk.yellowBright(`[launcher] Build directory: ${buildDir}`))
-  }
-
-  // Build the app
-  if (argv.verbose) {
-    console.log(chalk.yellowBright("[launcher] Building app..."))
-  }
-  await buildKettleApp({
-    source: manifest.app,
-    targetDir: buildDir,
-    verbose: argv.verbose,
-  })
-
-  // Build externals and worker
-  const kettlePackageDir = KETTLE_DIR
-  await buildKettleExternals({
-    sourceDir: kettlePackageDir,
-    targetDir: buildDir,
-    verbose: argv.verbose,
-  })
-
-  // Set up database directory
-  const baseDir =
-    argv["db-dir"] ?? mkdtempSync(join(tmpdir(), "kettle-launcher-db-"))
-  if (!existsSync(baseDir)) {
-    mkdirSync(baseDir, { recursive: true })
-  }
-  const dbPath = join(baseDir, "app.sqlite")
-
-  if (argv.verbose) {
-    console.log(chalk.yellowBright("[launcher] Starting worker..."))
-  }
-  const { stop } = await startWorker({
-    dbPath,
-    workerPort: argv.port,
-    sqldPort: await findFreePort(),
-    quoteServicePort: await findFreePort(),
-    bundleDir: buildDir,
-  })
-
-  // Handle graceful shutdown
-  const shutdown = async () => {
-    console.log(chalk.yellowBright("\n[launcher] Shutting down..."))
-    await stop()
-    process.exit(0)
-  }
-
-  process.on("SIGINT", shutdown)
-  process.on("SIGTERM", shutdown)
-}
-
-if (import.meta.url === new URL(process.argv[1], "file:").href) {
-  main().catch((err) => {
-    console.error(chalk.red("[launcher] Error:", err.message))
-    process.exit(1)
-  })
-}
+ 
 
 export { parseManifest }

@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from "child_process"
 import chalk from "chalk"
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
 import { join, basename } from "path"
-import { pathToFileURL, fileURLToPath } from "url"
+import { fileURLToPath } from "url"
 import {
   findFreePort,
   isSuppressedSqldLogs,
@@ -479,49 +479,4 @@ export async function startWorkerCommand(argv: any) {
 
   process.on("SIGINT", () => stop())
   process.on("SIGTERM", () => stop())
-}
-
-async function main() {
-  const port = process.env.PORT ? Number(process.env.PORT) : 3001
-
-  // Store worker data in /tmp
-  const baseDir =
-    process.env.DB_DIR ??
-    mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
-  if (!existsSync(baseDir)) {
-    mkdirSync(baseDir, { recursive: true })
-  }
-  const dbPath = join(baseDir, "app.sqlite")
-
-  // Always (re)build worker bundle for tests/local runs to pick up changes
-  const projectDir = PACKAGE_ROOT
-
-  const filenameArg = process.argv[2]
-  const appSourcePath = filenameArg
-    ? join(projectDir, filenameArg)
-    : join(projectDir, "app.ts")
-  console.log(chalk.yellowBright("[kettle] Building..."))
-  await buildKettleApp({
-    source: appSourcePath,
-    targetDir: join(projectDir, "dist"),
-  })
-  await buildKettleExternals({
-    sourceDir: projectDir,
-    targetDir: join(projectDir, "dist"),
-  })
-
-  const { stop } = await startWorker({
-    dbPath,
-    workerPort: port,
-    sqldPort: await findFreePort(),
-    quoteServicePort: await findFreePort(),
-    bundleDir: join(projectDir, "dist"),
-  })
-
-  process.on("SIGINT", () => stop())
-  process.on("SIGTERM", () => stop())
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main()
 }

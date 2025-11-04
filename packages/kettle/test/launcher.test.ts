@@ -11,6 +11,7 @@ import { join } from "path"
 import { spawn, ChildProcess } from "child_process"
 import { fileURLToPath } from "url"
 import { createHash } from "crypto"
+import chalk from "chalk"
 import { connectWebSocket } from "./helpers.js"
 import {
   findFreePort,
@@ -28,13 +29,21 @@ async function startLauncher(
   manifestPath: string,
   port: number,
 ): Promise<LauncherProcess> {
+  console.log(chalk.gray("[launcher] starting..."))
   const kettleDir = fileURLToPath(new URL("..", import.meta.url))
-  const launcherPath = join(kettleDir, "services", "lib", "launcher.js")
+  const cliPath = join(kettleDir, "services", "lib", "cli.js")
 
   return new Promise((resolve, reject) => {
     const proc = spawn(
       "node",
-      [launcherPath, "--manifest", manifestPath, "--port", port.toString()],
+      [
+        cliPath,
+        "launcher",
+        "--manifest",
+        manifestPath,
+        "--port",
+        port.toString(),
+      ],
       {
         stdio: ["ignore", "pipe", "pipe"],
         cwd: kettleDir,
@@ -67,6 +76,7 @@ async function startLauncher(
         if (!resolved) {
           resolved = true
           clearTimeout(timeout)
+          console.log(chalk.gray("[launcher] launcher started workerd"))
           resolve({
             process: proc,
             port,
@@ -101,6 +111,7 @@ async function startLauncher(
     })
 
     proc.on("exit", (code) => {
+      console.log(chalk.gray("[launcher] exited"))
       if (!resolved && code !== 0) {
         clearTimeout(timeout)
         reject(
@@ -117,6 +128,8 @@ let launcher: LauncherProcess | null = null
 let testPort: number
 
 test.before(async (t) => {
+  console.log(chalk.gray("[launcher] starting launcher test..."))
+
   // Create temp directory for test
   const tempDir = mkdtempSync(join(tmpdir(), "kettle-launcher-test-"))
 
@@ -164,6 +177,7 @@ test.before(async (t) => {
 })
 
 test.after.always(async () => {
+  console.log(chalk.gray("[launcher] stopping launcher..."))
   if (launcher) {
     await launcher.stop()
     launcher = null
@@ -389,15 +403,16 @@ test("launcher: fails when SHA256 hash does not match", async (t) => {
 
   // Try to start launcher - should fail
   const kettleDir2 = fileURLToPath(new URL("..", import.meta.url))
-  const launcherPath = join(kettleDir2, "services", "launcher.ts")
+  const cliPath = join(kettleDir2, "services", "lib", "cli.js")
   const testPort = await findFreePort()
 
   const result = await new Promise<{ exitCode: number | null; stderr: string }>(
     (resolve) => {
       const proc = spawn(
-        "tsx",
+        "node",
         [
-          launcherPath,
+          cliPath,
+          "launcher",
           "--manifest",
           manifestPath,
           "--port",

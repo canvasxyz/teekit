@@ -185,23 +185,4 @@ export function startQuoteService(port: number = DEFAULT_PORT) {
   }
 }
 
-// Run as standalone service if executed directly
-if (import.meta.url === new URL(process.argv[1], "file:").href) {
-  const port = process.env.QUOTE_SERVICE_PORT
-    ? parseInt(process.env.QUOTE_SERVICE_PORT)
-    : DEFAULT_PORT
-
-  const { stop } = startQuoteService(port)
-
-  process.on("SIGINT", async () => {
-    console.log(chalk.blueBright("[quote-service] Shutting down..."))
-    await stop()
-    process.exit(0)
-  })
-
-  process.on("SIGTERM", async () => {
-    console.log(chalk.blueBright("[quote-service] Shutting down..."))
-    await stop()
-    process.exit(0)
-  })
-}
+// No standalone execution entrypoint; use via CLI commands.

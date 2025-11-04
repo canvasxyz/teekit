@@ -2,7 +2,7 @@ import chalk from "chalk"
 import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs"
 import { join, basename } from "path"
 import { build } from "esbuild"
-import { fileURLToPath, pathToFileURL } from "url"
+import { fileURLToPath } from "url"
 
 const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
@@ -184,28 +184,4 @@ export async function buildWorkerCommand(argv: any) {
     targetDir: join(projectDir, "dist"),
     verbose: true,
   })
-}
-
-async function main() {
-  const projectDir = PACKAGE_ROOT
-
-  console.log(chalk.yellowBright("[kettle] Building..."))
-
-  const filenameArg = process.argv[2]
-  const appSourcePath = filenameArg
-    ? join(projectDir, filenameArg)
-    : join(projectDir, "app.ts")
-  await buildKettleApp({
-    source: appSourcePath,
-    targetDir: join(projectDir, "dist"),
-    verbose: true,
-  })
-  await buildKettleExternals({
-    targetDir: join(projectDir, "dist"),
-    verbose: true,
-  })
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main()
 }
