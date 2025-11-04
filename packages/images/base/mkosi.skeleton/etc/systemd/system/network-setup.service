@@ -1,0 +1,17 @@
+[Unit]
+Description=Basic Network Setup
+DefaultDependencies=no
+Before=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=ip link set lo up
+ExecStart=/bin/sh -c 'IFACE=$(ip -o link show | awk -F": " "$$2 !~ /^lo$$/ {print $$2; exit}"); ip link set $$IFACE up'
+ExecStart=-chattr -i /etc/resolv.conf
+ExecStart=/bin/sh -c 'IFACE=$(ip -o link show | awk -F": " "$$2 !~ /^lo$$/ {print $$2; exit}"); /usr/sbin/udhcpc -i $$IFACE -n'
+ExecStart=chattr +i /etc/resolv.conf
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
