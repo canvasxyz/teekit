@@ -461,10 +461,12 @@ export async function startWorkerCommand(argv: StartWorkerArgs) {
   const dbPath = join(baseDir, "app.sqlite")
 
   // Always (re)build worker bundle for tests/local runs to pick up changes
+  // Use current working directory for resolving the file path
+  const cwd = process.cwd()
   const projectDir = PACKAGE_ROOT
 
   const filename = argv.file ?? "app.ts"
-  const appSourcePath = join(projectDir, filename)
+  const appSourcePath = join(cwd, filename)
   console.log(chalk.yellowBright("[kettle] Building..."))
   await buildKettleApp({
     source: appSourcePath,

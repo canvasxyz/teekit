@@ -173,9 +173,11 @@ export interface BuildAppArgs {
 }
 
 export async function buildAppCommand(argv: BuildAppArgs) {
+  // Resolve file path relative to current working directory
+  const cwd = process.cwd()
   const projectDir = PACKAGE_ROOT
   const filename = argv.file ?? "app.ts"
-  const appSourcePath = join(projectDir, filename)
+  const appSourcePath = join(cwd, filename)
   await buildKettleApp({
     source: appSourcePath,
     targetDir: join(projectDir, "dist"),

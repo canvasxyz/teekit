@@ -4,13 +4,13 @@ import { fileURLToPath } from "url"
 import { createHash } from "crypto"
 import chalk from "chalk"
 
+const GITHUB_TOKEN_URL =
+  "https://github.com/settings/tokens/new?description=Kettle&scopes=gist&default_expires_at=90"
+
 const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
 const KETTLE_DIR =
   DIR_NAME === "lib" ? join(CURRENT_DIR, "..", "..") : join(CURRENT_DIR, "..")
-
-const GITHUB_TOKEN_URL =
-  "https://github.com/settings/tokens/new?description=Kettle&scopes=gist&default_expires_at=90"
 
 async function createGist(
   appContent: string,
@@ -71,7 +71,9 @@ export interface BuildRemoteManifestArgs {
   file: string
 }
 
-export async function buildRemoteManifestCommand(argv: BuildRemoteManifestArgs) {
+export async function buildRemoteManifestCommand(
+  argv: BuildRemoteManifestArgs,
+) {
   const filename = argv.file
   if (!filename) {
     console.error(
@@ -80,14 +82,14 @@ export async function buildRemoteManifestCommand(argv: BuildRemoteManifestArgs) 
     process.exit(1)
   }
 
-  // Get the kettle package directory
-  const kettleDir = KETTLE_DIR
-  const appPath = join(kettleDir, filename)
-  const manifestPath = join(kettleDir, "manifest.json")
+  // Resolve file path relative to current working directory
+  const cwd = process.cwd()
+  const appPath = join(cwd, filename)
+  const manifestPath = join(cwd, "manifest.json")
 
-  // Prefer GITHUB_TOKEN from .env over process.env
+  // Prefer GITHUB_TOKEN from packages/kettle/.env over process.env
   let tokenFromDotEnv: string | undefined
-  const dotEnvPath = join(kettleDir, ".env")
+  const dotEnvPath = join(KETTLE_DIR, ".env")
   if (existsSync(dotEnvPath)) {
     try {
       const envContent = readFileSync(dotEnvPath, "utf-8")

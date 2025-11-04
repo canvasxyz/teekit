@@ -1,15 +1,7 @@
 import { readFileSync, writeFileSync } from "fs"
-import { join, basename } from "path"
-import { fileURLToPath } from "url"
+import { join } from "path"
 import { createHash } from "crypto"
 import chalk from "chalk"
-
-const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
-const DIR_NAME = basename(CURRENT_DIR)
-const KETTLE_DIR =
-  DIR_NAME === "lib"
-    ? join(CURRENT_DIR, "..", "..")
-    : join(CURRENT_DIR, "..")
 
 export interface BuildManifestArgs {
   file: string
@@ -24,10 +16,10 @@ export async function buildManifestCommand(argv: BuildManifestArgs) {
     process.exit(1)
   }
 
-  // Get the kettle package directory
-  const kettleDir = KETTLE_DIR
-  const appPath = join(kettleDir, filename)
-  const manifestPath = join(kettleDir, "manifest.json")
+  // Resolve file path relative to current working directory
+  const cwd = process.cwd()
+  const appPath = join(cwd, filename)
+  const manifestPath = join(cwd, "manifest.json")
 
   // Read app.ts and calculate SHA256 hash
   const appFileContent = readFileSync(appPath)
