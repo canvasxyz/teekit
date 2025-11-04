@@ -1,0 +1,34 @@
+# Build artifacts
+dist/
+services/lib/
+test/lib/
+*.tsbuildinfo
+
+# Node modules (will be installed in container)
+node_modules/
+
+# Development files
+.git/
+.gitignore
+*.md
+!README.md
+.vscode/
+.idea/
+
+# Test files
+test/
+*.test.ts
+
+# Data directories
+data.sqld/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Temporary files
+app-remote.tmp.ts
+*.tmp.*
+
+# Environment files
+.env
+.env.local
