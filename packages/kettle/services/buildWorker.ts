@@ -168,7 +168,11 @@ export async function buildKettleExternals(options: BuildExternalsConfig) {
   }
 }
 
-export async function buildAppCommand(argv: any) {
+export interface BuildAppArgs {
+  file?: string
+}
+
+export async function buildAppCommand(argv: BuildAppArgs) {
   const projectDir = PACKAGE_ROOT
   const filename = argv.file ?? "app.ts"
   const appSourcePath = join(projectDir, filename)

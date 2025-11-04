@@ -67,7 +67,11 @@ async function createGist(
   return rawUrl
 }
 
-export async function buildRemoteManifestCommand(argv: any) {
+export interface BuildRemoteManifestArgs {
+  file: string
+}
+
+export async function buildRemoteManifestCommand(argv: BuildRemoteManifestArgs) {
   const filename = argv.file
   if (!filename) {
     console.error(

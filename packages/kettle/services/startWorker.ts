@@ -441,7 +441,13 @@ const config :Workerd.Config = (
   return result
 }
 
-export async function startWorkerCommand(argv: any) {
+export interface StartWorkerArgs {
+  file?: string
+  port?: number
+  "db-dir"?: string
+}
+
+export async function startWorkerCommand(argv: StartWorkerArgs) {
   const port = argv.port ?? (process.env.PORT ? Number(process.env.PORT) : 3001)
 
   // Store worker data in /tmp

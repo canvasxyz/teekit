@@ -184,7 +184,14 @@ async function parseManifest(
   return { app: appPath }
 }
 
-export async function launcherCommand(argv: any) {
+export interface LauncherArgs {
+  manifest: string
+  port?: number
+  "db-dir"?: string
+  verbose?: boolean
+}
+
+export async function launcherCommand(argv: LauncherArgs) {
   const manifest = await parseManifest(argv.manifest)
   if (argv.verbose) {
     console.log(chalk.yellowBright(`[launcher] App source: ${manifest.app}`))
@@ -227,7 +234,7 @@ export async function launcherCommand(argv: any) {
   }
   const { stop } = await startWorker({
     dbPath,
-    workerPort: argv.port,
+    workerPort: argv.port ?? 3001,
     sqldPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
     bundleDir: buildDir,

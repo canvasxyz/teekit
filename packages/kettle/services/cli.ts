@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import yargs from "yargs"
+import yargs, { type Argv } from "yargs"
 import { hideBin } from "yargs/helpers"
 import chalk from "chalk"
 
@@ -16,7 +16,7 @@ async function main() {
     .command(
       "publish <file>",
       "Generate an app manifest, by publishing to GitHub",
-      (yargs) => {
+      (yargs: Argv) => {
         return yargs.positional("file", {
           describe: "Path to the app source file (relative to package root)",
           type: "string",
@@ -28,7 +28,7 @@ async function main() {
     .command(
       "publish-local <file>",
       "Generate an app manifest, using a file:/// url",
-      (yargs) => {
+      (yargs: Argv) => {
         return yargs.positional("file", {
           describe: "Path to the app source file (relative to package root)",
           type: "string",
@@ -40,7 +40,7 @@ async function main() {
     .command(
       "launch <manifest>",
       "Start app runtime from a manifest file",
-      (yargs) => {
+      (yargs: Argv) => {
         return yargs
           .positional("manifest", {
             describe: "Manifest identifier (path, file:/// or http/https URL)",
@@ -67,7 +67,7 @@ async function main() {
     .command(
       "start-worker [file]",
       "[Internal] Start app runtime with workerd/sqld directly",
-      (yargs) => {
+      (yargs: Argv) => {
         return yargs
           .positional("file", {
             describe: "Path to the app source file (relative to package root)",
@@ -90,7 +90,7 @@ async function main() {
     .command(
       "build-app [file]",
       "[Internal] Build the app bundle (app.js)",
-      (yargs) => {
+      (yargs: Argv) => {
         return yargs.positional("file", {
           describe: "Path to the app source file (relative to package root)",
           type: "string",

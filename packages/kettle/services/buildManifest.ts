@@ -11,7 +11,11 @@ const KETTLE_DIR =
     ? join(CURRENT_DIR, "..", "..")
     : join(CURRENT_DIR, "..")
 
-export async function buildManifestCommand(argv: any) {
+export interface BuildManifestArgs {
+  file: string
+}
+
+export async function buildManifestCommand(argv: BuildManifestArgs) {
   const filename = argv.file
   if (!filename) {
     console.error(
