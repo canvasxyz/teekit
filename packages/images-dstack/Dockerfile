@@ -1,6 +1,6 @@
 # Multi-stage build for Kettle Launcher
 # Build from monorepo root to handle workspace dependencies
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 # Install system dependencies needed for building
 RUN apt-get update && apt-get install -y \
@@ -48,7 +48,6 @@ WORKDIR /app
 # Copy built kettle package
 COPY --from=builder /workspace/packages/kettle/services/lib ./services/lib
 COPY --from=builder /workspace/packages/kettle/package.json ./
-COPY --from=builder /workspace/packages/kettle/dist ./dist
 
 # Copy built workspace dependencies with their package.json files for proper resolution
 COPY --from=builder /workspace/packages/qvl/package.json ./packages/qvl/
@@ -111,8 +110,7 @@ EXPOSE 3001
 
 # Health check (optional - adjust based on your app)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:${KETTLE_PORT:-3001}/ || exit 1
+    CMD curl -f http://localhost:${KETTLE_PORT:-3001}/healthz || exit 1
 
 # Use entrypoint script
 ENTRYPOINT ["/entrypoint.sh"]
-
