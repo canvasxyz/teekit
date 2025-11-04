@@ -168,11 +168,8 @@ export async function buildKettleExternals(options: BuildExternalsConfig) {
   }
 }
 
-export async function buildWorkerCommand(argv: any) {
+export async function buildAppCommand(argv: any) {
   const projectDir = PACKAGE_ROOT
-
-  console.log(chalk.yellowBright("[kettle] Building..."))
-
   const filename = argv.file ?? "app.ts"
   const appSourcePath = join(projectDir, filename)
   await buildKettleApp({
@@ -180,6 +177,10 @@ export async function buildWorkerCommand(argv: any) {
     targetDir: join(projectDir, "dist"),
     verbose: true,
   })
+}
+
+export async function buildWorkerCommand() {
+  const projectDir = PACKAGE_ROOT
   await buildKettleExternals({
     targetDir: join(projectDir, "dist"),
     verbose: true,

@@ -7,9 +7,7 @@ import chalk from "chalk"
 const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
 const KETTLE_DIR =
-  DIR_NAME === "lib"
-    ? join(CURRENT_DIR, "..", "..")
-    : join(CURRENT_DIR, "..")
+  DIR_NAME === "lib" ? join(CURRENT_DIR, "..", "..") : join(CURRENT_DIR, "..")
 
 const GITHUB_TOKEN_URL =
   "https://github.com/settings/tokens/new?description=Kettle&scopes=gist&default_expires_at=90"
@@ -73,9 +71,7 @@ export async function buildRemoteManifestCommand(argv: any) {
   const filename = argv.file
   if (!filename) {
     console.error(
-      chalk.red(
-        "[remote-manifest] Error: Please provide a filename or relative path",
-      ),
+      chalk.red("[publish] Please provide a filename or relative path"),
     )
     process.exit(1)
   }
@@ -106,7 +102,7 @@ export async function buildRemoteManifestCommand(argv: any) {
   if (!token) {
     console.error(
       chalk.red(
-        `[remote-manifest] GITHUB_TOKEN environment variable not found.\n` +
+        `[publish] GITHUB_TOKEN environment variable not found.\n` +
           `Please create a GitHub personal access token at:\n${GITHUB_TOKEN_URL}\n` +
           `Then set it in your .env file or provide it as GITHUB_TOKEN=<token>`,
       ),
@@ -121,16 +117,14 @@ export async function buildRemoteManifestCommand(argv: any) {
     .digest("hex")
 
   // Create Gist
-  console.log(chalk.blueBright("[remote-manifest] Creating Gist..."))
+  console.log(chalk.blueBright("[publish] Creating Gist..."))
   let gistRawUrl: string
   try {
     gistRawUrl = await createGist(appFileContent, token, filename)
-    console.log(
-      chalk.blueBright(`[remote-manifest] Created Gist: ${gistRawUrl}`),
-    )
+    console.log(chalk.blueBright(`[publish] Created Gist: ${gistRawUrl}`))
   } catch (err) {
     if (err instanceof Error) {
-      console.error(chalk.blueBright(`[remote-manifest] Error: ${err.message}`))
+      console.error(chalk.blueBright(`[publish] Error: ${err.message}`))
       if (err.message.includes("token")) {
         console.error(
           chalk.blueBright(
@@ -139,9 +133,7 @@ export async function buildRemoteManifestCommand(argv: any) {
         )
       }
     } else {
-      console.error(
-        chalk.blueBright(`[remote-manifest] Unexpected error:`, err),
-      )
+      console.error(chalk.blueBright(`[publish] Unexpected error:`, err))
     }
     process.exit(1)
   }
@@ -153,5 +145,5 @@ export async function buildRemoteManifestCommand(argv: any) {
   }
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8")
 
-  console.log(chalk.blueBright(`[remote-manifest] Saved to ${manifestPath}`))
+  console.log(chalk.blueBright(`[publish] Generated manifest: ${manifestPath}`))
 }

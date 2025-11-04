@@ -10,7 +10,7 @@
 		"build": "npm run build:worker && npm run build:client",
 		"build:client": "vite build",
 		"build:client:watch": "vite",
-		"build:worker": "tsc --build services && node services/lib/cli.js build-worker app.ts",
+		"build:worker": "tsc --build services && node services/lib/cli.js build-app && node services/lib/cli.js build-worker",
 		"start:worker": "node services/lib/cli.js start-worker app.ts",
 		"start:launcher": "node services/lib/cli.js build-manifest app.ts && node services/lib/cli.js launcher --manifest manifest.json",
 		"start:launcher:remote": "node services/lib/cli.js build-remote-manifest app.ts && node services/lib/cli.js launcher --manifest manifest.json",
