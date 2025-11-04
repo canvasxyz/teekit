@@ -19,7 +19,8 @@ export async function connectWebSocket(
   url: string,
   timeoutMs = 5000,
 ): Promise<WebSocket> {
-  const ws = new WebSocket(url)
+  // Disable perMessageDeflate to avoid lingering zlib handles that delay test exit
+  const ws = new WebSocket(url, { perMessageDeflate: false })
 
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {

@@ -410,19 +410,33 @@ test("launcher: fails when SHA256 hash does not match", async (t) => {
       )
 
       let stderr = ""
+      let resolved = false
 
       proc.stderr.on("data", (data) => {
         stderr += data.toString()
       })
 
       proc.on("exit", (code) => {
-        resolve({ exitCode: code, stderr })
+        if (!resolved) {
+          resolved = true
+          clearTimeout(killTimeout)
+          // Clean up streams
+          proc.stderr?.destroy()
+          proc.stdout?.destroy()
+          resolve({ exitCode: code, stderr })
+        }
       })
 
       // Set a timeout in case the process hangs
-      setTimeout(() => {
-        proc.kill()
-        resolve({ exitCode: null, stderr })
+      const killTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          proc.kill()
+          // Clean up streams
+          proc.stderr?.destroy()
+          proc.stdout?.destroy()
+          resolve({ exitCode: null, stderr })
+        }
       }, 10000)
     },
   )
