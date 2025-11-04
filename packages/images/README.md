@@ -42,6 +42,12 @@ support for nested virtualization (/dev/kvm).
    scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf
    ```
 
+5. Export measurements:
+
+   ```
+   make measure
+   ```
+
 ## Adding Files to Modules
 
 There are two main ways to add custom files to your
