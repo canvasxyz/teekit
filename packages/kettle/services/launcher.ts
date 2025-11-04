@@ -186,6 +186,66 @@ async function parseManifest(
   return { app: appPath }
 }
 
+export async function launcherCommand(argv: any) {
+  const manifest = await parseManifest(argv.manifest)
+  if (argv.verbose) {
+    console.log(chalk.yellowBright(`[launcher] App source: ${manifest.app}`))
+  }
+
+  // Create temporary build directory
+  const buildDir = mkdtempSync(join(tmpdir(), "kettle-launcher-build-"))
+  if (argv.verbose) {
+    console.log(chalk.yellowBright(`[launcher] Build directory: ${buildDir}`))
+  }
+
+  // Build the app
+  if (argv.verbose) {
+    console.log(chalk.yellowBright("[launcher] Building app..."))
+  }
+  await buildKettleApp({
+    source: manifest.app,
+    targetDir: buildDir,
+    verbose: argv.verbose,
+  })
+
+  // Build externals and worker
+  const kettlePackageDir = KETTLE_DIR
+  await buildKettleExternals({
+    sourceDir: kettlePackageDir,
+    targetDir: buildDir,
+    verbose: argv.verbose,
+  })
+
+  // Set up database directory
+  const baseDir =
+    argv["db-dir"] ?? mkdtempSync(join(tmpdir(), "kettle-launcher-db-"))
+  if (!existsSync(baseDir)) {
+    mkdirSync(baseDir, { recursive: true })
+  }
+  const dbPath = join(baseDir, "app.sqlite")
+
+  if (argv.verbose) {
+    console.log(chalk.yellowBright("[launcher] Starting worker..."))
+  }
+  const { stop } = await startWorker({
+    dbPath,
+    workerPort: argv.port,
+    sqldPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
+    bundleDir: buildDir,
+  })
+
+  // Handle graceful shutdown
+  const shutdown = async () => {
+    console.log(chalk.yellowBright("\n[launcher] Shutting down..."))
+    await stop()
+    process.exit(0)
+  }
+
+  process.on("SIGINT", shutdown)
+  process.on("SIGTERM", shutdown)
+}
+
 async function main() {
   const argv = await yargs(hideBin(process.argv))
     .option("manifest", {

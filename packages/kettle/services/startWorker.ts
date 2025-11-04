@@ -441,6 +441,46 @@ const config :Workerd.Config = (
   return result
 }
 
+export async function startWorkerCommand(argv: any) {
+  const port = argv.port ?? (process.env.PORT ? Number(process.env.PORT) : 3001)
+
+  // Store worker data in /tmp
+  const baseDir =
+    argv["db-dir"] ??
+    process.env.DB_DIR ??
+    mkdtempSync(join(process.env.TMPDIR || "/tmp", "teekit-kettle-"))
+  if (!existsSync(baseDir)) {
+    mkdirSync(baseDir, { recursive: true })
+  }
+  const dbPath = join(baseDir, "app.sqlite")
+
+  // Always (re)build worker bundle for tests/local runs to pick up changes
+  const projectDir = PACKAGE_ROOT
+
+  const filename = argv.file ?? "app.ts"
+  const appSourcePath = join(projectDir, filename)
+  console.log(chalk.yellowBright("[kettle] Building..."))
+  await buildKettleApp({
+    source: appSourcePath,
+    targetDir: join(projectDir, "dist"),
+  })
+  await buildKettleExternals({
+    sourceDir: projectDir,
+    targetDir: join(projectDir, "dist"),
+  })
+
+  const { stop } = await startWorker({
+    dbPath,
+    workerPort: port,
+    sqldPort: await findFreePort(),
+    quoteServicePort: await findFreePort(),
+    bundleDir: join(projectDir, "dist"),
+  })
+
+  process.on("SIGINT", () => stop())
+  process.on("SIGTERM", () => stop())
+}
+
 async function main() {
   const port = process.env.PORT ? Number(process.env.PORT) : 3001
 

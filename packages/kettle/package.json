@@ -3,17 +3,17 @@
 	"version": "0.0.2",
 	"type": "module",
 	"bin": {
-		"kettle": "services/lib/launcher.js"
+		"kettle": "services/lib/cli.js"
 	},
 	"scripts": {
 		"clean": "rm -rf dist/* services/lib/* test/lib/* *.tsbuildinfo",
 		"build": "npm run build:worker && npm run build:client",
 		"build:client": "vite build",
 		"build:client:watch": "vite",
-		"build:worker": "tsc --build services && node services/lib/buildWorker.js app.ts",
-		"start:worker": "node services/lib/startWorker.js app.ts",
-		"start:launcher": "node services/lib/buildManifest.js app.ts && node services/lib/launcher.js --manifest manifest.json",
-		"start:launcher:remote": "node services/lib/buildRemoteManifest.js app.ts && node services/lib/launcher.js --manifest manifest.json",
+		"build:worker": "tsc --build services && node services/lib/cli.js build-worker app.ts",
+		"start:worker": "node services/lib/cli.js start-worker app.ts",
+		"start:launcher": "node services/lib/cli.js build-manifest app.ts && node services/lib/cli.js launcher --manifest manifest.json",
+		"start:launcher:remote": "node services/lib/cli.js build-remote-manifest app.ts && node services/lib/cli.js launcher --manifest manifest.json",
 		"pretest": "npm run build",
 		"test": "ava --serial"
 	},
