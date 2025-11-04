@@ -149,7 +149,19 @@ export async function buildRemoteManifestCommand(
     app: gistRawUrl,
     sha256: sha256Hash,
   }
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8")
+  const manifestContent = JSON.stringify(manifest, null, 2)
+  writeFileSync(manifestPath, manifestContent, "utf-8")
 
   console.log(chalk.blueBright(`[publish] Generated manifest: ${manifestPath}`))
+
+  // Create Gist for manifest file
+  console.log(chalk.blueBright("[publish] Creating Gist for manifest..."))
+  const manifestGistRawUrl = await createGist(
+    manifestContent,
+    token,
+    "manifest.json",
+  )
+  console.log(
+    chalk.blueBright(`[publish] Created manifest Gist: ${manifestGistRawUrl}`),
+  )
 }

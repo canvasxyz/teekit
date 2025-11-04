@@ -31,3 +31,4 @@ packages/*/dist-ssr
 config.json
 
 .env
+manifest.json
