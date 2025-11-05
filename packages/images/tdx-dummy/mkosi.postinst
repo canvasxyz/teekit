@@ -6,3 +6,27 @@ SERVICE_DIR="$BUILDROOT/etc/systemd/system"
 mkdir -p "$SERVICE_DIR"
 
 install -m 644 "tdx-dummy/dummy-tdx-dcap.service" "$SERVICE_DIR/"
+install -m 644 "tdx-dummy/kettle-launcher.service" "$SERVICE_DIR/"
+
+# Create kettle database directory
+mkdir -p "$BUILDROOT/var/lib/kettle/db"
+
+# Install workerd globally via npm (if npm is available)
+# Note: This requires npm to be installed, which is already in Packages
+if command -v npm >/dev/null 2>&1; then
+  echo "Installing workerd via npm..."
+  npm install -g workerd@^1.20250107.0 || echo "Warning: Failed to install workerd via npm"
+fi
+
+# Ensure workerd is in PATH - it should be in /usr/local/bin after npm install -g
+# or in node_modules/.bin if installed locally
+# The kettle launcher will look for it in PATH
+
+# Note: sqld (libsql server) is also required for the kettle launcher to work.
+# sqld is not available as a Debian package and must be installed separately.
+# Users can install it via homebrew or download the binary from:
+# https://github.com/libsql/sqld/releases
+# The launcher will look for sqld in PATH.
+
+# Enable kettle-launcher service
+systemctl --root="$BUILDROOT" enable kettle-launcher.service
