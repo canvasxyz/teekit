@@ -4,3 +4,93 @@ set -euxo pipefail
 source scripts/make_git_package.sh
 
 make_git_package "dummy-tdx-dcap" "v0.0.1" "https://github.com/Ruteri/dummy-tdx-dcap" 'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v0.0.1" -v -o ./build/httpserver cmd/httpserver/main.go' "build/httpserver:/usr/bin/dummy-tdx-dcap"
+
+# Install sqld (libsql server) binary
+echo "[mkosi] Installing sqld..."
+SQLD_VERSION="v0.24.28"
+SQLD_URL="https://github.com/tursodatabase/libsql/releases/download/${SQLD_VERSION}/sqld-x86_64-unknown-linux-gnu.tar.xz"
+curl -L "$SQLD_URL" -o sqld.tar.xz
+tar -xf sqld.tar.xz
+install -m 755 sqld "$BUILDROOT/usr/bin/sqld"
+rm -f sqld sqld.tar.xz
+
+# Build kettle CLI and application
+echo "[mkosi] Building kettle CLI and application..."
+
+# Navigate to repo root (two levels up from packages/images)
+# The build script runs from packages/images directory
+REPO_ROOT="$(cd ../.. && pwd)"
+cd "$REPO_ROOT"
+
+# Install dependencies
+echo "[mkosi] Installing npm dependencies..."
+npm install
+
+# Build the kettle CLI bundle using bundle.sh
+echo "[mkosi] Building kettle CLI bundle..."
+bash packages/images/bundle.sh
+
+# Create kettle build directory
+KETTLE_BUILD_DIR="$BUILDROOT/opt/kettle"
+mkdir -p "$KETTLE_BUILD_DIR"
+
+# Copy the CLI bundle to the image
+echo "[mkosi] Copying kettle CLI bundle to image..."
+cp packages/images/cli.bundle.js "$KETTLE_BUILD_DIR/"
+
+# Copy kettle package sources needed for runtime building
+echo "[mkosi] Copying kettle package sources to image..."
+cd "$REPO_ROOT/packages/kettle"
+
+# Copy necessary source files for runtime building directly to /opt/kettle
+cp externals.ts "$KETTLE_BUILD_DIR/"
+cp types.ts "$KETTLE_BUILD_DIR/"
+cp package.json "$KETTLE_BUILD_DIR/"
+
+# Copy services directory
+cp -r services "$KETTLE_BUILD_DIR/"
+
+# Copy app.ts to the kettle directory
+APP_SOURCE_PATH="$REPO_ROOT/packages/kettle/app.ts"
+cp "$APP_SOURCE_PATH" "$KETTLE_BUILD_DIR/"
+
+# Compile TypeScript services
+echo "[mkosi] Compiling TypeScript services..."
+npx tsc --build services
+
+# Copy compiled services to the image
+cp -r services/lib "$KETTLE_BUILD_DIR/services/"
+
+# Build and copy teekit dependencies first
+echo "[mkosi] Building and copying teekit dependencies..."
+cd "$REPO_ROOT"
+# Build qvl and tunnel packages if not already built
+npm run build --workspace packages/qvl --workspace packages/tunnel 2>/dev/null || true
+
+# Copy the @teekit packages to the kettle directory before npm install
+mkdir -p "$KETTLE_BUILD_DIR/node_modules/@teekit"
+cp -r packages/qvl "$KETTLE_BUILD_DIR/node_modules/@teekit/"
+cp -r packages/tunnel "$KETTLE_BUILD_DIR/node_modules/@teekit/"
+
+# Install dependencies in the kettle directory
+echo "[mkosi] Installing kettle dependencies..."
+cd "$KETTLE_BUILD_DIR"
+# Use --legacy-peer-deps to avoid issues with workspace packages
+npm install --production --legacy-peer-deps
+
+# Also install dev dependencies needed at runtime: esbuild and workerd
+npm install esbuild workerd --legacy-peer-deps
+
+# Generate manifest for the application
+echo "[mkosi] Generating manifest..."
+APP_TARGET_PATH="/opt/kettle/app.ts"
+SHA256=$(sha256sum "$APP_SOURCE_PATH" | awk '{print $1}')
+
+cat > "$KETTLE_BUILD_DIR/manifest.json" <<EOF
+{
+  "app": "file://$APP_TARGET_PATH",
+  "sha256": "$SHA256"
+}
+EOF
+
+echo "[mkosi] Kettle build complete!"

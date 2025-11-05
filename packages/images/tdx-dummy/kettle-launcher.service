@@ -1,0 +1,19 @@
+[Unit]
+Description=Kettle Launcher Service
+After=network-setup.service
+Wants=network-setup.service
+
+[Service]
+Type=exec
+User=root
+Group=root
+WorkingDirectory=/opt/kettle
+Environment="NODE_PATH=/usr/lib/node_modules"
+ExecStart=/usr/bin/node /opt/kettle/cli.bundle.js launch /opt/kettle/manifest.json --port 3001 --db-dir /var/lib/kettle --verbose
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target

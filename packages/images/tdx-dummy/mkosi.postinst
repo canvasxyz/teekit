@@ -6,3 +6,11 @@ SERVICE_DIR="$BUILDROOT/etc/systemd/system"
 mkdir -p "$SERVICE_DIR"
 
 install -m 644 "tdx-dummy/dummy-tdx-dcap.service" "$SERVICE_DIR/"
+install -m 644 "tdx-dummy/kettle-launcher.service" "$SERVICE_DIR/"
+
+# Create kettle data directory
+mkdir -p "$BUILDROOT/var/lib/kettle"
+
+# Enable kettle launcher service by creating wants directory and symlink
+mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
+ln -sf ../kettle-launcher.service "$BUILDROOT/etc/systemd/system/minimal.target.wants/kettle-launcher.service"
