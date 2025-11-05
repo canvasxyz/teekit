@@ -9,3 +9,4 @@ mkosi.builddir/
 .claudeignore
 tmp/
 NvVars
+cli.bundle.js
