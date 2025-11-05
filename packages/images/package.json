@@ -3,8 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:dev-vm": "scripts/check_perms.sh && scripts/setup_deps.sh && USE_LOCAL_SOURCE=1 make build-dev IMAGE=kettle-runtime",
-    "build:vm": "scripts/check_perms.sh && scripts/setup_deps.sh && TEEKIT_REPO_URL=https://github.com/canvasxyz/teekit.git TEEKIT_REPO_BRANCH=main make build IMAGE=kettle-runtime",
-    "build:gcp-vm": "scripts/check_perms.sh && scripts/setup_deps.sh && make build IMAGE=kettle-runtime && scripts/env_wrapper.sh mkosi --force --profile=gcp,kettle -I kettle-runtime.conf"
+    "build:vm": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf"
   }
 }
