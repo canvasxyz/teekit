@@ -1,0 +1,62 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Install Node.js 22+ (required by kettle)
+NODE_VERSION="22.13.0"
+cd /tmp
+curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o node.tar.xz
+tar -xJf node.tar.xz -C /usr/local --strip-components=1
+node --version
+npm --version
+
+# Clone the teekit repo (or copy from workspace)
+REPO_URL="${TEEKIT_REPO_URL:-https://github.com/your-org/teekit.git}"
+REPO_BRANCH="${TEEKIT_REPO_BRANCH:-main}"
+
+cd "$BUILDROOT/build"
+if [ -n "${USE_LOCAL_SOURCE:-}" ]; then
+    # Copy local workspace for development builds
+    cp -r /workspace /build/teekit
+else
+    git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" teekit
+fi
+
+cd teekit
+
+# Install dependencies and build
+npm ci --production=false
+npm run build
+
+# Create installation directory
+INSTALL_DIR="$DESTDIR/opt/kettle"
+mkdir -p "$INSTALL_DIR"
+
+# Copy kettle package and its dependencies
+cp -r packages/kettle "$INSTALL_DIR/"
+cp -r packages/qvl "$INSTALL_DIR/"
+cp -r packages/tunnel "$INSTALL_DIR/"
+cp -r node_modules "$INSTALL_DIR/"
+cp package.json package-lock.json "$INSTALL_DIR/"
+
+# Create wrapper script for kettle CLI
+mkdir -p "$DESTDIR/usr/bin"
+cat > "$DESTDIR/usr/bin/kettle" << 'EOF'
+#!/bin/bash
+export PATH="/opt/kettle/node_modules/.bin:$PATH"
+export NODE_PATH="/opt/kettle/node_modules"
+exec node /opt/kettle/packages/kettle/services/lib/cli.js "$@"
+EOF
+chmod +x "$DESTDIR/usr/bin/kettle"
+
+# Extract and install workerd binary
+WORKERD_BIN="$INSTALL_DIR/node_modules/.bin/workerd"
+if [ -x "$WORKERD_BIN" ]; then
+    cp "$WORKERD_BIN" "$DESTDIR/usr/bin/workerd"
+fi
+
+# Install sqld (libSQL) - download prebuilt binary
+SQLD_VERSION="0.24.30"
+curl -fsSL "https://github.com/tursodatabase/libsql/releases/download/libsql-server-v${SQLD_VERSION}/sqld-x86_64-unknown-linux-gnu.tar.gz" -o sqld.tar.gz
+tar -xzf sqld.tar.gz
+cp sqld "$DESTDIR/usr/bin/sqld"
+chmod +x "$DESTDIR/usr/bin/sqld"

@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Install systemd service
+SERVICE_DIR="$BUILDROOT/etc/systemd/system"
+mkdir -p "$SERVICE_DIR"
+install -m 644 "kettle-runtime/kettle-launcher.service" "$SERVICE_DIR/"
+
+# Install manifest fetch script
+mkdir -p "$BUILDROOT/usr/local/bin"
+install -m 755 "kettle-runtime/kettle-fetch-manifest.sh" "$BUILDROOT/usr/local/bin/"
+
+# Install example manifest
+mkdir -p "$BUILDROOT/etc/kettle"
+install -m 644 "kettle-runtime/manifest.example.json" "$BUILDROOT/etc/kettle/manifest.json"
+
+# Create data directory for kettle
+mkdir -p "$BUILDROOT/var/lib/kettle"
