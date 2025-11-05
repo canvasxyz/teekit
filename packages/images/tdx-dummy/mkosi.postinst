@@ -6,3 +6,7 @@ SERVICE_DIR="$BUILDROOT/etc/systemd/system"
 mkdir -p "$SERVICE_DIR"
 
 install -m 644 "tdx-dummy/dummy-tdx-dcap.service" "$SERVICE_DIR/"
+install -m 644 "tdx-dummy/kettle-launcher.service" "$SERVICE_DIR/"
+
+# Create directory for kettle database
+mkdir -p "$BUILDROOT/var/lib/kettle"

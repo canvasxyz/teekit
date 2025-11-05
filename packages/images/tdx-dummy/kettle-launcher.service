@@ -1,0 +1,20 @@
+[Unit]
+Description=Kettle Launcher Service
+After=network-setup.service
+Wants=network-setup.service
+
+[Service]
+Type=exec
+User=root
+Group=root
+Environment="NODE_PATH=/usr/lib/kettle/node_modules"
+Environment="PATH=/usr/lib/kettle/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+WorkingDirectory=/usr/lib/kettle
+ExecStart=/usr/bin/kettle launch /usr/lib/kettle/manifest.json --port 3001 --db-dir /var/lib/kettle
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target

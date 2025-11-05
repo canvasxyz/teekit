@@ -3,4 +3,87 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
+# Build dummy-tdx-dcap
 make_git_package "dummy-tdx-dcap" "v0.0.1" "https://github.com/Ruteri/dummy-tdx-dcap" 'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v0.0.1" -v -o ./build/httpserver cmd/httpserver/main.go' "build/httpserver:/usr/bin/dummy-tdx-dcap"
+
+# Build kettle CLI bundle
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
+
+echo "Building kettle CLI bundle..."
+bash "$REPO_ROOT/packages/images/bundle.sh"
+
+# Create directory for kettle artifacts in the image
+KETTLE_INSTALL_DIR="$DESTDIR/usr/lib/kettle"
+mkdir -p "$KETTLE_INSTALL_DIR"
+
+# Install kettle CLI bundle
+install -m 755 "$REPO_ROOT/packages/images/cli.bundle.js" "$DESTDIR/usr/bin/kettle"
+
+# Generate manifest and build app
+echo "Generating manifest and building app..."
+cd "$REPO_ROOT/packages/kettle"
+
+# Ensure dependencies are installed
+if [ ! -d "node_modules" ]; then
+    echo "Installing npm dependencies..."
+    npm install
+fi
+
+# Build TypeScript services
+echo "Building TypeScript services..."
+npx tsc --build services
+
+# Generate manifest for app.ts
+echo "Generating manifest..."
+node services/lib/cli.js publish-local app.ts
+
+# Build the app bundle
+echo "Building app bundle..."
+node services/lib/cli.js build-app app.ts
+node services/lib/cli.js build-worker
+
+# Copy app.ts source file (launcher builds from source)
+install -m 644 "$REPO_ROOT/packages/kettle/app.ts" "$KETTLE_INSTALL_DIR/"
+
+# Update manifest to point to installed app.ts location
+node -e "
+const fs = require('fs');
+const manifest = JSON.parse(fs.readFileSync('$REPO_ROOT/packages/kettle/manifest.json', 'utf-8'));
+manifest.app = 'file:///usr/lib/kettle/app.ts';
+fs.writeFileSync('$KETTLE_INSTALL_DIR/manifest.json', JSON.stringify(manifest, null, 2));
+"
+
+# Copy pre-built app bundle files (for reference/backup)
+install -m 644 "$REPO_ROOT/packages/kettle/dist/app.js" "$KETTLE_INSTALL_DIR/"
+install -m 644 "$REPO_ROOT/packages/kettle/dist/externals.js" "$KETTLE_INSTALL_DIR/"
+install -m 644 "$REPO_ROOT/packages/kettle/dist/worker.js" "$KETTLE_INSTALL_DIR/"
+
+# Copy node_modules needed for launcher to build apps (esbuild and workerd)
+# The bundled CLI needs esbuild available at runtime, and launcher needs workerd
+if [ -d "$REPO_ROOT/packages/kettle/node_modules" ]; then
+    echo "Copying required node_modules..."
+    mkdir -p "$KETTLE_INSTALL_DIR/node_modules"
+    
+    # Copy esbuild
+    if [ -d "$REPO_ROOT/packages/kettle/node_modules/esbuild" ]; then
+        cp -r "$REPO_ROOT/packages/kettle/node_modules/esbuild" "$KETTLE_INSTALL_DIR/node_modules/"
+    fi
+    
+    # Copy workerd binary and its dependencies
+    if [ -d "$REPO_ROOT/packages/kettle/node_modules/.bin" ]; then
+        mkdir -p "$KETTLE_INSTALL_DIR/node_modules/.bin"
+        if [ -f "$REPO_ROOT/packages/kettle/node_modules/.bin/workerd" ]; then
+            cp "$REPO_ROOT/packages/kettle/node_modules/.bin/workerd" "$KETTLE_INSTALL_DIR/node_modules/.bin/"
+            chmod +x "$KETTLE_INSTALL_DIR/node_modules/.bin/workerd"
+        fi
+    fi
+    
+    # Copy workerd package if it exists
+    if [ -d "$REPO_ROOT/packages/kettle/node_modules/workerd" ]; then
+        cp -r "$REPO_ROOT/packages/kettle/node_modules/workerd" "$KETTLE_INSTALL_DIR/node_modules/"
+    fi
+fi
+
+echo "Kettle CLI bundle, manifest, and app build files installed successfully"
