@@ -10,3 +10,4 @@ mkosi.builddir/
 tmp/
 NvVars
 cli.bundle.js
+kettle-artifacts/
