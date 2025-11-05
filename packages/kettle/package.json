@@ -55,6 +55,7 @@
 		"ws": "^8.18.3"
 	},
 	"optionalDependencies": {
+		"@esbuild/linux-x64": "^0.25.12",
 		"@libsql/linux-x64-gnu": "^0.5.22",
 		"@rollup/rollup-linux-x64-gnu": "^4.50.1"
 	},
