@@ -310,7 +310,7 @@ const config :Workerd.Config = (
             esModule = embed "${EXTERNALS_JS}"
           ),
         ],
-        compatibilityDate = "2024-04-03",
+        compatibilityDate = "2024-11-18",
         compatibilityFlags = ["nodejs_compat"],
 
 
