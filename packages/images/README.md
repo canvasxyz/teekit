@@ -39,6 +39,10 @@ support for nested virtualization (/dev/kvm).
    ```
    scripts/check_perms.sh
    scripts/setup_deps.sh
+
+   # If building tdx-dummy with kettle integration, bundle kettle first
+   scripts/bundle_kettle.sh
+
    scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf
    ```
 
@@ -47,6 +51,20 @@ support for nested virtualization (/dev/kvm).
    ```
    make measure
    ```
+
+## Testing Locally
+
+After building the image, you can test it locally with QEMU:
+
+```bash
+./scripts/test_local.sh
+```
+
+This will boot the image with:
+- Kettle service on port 3001 (http://localhost:3001)
+- Dummy TDX DCAP server on port 8080 (http://localhost:8080)
+
+See [TESTING.md](./TESTING.md) for more detailed testing instructions.
 
 ## Adding Files to Modules
 
