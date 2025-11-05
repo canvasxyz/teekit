@@ -3,4 +3,111 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
+# Build dummy-tdx-dcap
 make_git_package "dummy-tdx-dcap" "v0.0.1" "https://github.com/Ruteri/dummy-tdx-dcap" 'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v0.0.1" -v -o ./build/httpserver cmd/httpserver/main.go' "build/httpserver:/usr/bin/dummy-tdx-dcap"
+
+# Build kettle CLI bundle and generate manifest/app
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+KETTLE_DIR="$REPO_ROOT/packages/kettle"
+IMAGES_DIR="$REPO_ROOT/packages/images"
+
+# Ensure kettle package dependencies are installed for building
+echo "Installing kettle package dependencies..."
+cd "$KETTLE_DIR"
+if [ -f "package.json" ] && [ ! -d "node_modules" ]; then
+  npm install
+fi
+
+# Compile TypeScript services to get the CLI
+echo "Compiling kettle services..."
+cd "$KETTLE_DIR"
+npx tsc --build services
+
+# Build the CLI bundle (for use in the final image)
+echo "Building kettle CLI bundle..."
+"$IMAGES_DIR/bundle.sh"
+
+# Prepare build directory
+BUILD_DIR="$BUILDROOT/build/kettle"
+mkdir -p "$BUILD_DIR"
+KETTLE_APP_SOURCE="$KETTLE_DIR/app.ts"
+KETTLE_APP_BUILD="$BUILD_DIR/app.ts"
+
+# Copy app.ts to build directory
+cp "$KETTLE_APP_SOURCE" "$KETTLE_APP_BUILD"
+
+# Use the compiled CLI for build commands
+CLI_COMPILED="$KETTLE_DIR/services/lib/cli.js"
+
+# Generate manifest using the CLI (from build directory)
+echo "Generating manifest..."
+cd "$BUILD_DIR"
+node "$CLI_COMPILED" publish-local "app.ts"
+
+# Update manifest to use the final image path
+echo "Updating manifest for image..."
+MANIFEST_PATH="$BUILD_DIR/manifest.json"
+if [ -f "$MANIFEST_PATH" ]; then
+  # Update manifest to use file:///usr/lib/kettle/app.ts (absolute path)
+  python3 <<EOF
+import json
+with open("$MANIFEST_PATH", "r") as f:
+    manifest = json.load(f)
+manifest["app"] = "file:///usr/lib/kettle/app.ts"
+with open("$MANIFEST_PATH", "w") as f:
+    json.dump(manifest, f, indent=2)
+EOF
+fi
+
+# Build app and worker (from kettle directory so dependencies are available)
+echo "Building app and worker..."
+cd "$KETTLE_DIR"
+node "$CLI_COMPILED" build-app "$BUILD_DIR/app.ts"
+node "$CLI_COMPILED" build-worker
+
+# Copy CLI bundle to image
+mkdir -p "$DESTDIR/usr/bin"
+CLI_BUNDLE="$IMAGES_DIR/cli.bundle.js"
+cp "$CLI_BUNDLE" "$DESTDIR/usr/bin/kettle"
+chmod +x "$DESTDIR/usr/bin/kettle"
+
+# Copy manifest, app.ts, and built files to image
+KETTLE_LIB_DIR="$DESTDIR/usr/lib/kettle"
+mkdir -p "$KETTLE_LIB_DIR"
+
+# Verify files exist before copying
+if [ ! -f "$BUILD_DIR/manifest.json" ]; then
+  echo "Error: manifest.json not found at $BUILD_DIR/manifest.json"
+  exit 1
+fi
+if [ ! -f "$BUILD_DIR/app.ts" ]; then
+  echo "Error: app.ts not found at $BUILD_DIR/app.ts"
+  exit 1
+fi
+if [ ! -f "$KETTLE_DIR/dist/app.js" ]; then
+  echo "Error: app.js not found at $KETTLE_DIR/dist/app.js"
+  exit 1
+fi
+if [ ! -f "$KETTLE_DIR/dist/worker.js" ]; then
+  echo "Error: worker.js not found at $KETTLE_DIR/dist/worker.js"
+  exit 1
+fi
+if [ ! -f "$KETTLE_DIR/dist/externals.js" ]; then
+  echo "Error: externals.js not found at $KETTLE_DIR/dist/externals.js"
+  exit 1
+fi
+
+cp "$BUILD_DIR/manifest.json" "$KETTLE_LIB_DIR/"
+cp "$BUILD_DIR/app.ts" "$KETTLE_LIB_DIR/"
+cp "$KETTLE_DIR/dist/app.js" "$KETTLE_LIB_DIR/"
+cp "$KETTLE_DIR/dist/worker.js" "$KETTLE_LIB_DIR/"
+cp "$KETTLE_DIR/dist/externals.js" "$KETTLE_LIB_DIR/"
+
+echo "Successfully copied kettle files to image:"
+echo "  - CLI bundle: /usr/bin/kettle"
+echo "  - Manifest: /usr/lib/kettle/manifest.json"
+echo "  - App source: /usr/lib/kettle/app.ts"
+echo "  - App build: /usr/lib/kettle/app.js"
+echo "  - Worker: /usr/lib/kettle/worker.js"
+echo "  - Externals: /usr/lib/kettle/externals.js"
