@@ -10,15 +10,33 @@ interface DurableObjectNamespaceLike {
   idFromString(id: string): DurableObjectId
   get(id: DurableObjectId): DurableObjectStub
 }
-interface DurableObjectStateLike<Props = unknown> {
+
+// Type definitions for workerd's DurableObject runtime API
+interface DurableObjectState {
   waitUntil(promise: Promise<any>): void
-  readonly props: Props
   readonly id: DurableObjectId
-  readonly storage: unknown
+  readonly storage: DurableObjectStorage
   acceptWebSocket(ws: WebSocket, tags?: string[]): void
   getWebSockets(tag?: string): WebSocket[]
   getTags(ws: WebSocket): string[]
   abort(reason?: string): void
+}
+
+interface DurableObjectStorage {
+  get(key: string): Promise<any>
+  get(keys: string[]): Promise<Map<string, any>>
+  put(key: string, value: any): Promise<void>
+  put(entries: Record<string, any>): Promise<void>
+  delete(key: string): Promise<boolean>
+  delete(keys: string[]): Promise<number>
+  list(options?: any): Promise<Map<string, any>>
+}
+
+// Base class from cloudflare:workers (runtime-only, imported at runtime)
+declare class DurableObject<Env = unknown> {
+  protected state: DurableObjectState
+  protected env: Env
+  constructor(state: DurableObjectState, env: Env)
 }
 
 interface FetcherLike {
@@ -35,16 +53,16 @@ export interface Env {
   STATIC_FILES?: FetcherLike
 }
 
+// Import DurableObject base class from workerd (runtime-only module)
+// @ts-ignore - cloudflare:workers is a runtime module provided by workerd
+import { DurableObject } from "cloudflare:workers"
+
 // wrapper durable object that forwards all requests to the application
-export class HonoDurableObject {
-  // @ts-ignore TS6133
-  private state: DurableObjectState
-  private env: Env
+export class HonoDurableObject extends DurableObject<Env> {
   private appPromise: Promise<any> | null = null
 
-  constructor(state: DurableObjectStateLike, env: Env) {
-    this.state = state
-    this.env = env
+  constructor(state: DurableObjectState, env: Env) {
+    super(state, env)
   }
 
   // dynamically import and cache the user-provided hono application
