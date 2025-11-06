@@ -67,5 +67,31 @@ if [ -e /dev/kvm ]; then
   QEMU_CMD+=(-enable-kvm)
 fi
 
-# Run QEMU
-exec "${QEMU_CMD[@]}"
+# Track QEMU process so we can stop it on Ctrl+C
+QEMU_PID=""
+
+cleanup_vm() {
+  local signal="${1:-TERM}"
+  if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
+    echo ""
+    echo "Stopping VM..."
+    kill "-$signal" "$QEMU_PID" 2>/dev/null || true
+    wait "$QEMU_PID" 2>/dev/null || true
+    QEMU_PID=""
+  fi
+}
+
+trap 'cleanup_vm INT; exit 130' INT
+trap 'cleanup_vm TERM' TERM
+trap 'cleanup_vm TERM' EXIT
+
+"${QEMU_CMD[@]}" &
+QEMU_PID=$!
+
+set +e
+wait "$QEMU_PID"
+EXIT_CODE=$?
+set -e
+
+QEMU_PID=""
+exit "$EXIT_CODE"
