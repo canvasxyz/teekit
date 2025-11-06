@@ -1,0 +1,93 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Example mkosi.build modification for copying workspace instead of bundle
+# This shows how to integrate workspace copy into the build process
+
+source scripts/make_git_package.sh
+
+# Build dummy-tdx-dcap (unchanged)
+make_git_package "dummy-tdx-dcap" "v0.0.1" "https://github.com/Ruteri/dummy-tdx-dcap" 'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v0.0.1" -v -o ./build/httpserver cmd/httpserver/main.go' "build/httpserver:/usr/bin/dummy-tdx-dcap"
+
+# Install Node.js 22 from NodeSource
+# This should ideally be done via mkosi.conf Packages, but showing here for reference
+if ! command -v node >/dev/null 2>&1 || [ "$(node --version | cut -d. -f1 | sed 's/v//')" -lt 22 ]; then
+  echo "Installing Node.js 22 from NodeSource..."
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+fi
+
+# Verify Node.js version
+NODE_VERSION=$(node --version)
+echo "Node.js version: $NODE_VERSION"
+if [ "$(echo "$NODE_VERSION" | cut -d. -f1 | sed 's/v//')" -lt 22 ]; then
+  echo "Error: Node.js 22+ required, found $NODE_VERSION" >&2
+  exit 1
+fi
+
+# Use workspace instead of bundle
+IMAGES_DIR="$SRCDIR"
+WORKSPACE_STAGING="$IMAGES_DIR/workspace-staging"
+
+if [ ! -d "$WORKSPACE_STAGING" ]; then
+  echo "Error: Workspace staging not found at $WORKSPACE_STAGING"
+  echo "Please run scripts/prep_workspace.sh before running mkosi"
+  exit 1
+fi
+
+# Copy workspace to image
+WORKSPACE_DIR="$DESTDIR/opt/teekit"
+echo "Copying workspace to $WORKSPACE_DIR..."
+mkdir -p "$WORKSPACE_DIR"
+cp -r "$WORKSPACE_STAGING/." "$WORKSPACE_DIR/"
+
+# Install npm dependencies in workspace (if not already installed)
+echo "Installing npm dependencies..."
+cd "$WORKSPACE_DIR"
+npm ci --production=false || npm install --production=false
+
+# Verify workspace structure
+if [ ! -f "$WORKSPACE_DIR/packages/kettle/services/lib/cli.js" ]; then
+  echo "Error: Compiled CLI not found" >&2
+  exit 1
+fi
+
+# Create CLI wrapper script
+echo "Creating CLI wrapper..."
+mkdir -p "$DESTDIR/usr/bin"
+cat > "$DESTDIR/usr/bin/kettle" << 'EOF'
+#!/bin/bash
+cd /opt/teekit
+exec node packages/kettle/services/lib/cli.js "$@"
+EOF
+chmod +x "$DESTDIR/usr/bin/kettle"
+
+# Copy kettle artifacts (app.ts, manifest, etc.) - same as before
+KETTLE_ARTIFACTS="$IMAGES_DIR/kettle-artifacts"
+if [ -d "$KETTLE_ARTIFACTS" ]; then
+  KETTLE_LIB_DIR="$DESTDIR/usr/lib/kettle"
+  mkdir -p "$KETTLE_LIB_DIR"
+  
+  for file in manifest.json app.ts app.js worker.js externals.js; do
+    if [ -f "$KETTLE_ARTIFACTS/$file" ]; then
+      cp "$KETTLE_ARTIFACTS/$file" "$KETTLE_LIB_DIR/"
+    fi
+  done
+  
+  # Update manifest to use workspace path
+  if [ -f "$KETTLE_LIB_DIR/manifest.json" ]; then
+    python3 <<EOF
+import json
+with open("$KETTLE_LIB_DIR/manifest.json", "r") as f:
+    manifest = json.load(f)
+manifest["app"] = "file:///opt/teekit/packages/kettle/app.ts"
+with open("$KETTLE_LIB_DIR/manifest.json", "w") as f:
+    json.dump(manifest, f, indent=2)
+EOF
+  fi
+fi
+
+echo "Successfully copied workspace to image:"
+echo "  - Workspace: /opt/teekit"
+echo "  - CLI wrapper: /usr/bin/kettle"
+echo "  - Node.js version: $(node --version)"
