@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs"
 import { join, basename } from "path"
 import { fileURLToPath } from "url"
 import { createHash } from "crypto"
-import chalk from "chalk"
+import * as chalk from "colorette"
 
 const GITHUB_TOKEN_URL =
   "https://github.com/settings/tokens/new?description=Kettle&scopes=gist&default_expires_at=90"
@@ -139,7 +139,8 @@ export async function buildRemoteManifestCommand(
         )
       }
     } else {
-      console.error(chalk.blueBright(`[publish] Unexpected error:`, err))
+      console.error(chalk.blueBright(`[publish] Unexpected error:`))
+      console.error(err)
     }
     process.exit(1)
   }

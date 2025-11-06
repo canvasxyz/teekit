@@ -1,7 +1,7 @@
 /* Standalone HTTP service for quote generation */
 import { createServer } from "http"
 import { base64 } from "@scure/base"
-import chalk from "chalk"
+import * as chalk from "colorette"
 import fs from "node:fs"
 import { exec } from "node:child_process"
 

@@ -1,5 +1,5 @@
 import { spawn, ChildProcess } from "child_process"
-import chalk from "chalk"
+import * as chalk from "colorette"
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "fs"
 import { join, basename } from "path"
 import { fileURLToPath } from "url"

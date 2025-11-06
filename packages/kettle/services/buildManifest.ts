@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { createHash } from "crypto"
-import chalk from "chalk"
+import * as chalk from "colorette"
 
 export interface BuildManifestArgs {
   file: string

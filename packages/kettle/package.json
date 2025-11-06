@@ -27,7 +27,7 @@
 		"@teekit/qvl": "0.0.2",
 		"@teekit/tunnel": "0.0.2",
 		"cbor-x": "^1.6.0",
-		"chalk": "^4.1.2",
+		"colorette": "^2.0.20",
 		"hono": "^4.7.5",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",

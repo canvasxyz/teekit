@@ -11,7 +11,7 @@ import { join } from "path"
 import { spawn, ChildProcess } from "child_process"
 import { fileURLToPath } from "url"
 import { createHash } from "crypto"
-import chalk from "chalk"
+import * as chalk from "colorette"
 import { connectWebSocket } from "./helpers.js"
 import {
   findFreePort,

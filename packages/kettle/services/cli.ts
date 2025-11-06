@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import yargs, { type Argv } from "yargs"
 import { hideBin } from "yargs/helpers"
-import chalk from "chalk"
+import * as chalk from "colorette"
 
 import { startWorkerCommand } from "./startWorker.js"
 import { buildManifestCommand } from "./buildManifest.js"

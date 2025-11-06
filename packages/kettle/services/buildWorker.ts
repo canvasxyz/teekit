@@ -1,4 +1,4 @@
-import chalk from "chalk"
+import * as chalk from "colorette"
 import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs"
 import { join, basename } from "path"
 import { fileURLToPath } from "url"

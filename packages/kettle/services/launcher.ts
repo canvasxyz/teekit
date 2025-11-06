@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { createHash } from "crypto"
-import chalk from "chalk"
+import * as chalk from "colorette"
 
 import { startWorker } from "./startWorker.js"
 import { buildKettleApp, buildKettleExternals } from "./buildWorker.js"

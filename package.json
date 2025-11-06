@@ -37,7 +37,8 @@
 		]
 	},
 	"dependencies": {
-		"debug": "^4.4.3"
+		"debug": "^4.4.3",
+		"colorette": "^2.0.20"
 	},
 	"devDependencies": {
 		"@types/debug": "^4.1.12"
