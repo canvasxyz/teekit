@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:vm": "./bundle.sh && scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh && scripts/env_wrapper.sh mkosi --profile=gcp -I tdx-dummy.conf",
-    "build:vm:clean": "./bundle.sh && scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh && scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf"
+    "build": "./bundle.sh && scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
+    "build:vm": "npm run build && scripts/env_wrapper.sh mkosi --profile=gcp -I tdx-dummy.conf",
+    "build:vm:incremental": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=gcp -I tdx-dummy.conf",
+    "build:vm:clean": "npm run build && scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf"
   }
 }

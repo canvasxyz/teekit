@@ -10,6 +10,8 @@
 		"clean": "rm -rf packages/*/dist/* packages/*/test/lib/* packages/*/*.tsbuildinfo && npm run clean --workspace packages/kettle",
 		"build": "npm --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo --workspace packages/kettle run build",
 		"build:vm": "npm --workspace packages/images run build:vm",
+		"build:vm:incremental": "npm --workspace packages/images run build:vm:incremental",
+		"build:vm:clean": "npm --workspace packages/images run build:vm:clean",
 		"build:dstack": "npm --workspace packages/images-dstack run build:dstack",
 		"lint": "eslint .",
 		"publish": "npm run clean && npm run build && npm publish -w=packages/ --access public",
