@@ -6,6 +6,9 @@ source scripts/make_git_package.sh
 # Build dummy-tdx-dcap
 make_git_package "dummy-tdx-dcap" "v0.0.1" "https://github.com/Ruteri/dummy-tdx-dcap" 'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v0.0.1" -v -o ./build/httpserver cmd/httpserver/main.go' "build/httpserver:/usr/bin/dummy-tdx-dcap"
 
+# Build sqld (libsql server) - required for kettle
+make_git_package "libsql" "libsql-server-v0.24.30" "https://github.com/tursodatabase/libsql" 'cargo build --release --bin sqld --manifest-path libsql-server/Cargo.toml' "target/release/sqld:/usr/bin/sqld"
+
 # Use pre-built kettle CLI bundle and generate manifest/app
 # SRCDIR points to packages/images in the mkosi build environment
 IMAGES_DIR="$SRCDIR"
