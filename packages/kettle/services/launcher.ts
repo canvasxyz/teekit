@@ -160,7 +160,7 @@ async function parseManifest(
       throw new Error(`App file not found: ${appPath}`)
     }
 
-    // Read the app file and calculate its SHA256 hash
+    // Verify SHA256 hash for all files
     appFileContent = readFileSync(appPath)
     const calculatedHash = createHash("sha256")
       .update(appFileContent)
@@ -197,29 +197,53 @@ export async function launcherCommand(argv: LauncherArgs) {
     console.log(chalk.yellowBright(`[launcher] App source: ${manifest.app}`))
   }
 
-  // Create temporary build directory
-  const buildDir = mkdtempSync(join(tmpdir(), "kettle-launcher-build-"))
-  if (argv.verbose) {
-    console.log(chalk.yellowBright(`[launcher] Build directory: ${buildDir}`))
-  }
+  // Determine bundle directory based on whether app is pre-built or needs building
+  let bundleDir: string
+  const isPrebuilt = manifest.app.endsWith(".js")
 
-  // Build the app
-  if (argv.verbose) {
-    console.log(chalk.yellowBright("[launcher] Building app..."))
-  }
-  await buildKettleApp({
-    source: manifest.app,
-    targetDir: buildDir,
-    verbose: argv.verbose,
-  })
+  if (isPrebuilt) {
+    // App is already built, use the directory containing the built files
+    const appDir = manifest.app.substring(0, manifest.app.lastIndexOf("/"))
+    let appDirPath = appDir.startsWith("file://")
+      ? fileURLToPath(appDir)
+      : appDir
 
-  // Build externals and worker
-  const kettlePackageDir = KETTLE_DIR
-  await buildKettleExternals({
-    sourceDir: kettlePackageDir,
-    targetDir: buildDir,
-    verbose: argv.verbose,
-  })
+    if (argv.verbose) {
+      console.log(
+        chalk.yellowBright(
+          `[launcher] Using pre-built app from: ${appDirPath}`,
+        ),
+      )
+    }
+
+    // For pre-built apps, assume worker.js and externals.js are in the same directory
+    bundleDir = appDirPath
+  } else {
+    // Create temporary build directory
+    const tempBuildDir = mkdtempSync(join(tmpdir(), "kettle-launcher-build-"))
+    bundleDir = tempBuildDir
+    if (argv.verbose) {
+      console.log(chalk.yellowBright(`[launcher] Build directory: ${bundleDir}`))
+    }
+
+    // Build the app
+    if (argv.verbose) {
+      console.log(chalk.yellowBright("[launcher] Building app..."))
+    }
+    await buildKettleApp({
+      source: manifest.app,
+      targetDir: bundleDir,
+      verbose: argv.verbose,
+    })
+
+    // Build externals and worker
+    const kettlePackageDir = KETTLE_DIR
+    await buildKettleExternals({
+      sourceDir: kettlePackageDir,
+      targetDir: bundleDir,
+      verbose: argv.verbose,
+    })
+  }
 
   // Set up database directory
   const baseDir =
@@ -237,7 +261,7 @@ export async function launcherCommand(argv: LauncherArgs) {
     workerPort: argv.port ?? 3001,
     sqldPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
-    bundleDir: buildDir,
+    bundleDir: bundleDir,
   })
 
   // Handle graceful shutdown
