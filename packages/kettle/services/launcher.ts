@@ -1,5 +1,5 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs"
-import { join, basename, extname } from "path"
+import { join, basename } from "path"
 import { fileURLToPath } from "url"
 import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
@@ -27,19 +27,6 @@ interface ParsedManifest {
 }
 
 const MAX_APP_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-const SUPPORTED_APP_EXTENSIONS = new Set([".js", ".mjs"])
-
-function assertSupportedAppExtension(
-  appPath: string,
-  description: string,
-): void {
-  const extension = extname(appPath).toLowerCase()
-  if (!SUPPORTED_APP_EXTENSIONS.has(extension)) {
-    throw new Error(
-      `${description} must reference a pre-built JavaScript bundle (.js or .mjs). ${appPath}`,
-    )
-  }
-}
 
 async function parseManifest(
   manifestIdentifier: string,
@@ -108,12 +95,6 @@ async function parseManifest(
     manifestObj.app.startsWith("http://") ||
     manifestObj.app.startsWith("https://")
   ) {
-    const remoteUrl = new URL(manifestObj.app)
-    assertSupportedAppExtension(
-      remoteUrl.pathname,
-      "Remote manifest 'app' field",
-    )
-
     // Fetch app file from URL
     const response = await fetch(manifestObj.app)
     if (!response.ok) {
@@ -169,15 +150,11 @@ async function parseManifest(
 
     // Write fetched app to a temporary file inside the package root
     const kettleDir = KETTLE_DIR
-    appPath = join(kettleDir, "app-remote.tmp.js")
+    appPath = join(kettleDir, "app-remote.tmp.ts")
     writeFileSync(appPath, appFileContent)
   } else if (manifestObj.app.startsWith("file://")) {
     // Handle file:/// URL
     appPath = fileURLToPath(manifestObj.app)
-    assertSupportedAppExtension(
-      appPath,
-      "File manifest 'app' field (file:// scheme)",
-    )
 
     if (!existsSync(appPath)) {
       throw new Error(`App file not found: ${appPath}`)
@@ -199,7 +176,6 @@ async function parseManifest(
       )
     }
   } else {
-    assertSupportedAppExtension(manifestObj.app, "Manifest 'app' field")
     throw new Error(
       "Manifest must contain an 'app' field with a file:/// or http/https URL",
     )
