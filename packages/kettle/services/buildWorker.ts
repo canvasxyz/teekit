@@ -147,6 +147,8 @@ export async function buildKettleExternals(options: BuildExternalsConfig) {
       "node-mocks-http",
       // Treat embedded module as external so it's resolved at runtime by workerd
       "app.js",
+      // cloudflare:workers is a runtime module provided by workerd
+      "cloudflare:workers",
     ],
   })
 
