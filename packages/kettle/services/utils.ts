@@ -126,14 +126,17 @@ export function resolveWorkerdBinary(): string {
   const cwd = process.cwd()
   const candidates = [
     process.env.WORKERD_BIN,
+    // Global PATH resolution (check this first for system installs)
+    "workerd",
+    // System-wide installations
+    "/usr/local/bin/workerd",
+    "/usr/bin/workerd",
     // Prefer local project bin if available
     `${cwd}/node_modules/.bin/workerd`,
     // Monorepo root fallback
     `${cwd}/../node_modules/.bin/workerd`,
     `${cwd}/../../node_modules/.bin/workerd`,
     `/workspace/node_modules/.bin/workerd`,
-    // Global PATH resolution
-    "workerd",
   ].filter(Boolean) as string[]
   for (const bin of candidates) {
     try {
