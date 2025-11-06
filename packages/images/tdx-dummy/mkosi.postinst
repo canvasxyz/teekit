@@ -7,14 +7,19 @@ mkdir -p "$SERVICE_DIR"
 
 install -m 644 "tdx-dummy/dummy-tdx-dcap.service" "$SERVICE_DIR/"
 install -m 644 "tdx-dummy/kettle-launcher.service" "$SERVICE_DIR/"
+install -m 644 "tdx-dummy/kettle-log-dumper.service" "$SERVICE_DIR/"
+
+# Install log dumper script
+mkdir -p "$BUILDROOT/usr/local/bin"
+install -m 755 "tdx-dummy/dump-kettle-logs.sh" "$BUILDROOT/usr/local/bin/"
 
 # Create kettle database directory
 mkdir -p "$BUILDROOT/var/lib/kettle/db"
 
-# Install workerd globally via npm in the chroot environment
-# npm is available as a BuildPackage, so we use mkosi-chroot
-echo "Installing workerd via npm..."
-mkosi-chroot npm install -g workerd@^1.20250107.0 || echo "Warning: Failed to install workerd via npm"
+# Install workerd and esbuild globally via npm into the BUILDROOT
+# npm is available as a BuildPackage, so we use mkosi-chroot with --prefix to install into BUILDROOT
+echo "Installing workerd and esbuild via npm..."
+mkosi-chroot npm install -g --prefix "$BUILDROOT/usr/local" workerd@^1.20250107.0 esbuild@^0.24.2 || echo "Warning: Failed to install npm packages"
 
 # Ensure workerd is in PATH - it should be in /usr/local/bin after npm install -g
 # or in node_modules/.bin if installed locally
@@ -22,5 +27,6 @@ mkosi-chroot npm install -g workerd@^1.20250107.0 || echo "Warning: Failed to in
 
 # Note: sqld (libsql server) is built and installed to /usr/bin/sqld during mkosi.build
 
-# Enable kettle-launcher service
+# Enable kettle-launcher and log dumper services
 systemctl --root="$BUILDROOT" enable kettle-launcher.service
+systemctl --root="$BUILDROOT" enable kettle-log-dumper.service

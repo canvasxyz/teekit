@@ -10,8 +10,8 @@ Group=root
 ExecStart=/usr/bin/kettle launch /usr/lib/kettle/manifest.json --port 3001 --db-dir /var/lib/kettle/db
 Restart=on-failure
 RestartSec=10
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:/var/log/kettle.log
+StandardError=append:/var/log/kettle-error.log
 
 [Install]
 WantedBy=minimal.target

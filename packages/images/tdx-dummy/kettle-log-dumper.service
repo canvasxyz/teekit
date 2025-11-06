@@ -1,0 +1,12 @@
+[Unit]
+Description=Kettle Log Dumper (Debug)
+After=kettle-launcher.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/dump-kettle-logs.sh
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=minimal.target

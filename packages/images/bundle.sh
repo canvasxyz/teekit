@@ -38,7 +38,7 @@ rm -f "$OUT_PATH.map" || true
   --format=esm \
   --external:esbuild \
   --external:workerd \
-  --banner:js="import { createRequire as __createRequire } from 'module'; const require = __createRequire(import.meta.url);" \
+  --inject:"$SCRIPT_DIR/esm-shims.js" \
   --outfile="$OUT_PATH"
 
 # # Fix __dirname reference that esbuild generates incorrectly
