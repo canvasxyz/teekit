@@ -32,8 +32,24 @@ rm -f "$OUT_PATH.map" || true
   --bundle \
   --platform=node \
   --format=esm \
+  --external:esbuild \
+  --external:workerd \
   --banner:js="import { createRequire as __createRequire } from 'module'; const require = __createRequire(import.meta.url);" \
   --outfile="$OUT_PATH"
+
+# Fix __dirname reference that esbuild generates incorrectly
+# fileURLToPath(import.meta.url) gives the file path, but dirname is needed for __dirname
+# Find the line and get the correct line number to find what dirname import is available
+LINE_NUM=$(grep -n "var __dirname = fileURLToPath(import.meta.url);" "$OUT_PATH" | cut -d: -f1)
+if [ -n "$LINE_NUM" ]; then
+  # Find what dirname is called in scope (could be dirname, dirname2, etc.)
+  # Look backwards from the error line to find the dirname import
+  DIRNAME_IMPORT=$(head -n "$LINE_NUM" "$OUT_PATH" | grep -o "dirname[0-9]*" | tail -1)
+  if [ -z "$DIRNAME_IMPORT" ]; then
+    DIRNAME_IMPORT="dirname"
+  fi
+  sed -i "${LINE_NUM}s/var __dirname = fileURLToPath(import\.meta\.url);/var __dirname = ${DIRNAME_IMPORT}(fileURLToPath(import.meta.url));/" "$OUT_PATH"
+fi
 
 chmod +x "$OUT_PATH"
 
