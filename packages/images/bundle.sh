@@ -36,9 +36,9 @@ rm -f "$OUT_PATH.map" || true
   --bundle \
   --platform=node \
   --format=esm \
+  --packages=bundle \
   --external:esbuild \
   --external:workerd \
-  --inject:"$SCRIPT_DIR/esm-shims.js" \
   --outfile="$OUT_PATH"
 
 # # Fix __dirname reference that esbuild generates incorrectly

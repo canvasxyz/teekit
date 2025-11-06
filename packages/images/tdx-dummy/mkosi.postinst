@@ -16,14 +16,37 @@ install -m 755 "tdx-dummy/dump-kettle-logs.sh" "$BUILDROOT/usr/local/bin/"
 # Create kettle database directory
 mkdir -p "$BUILDROOT/var/lib/kettle/db"
 
-# Install workerd and esbuild globally via npm into the BUILDROOT
-# npm is available as a BuildPackage, so we use mkosi-chroot with --prefix to install into BUILDROOT
+# Install workerd and esbuild into /usr/lib/node_modules in the BUILDROOT
 echo "Installing workerd and esbuild via npm..."
-mkosi-chroot npm install -g --prefix "$BUILDROOT/usr/local" workerd@^1.20250107.0 esbuild@^0.24.2 || echo "Warning: Failed to install npm packages"
+mkdir -p "$BUILDROOT/usr/lib/node_modules"
 
-# Ensure workerd is in PATH - it should be in /usr/local/bin after npm install -g
-# or in node_modules/.bin if installed locally
-# The kettle launcher will look for it in PATH
+# Install packages using mkosi-chroot with chroot-relative path
+# Inside the chroot, /usr maps to $BUILDROOT/usr
+npm_install_cmd="npm install --global-style --no-bin-links --prefix /usr workerd@^1.20250107.0 esbuild@^0.24.2 chalk@^5.4.2"
+echo "Running in chroot: $npm_install_cmd"
+mkosi-chroot sh -c "$npm_install_cmd" || echo "Warning: Failed to install npm packages"
+
+# npm installs to /usr/node_modules, but Node.js looks in /usr/lib/node_modules
+# Move the packages to the correct location
+echo "Moving npm packages to /usr/lib/node_modules..."
+if [ -d "$BUILDROOT/usr/node_modules" ]; then
+    mv "$BUILDROOT/usr/node_modules"/* "$BUILDROOT/usr/lib/node_modules/" 2>/dev/null || echo "Warning: Failed to move some packages"
+    rmdir "$BUILDROOT/usr/node_modules" 2>/dev/null || echo "Warning: Could not remove usr/node_modules"
+fi
+
+echo "Verifying installed packages..."
+ls -la "$BUILDROOT/usr/lib/node_modules/" || echo "No packages in /usr/lib/node_modules"
+
+# Create symlinks for binaries in PATH
+mkdir -p "$BUILDROOT/usr/local/bin"
+if [ -f "$BUILDROOT/usr/lib/node_modules/workerd/bin/workerd" ]; then
+    echo "Creating workerd symlink"
+    ln -sf /usr/lib/node_modules/workerd/bin/workerd "$BUILDROOT/usr/local/bin/workerd"
+fi
+if [ -f "$BUILDROOT/usr/lib/node_modules/esbuild/bin/esbuild" ]; then
+    echo "Creating esbuild symlink"
+    ln -sf /usr/lib/node_modules/esbuild/bin/esbuild "$BUILDROOT/usr/local/bin/esbuild"
+fi
 
 # Note: sqld (libsql server) is built and installed to /usr/bin/sqld during mkosi.build
 
