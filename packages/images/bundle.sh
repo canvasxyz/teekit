@@ -24,6 +24,10 @@ fi
 
 mkdir -p "$(dirname "$OUT_PATH")"
 
+# Generate embeddedSources.ts with actual file content
+echo "Generating embeddedSources.ts..."
+node "$SCRIPT_DIR/generate-embedded-sources.js"
+
 # Ensure no stale sourcemap remains
 rm -f "$OUT_PATH.map" || true
 

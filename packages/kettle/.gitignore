@@ -1,3 +1,4 @@
+services/embeddedSources.ts
 services/lib/
 workerd.config.tmp.capnp
 data.sqld/

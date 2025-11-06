@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:vm": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh && scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf"
+    "build:vm": "scripts/check_perms.sh && scripts/setup_deps.sh && ./bundle.sh && scripts/prep_kettle.sh && scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf"
   }
 }

@@ -3,6 +3,7 @@ import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs"
 import { join, basename } from "path"
 import { build } from "esbuild"
 import { fileURLToPath } from "url"
+import { EXTERNALS_JS, WORKER_JS } from "./embeddedSources.js"
 
 const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
@@ -90,73 +91,19 @@ export async function buildKettleApp(options: BuildConfig) {
 
 export async function buildKettleExternals(options: BuildExternalsConfig) {
   const { targetDir, verbose } = options
-  const sourceDir = options.sourceDir ?? PACKAGE_ROOT
 
   if (!existsSync(targetDir)) {
     mkdirSync(targetDir, { recursive: true })
   }
 
-  // Build externals bundle to reduce app.js size
-  const externalsBuild = await build({
-    entryPoints: [join(sourceDir, "externals.ts")],
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    outfile: join(targetDir, "externals.js"),
-    metafile: true,
-    external: [
-      // Externalize Node-only deps that appear in optional/dynamic paths
-      "path",
-      "fs",
-      "stream",
-      "buffer",
-      "events",
-      "http",
-      "ws",
-      "node-mocks-http",
-      "net",
-      "querystring",
-    ],
-  })
+  // Write pre-built files from embedded sources
+  // (these are either read from dist/ in dev mode, or bundled as strings in the CLI bundle)
+  writeFileSync(join(targetDir, "externals.js"), EXTERNALS_JS)
+  writeFileSync(join(targetDir, "worker.js"), WORKER_JS)
 
-  if (externalsBuild.metafile) {
-    writeFileSync(
-      join(targetDir, "externals.metafile.json"),
-      JSON.stringify(externalsBuild.metafile, null, 2),
-    )
-  }
+  const externalsSize = EXTERNALS_JS.length
+  const workerSize = WORKER_JS.length
 
-  const workerBuild = await build({
-    entryPoints: [join(sourceDir, "services", "worker", "worker.ts")],
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    outfile: join(targetDir, "worker.js"),
-    metafile: true,
-    external: [
-      // Same externals as app; keep bundle minimal
-      "path",
-      "fs",
-      "stream",
-      "buffer",
-      "events",
-      "http",
-      "ws",
-      "node-mocks-http",
-      // Treat embedded module as external so it's resolved at runtime by workerd
-      "app.js",
-    ],
-  })
-
-  if (workerBuild.metafile) {
-    writeFileSync(
-      join(targetDir, "worker.metafile.json"),
-      JSON.stringify(workerBuild.metafile, null, 2),
-    )
-  }
-
-  const workerSize = readFileSync(join(targetDir, "worker.js")).length
-  const externalsSize = readFileSync(join(targetDir, "externals.js")).length
   if (verbose) {
     console.log(
       chalk.yellowBright(
