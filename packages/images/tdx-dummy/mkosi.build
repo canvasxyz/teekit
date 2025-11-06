@@ -29,17 +29,21 @@ if [ ! -d "$KETTLE_ARTIFACTS" ]; then
   exit 1
 fi
 
-# Update manifest to use the final image path
+# Update manifest to use the final image path and correct SHA256 hash
 echo "Updating manifest for image..."
 BUILD_DIR="$BUILDROOT/build/kettle"
 mkdir -p "$BUILD_DIR"
 cp "$KETTLE_ARTIFACTS/manifest.json" "$BUILD_DIR/manifest.json"
+
+# Calculate SHA256 hash of app.js
+APP_JS_HASH=$(sha256sum "$KETTLE_ARTIFACTS/app.js" | awk '{print $1}')
 
 python3 <<EOF
 import json
 with open("$BUILD_DIR/manifest.json", "r") as f:
     manifest = json.load(f)
 manifest["app"] = "file:///usr/lib/kettle/app.js"
+manifest["sha256"] = "$APP_JS_HASH"
 with open("$BUILD_DIR/manifest.json", "w") as f:
     json.dump(manifest, f, indent=2)
 EOF
