@@ -11,7 +11,10 @@ const REPO_ROOT = join(SCRIPT_DIR, "..", "..")
 const KETTLE_DIR = join(REPO_ROOT, "packages", "kettle")
 
 // Read the pre-built files
-const externalsJs = readFileSync(join(KETTLE_DIR, "dist", "externals.js"), "utf-8")
+const externalsJs = readFileSync(
+  join(KETTLE_DIR, "dist", "externals.js"),
+  "utf-8",
+)
 const workerJs = readFileSync(join(KETTLE_DIR, "dist", "worker.js"), "utf-8")
 
 // Escape backticks and backslashes for template literals

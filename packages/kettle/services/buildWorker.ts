@@ -1,6 +1,12 @@
 import * as chalk from "colorette"
-import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs"
-import { join, basename } from "path"
+import {
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  copyFileSync,
+} from "fs"
+import { join, basename, extname } from "path"
 import { fileURLToPath } from "url"
 import { EXTERNALS_JS, WORKER_JS } from "./embeddedSources.js"
 
@@ -28,63 +34,79 @@ export async function buildKettleApp(options: BuildConfig) {
     mkdirSync(targetDir, { recursive: true })
   }
 
-  // Dynamic import of esbuild to avoid loading it at module initialization
-  const { build } = await import("esbuild")
+  const targetAppPath = join(targetDir, "app.js")
+  const sourceExt = extname(source).toLowerCase()
+  let metafile: Record<string, unknown> | undefined
 
-  const appBuild = await build({
-    entryPoints: [source],
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    outfile: join(targetDir, "app.js"),
-    metafile: true,
-    external: [
-      // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
-      "path",
-      "fs",
-      "stream",
-      "buffer",
-      "events",
-      "http",
-      "ws",
-      "node-mocks-http",
-      // Externalize large packages to reduce app.js size - workerd will resolve to externals.js module
-      "hono",
-      "hono/cors",
-      "hono/ws",
-      "hono/cloudflare-workers",
-      "hono/utils/http-status",
-      "@libsql/client",
-      "@teekit/kettle/worker",
-      "@teekit/tunnel",
-      "@teekit/tunnel/samples",
-      "@teekit/qvl",
-      "@teekit/qvl/utils",
-      "cbor-x",
-      "@noble/ciphers",
-      "@noble/ciphers/salsa",
-      "@noble/hashes",
-      "@noble/hashes/sha256",
-      "@noble/hashes/sha512",
-      "@noble/hashes/blake2b",
-      "@noble/hashes/crypto",
-      "@noble/hashes/sha1",
-      "@noble/hashes/sha2",
-      "@noble/hashes/utils",
-      "@noble/curves",
-      "@noble/curves/ed25519",
-      "@scure/base",
-    ],
-  })
+  if (sourceExt === ".js" || sourceExt === ".mjs") {
+    copyFileSync(source, targetAppPath)
+  } else if (sourceExt === ".ts" || sourceExt === ".tsx") {
+    // Dynamic import of esbuild to avoid loading it when prebuilt bundles are provided
+    const { build } = await import("esbuild")
 
-  if (appBuild.metafile) {
-    writeFileSync(
-      join(targetDir, "app.metafile.json"),
-      JSON.stringify(appBuild.metafile, null, 2),
+    const appBuild = await build({
+      entryPoints: [source],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: targetAppPath,
+      metafile: true,
+      external: [
+        // Externalize Node-only deps that appear in optional/dynamic paths of @teekit/tunnel
+        "path",
+        "fs",
+        "stream",
+        "buffer",
+        "events",
+        "http",
+        "ws",
+        "node-mocks-http",
+        // Externalize large packages to reduce app.js size - workerd will resolve to externals.js module
+        "hono",
+        "hono/cors",
+        "hono/ws",
+        "hono/cloudflare-workers",
+        "hono/utils/http-status",
+        "@libsql/client",
+        "@teekit/kettle/worker",
+        "@teekit/tunnel",
+        "@teekit/tunnel/samples",
+        "@teekit/qvl",
+        "@teekit/qvl/utils",
+        "cbor-x",
+        "@noble/ciphers",
+        "@noble/ciphers/salsa",
+        "@noble/hashes",
+        "@noble/hashes/sha256",
+        "@noble/hashes/sha512",
+        "@noble/hashes/blake2b",
+        "@noble/hashes/crypto",
+        "@noble/hashes/sha1",
+        "@noble/hashes/sha2",
+        "@noble/hashes/utils",
+        "@noble/curves",
+        "@noble/curves/ed25519",
+        "@scure/base",
+      ],
+    })
+
+    if (appBuild.metafile) {
+      metafile = appBuild.metafile
+    }
+  } else {
+    throw new Error(
+      `Unsupported app source "${source}". Provide a prebuilt .js bundle or a .ts entry point.`,
     )
   }
 
-  const appSize = readFileSync(join(targetDir, "app.js")).length
+  if (metafile) {
+    writeFileSync(
+      join(targetDir, "app.metafile.json"),
+      JSON.stringify(metafile, null, 2),
+    )
+  }
+
+  const appSize = readFileSync(targetAppPath).length
 
   if (verbose) {
     console.log(chalk.yellowBright(`[kettle] Built app.js (${appSize} bytes)`))
