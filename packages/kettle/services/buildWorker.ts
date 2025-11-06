@@ -1,7 +1,6 @@
 import chalk from "chalk"
 import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs"
 import { join, basename } from "path"
-import { build } from "esbuild"
 import { fileURLToPath } from "url"
 import { EXTERNALS_JS, WORKER_JS } from "./embeddedSources.js"
 
@@ -28,6 +27,9 @@ export async function buildKettleApp(options: BuildConfig) {
   if (!existsSync(targetDir)) {
     mkdirSync(targetDir, { recursive: true })
   }
+
+  // Dynamic import of esbuild to avoid loading it at module initialization
+  const { build } = await import("esbuild")
 
   const appBuild = await build({
     entryPoints: [source],
