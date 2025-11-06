@@ -36,7 +36,7 @@ export async function buildKettleApp(options: BuildConfig) {
 
   const targetAppPath = join(targetDir, "app.js")
   const sourceExt = extname(source).toLowerCase()
-  let metafile: Record<string, unknown> | undefined
+  let metafile: any | undefined
 
   if (sourceExt === ".js" || sourceExt === ".mjs") {
     copyFileSync(source, targetAppPath)
