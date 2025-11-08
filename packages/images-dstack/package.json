@@ -1,8 +1,9 @@
 {
-  "name": "@teekit/images-dstack",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build:dstack": "cd ../.. && ./packages/images-dstack/docker-build.sh"
-  }
+	"name": "@teekit/images-dstack",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:dstack": "cd ../.. && ./packages/images-dstack/docker-build.sh"
+	},
+	"version": "0.0.3"
 }
