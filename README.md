@@ -6,17 +6,19 @@
 
 A set of building blocks for end-to-end verifiable TEE applications.
 
-_Note: Under active development, has not been audited._
-
 ## Background
 
 Trusted execution environments make it possible to build private,
-verifiable web services, but web pages in a browser cannot verify that
-they're connected to a TEE. Browsers don't expose X.509 certificate
-information that proves a connection terminates inside the secure
-environment, so proxies like Cloudflare can trivially see and modify
-traffic to TEEs forwarded through them. Anyone hosting a TEE app
-can use a TLS proxy to extract session data and/or impersonate users.
+verifiable web services, that can compose with each other trustlessly
+and with properties similar to those of advanced cryptography.
+
+One significant limitation for end-user TEE applications is that web
+pages in a browser cannot verify that they're connected to a
+TEE. Browsers don't expose X.509 certificate information that proves a
+connection terminates inside the secure environment, so proxies like
+Cloudflare can trivially see and modify traffic to TEEs forwarded
+through them. Anyone hosting a TEE app can use a TLS proxy to extract
+session data and/or impersonate users.
 
 To work around this, some TEE application hosts implement their own
 proxy in front of the TEE, but this reintroduces trust assumptions
@@ -30,8 +32,8 @@ that verifiably terminate inside trusted execution environments
 (currently Intel TDX/SGX). This makes it possible to create
 applications that interact with a TEE trustlessly, especially if
 applications are pinned on IPFS or other immutable hosting services.
-It also allows TEE developers to use public certificate authorities
-like Let's Encrypt without custom configuration.
+This also allows TEE developers to use public certificate authorities
+like Let's Encrypt, without custom configuration.
 
 ## Components
 
@@ -52,13 +54,25 @@ like Let's Encrypt without custom configuration.
   - A [demo application](https://teekit.vercel.app/) that supports
     HTTPS and WSS requests over the encrypted channel, both with and without
     the embedded ServiceWorker.
+- @teekit/kettle:
+  - A JS runtime designed for deploying remotely-attested, user-verifiable
+    code, designed to work with @teekit/tunnel and TEE environments
+    (e.g. Dstack, GCP, Azure).
+- @teekit/images:
+  - A deterministic VM image for running @teekit/kettle applications.
+
+@teekit/tunnel and @teekit/qvl are stable, while other components are under
+active development. These libraries have not been audited.
 
 ## Benchmarks
 
 The encrypted channel adds ~3x overhead for concurrent requests, and
-~6.5x for large payloads. Some of this increase is because we use
-@noble/ciphers for encryption; Wasm-based cryptography has been tested
-to give us a speedup of ~50-100%.
+~6.5x for large payloads.
+
+Some of this overhead is because we use @noble/ciphers for stream
+encryption. We have tested that WASM-based cryptography provides a
+~50-100% speedup and plan to integrate it (with fallback to JS-based
+cryptography) in a later release.
 
 ### With Tunnel
 
