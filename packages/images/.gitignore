@@ -4,6 +4,7 @@ env.json
 mkosi.packages/
 mkosi.cache/
 mkosi.builddir/
+mkosi.tools/
 *.qcow2
 .claudesync/
 .claudeignore

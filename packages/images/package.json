@@ -1,12 +1,9 @@
 {
-	"name": "@teekit/images",
 	"private": true,
 	"type": "module",
 	"scripts": {
 		"build": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
-		"build:vm": "npm run build && scripts/env_wrapper.sh mkosi --profile=gcp -I tdx-dummy.conf",
-		"build:vm:incremental": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=gcp -I tdx-dummy.conf",
-		"build:vm:clean": "npm run build && scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf"
-	},
-	"version": "0.0.3"
+		"build:vm": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=gcp --profile=devtools -I tdx-dummy.conf",
+		"build:vm:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=gcp --profile=devtools -I tdx-dummy.conf"
+	}
 }
