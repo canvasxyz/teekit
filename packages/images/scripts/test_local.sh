@@ -1,19 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Test the built image locally with QEMU
+# Ensure at least 8GB swap
+required_kb=$((8 * 1024 * 1024))
+total_swap_kb=$(grep -i '^SwapTotal:' /proc/meminfo | awk '{print $2}')
+if (( total_swap_kb >= required_kb )); then
+    echo "OK: System has swap: ($((total_swap_kb / 1024 / 1024)) GB)."
+else
+    echo "Warning: System has $((total_swap_kb / 1024 / 1024)) GB swap, recommended 8GB for build."
+fi
+
+# Test the built image locally with QEMU, exposing serial console via Unix socket
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$IMAGES_DIR/build"
 
 IMAGE="$BUILD_DIR/tdx-debian.efi"
+SERIAL_SOCKET="/tmp/qemu-teekit-serial.sock"
 
 if [ ! -f "$IMAGE" ]; then
   echo "Error: Image not found at $IMAGE"
   echo "Please run 'npm run build:vm' first"
   exit 1
 fi
+
+# Remove old socket if it exists
+rm -f "$SERIAL_SOCKET"
 
 # Check if OVMF firmware is available
 OVMF_CODE="/usr/share/OVMF/OVMF_CODE.fd"
@@ -31,16 +44,22 @@ echo "Starting VM with image: $IMAGE"
 echo "Kettle service should be available on http://localhost:3001"
 echo "Dummy TDX DCAP on http://localhost:8080"
 echo ""
+echo "Serial console available at: $SERIAL_SOCKET"
+echo "Connect from another terminal with:"
+echo "  socat - UNIX-CONNECT:$SERIAL_SOCKET"
+echo ""
 echo "Press Ctrl+C to stop the VM"
 echo ""
 
 # Build QEMU command
 QEMU_CMD=(
   qemu-system-x86_64
-  -m 2G
+  -cpu host
+  -m 8G
+  -overcommit mem-lock=off
   -smp 2
   -nographic
-  -serial mon:stdio
+  -serial "unix:$SERIAL_SOCKET,server,nowait"
 )
 
 # Add EFI firmware if available
@@ -58,7 +77,7 @@ QEMU_CMD+=(
 
 # Port forwarding for services
 QEMU_CMD+=(
-  -netdev user,id=net0,hostfwd=tcp::3001-:3001,hostfwd=tcp::8080-:8080
+  -netdev user,id=net0,hostfwd=tcp::3001-:3001,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22
   -device virtio-net-pci,netdev=net0
 )
 
@@ -79,6 +98,8 @@ cleanup_vm() {
     wait "$QEMU_PID" 2>/dev/null || true
     QEMU_PID=""
   fi
+  # Clean up socket
+  rm -f "$SERIAL_SOCKET"
 }
 
 trap 'cleanup_vm INT; exit 130' INT

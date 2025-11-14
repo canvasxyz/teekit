@@ -1,12 +1,33 @@
 #!/bin/bash
 set -euxo pipefail
 
+# Create /var/lib/dpkg directory
+mkdir -p /var/lib/dpkg
+
+# Configure APT sources
+cat > "$BUILDROOT/etc/apt/sources.list" << 'EOF'
+deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
+EOF
+
 # Deterministically set root password
-PASSWORD="dqSPjo4p"
+PASSWORD="devtools"
 HASH=$(mkosi-chroot openssl passwd -6 -salt salt "$PASSWORD")
 mkosi-chroot passwd -u root
 mkosi-chroot usermod -p "$HASH" root
 
+# Generate SSH host keys (required for SSH daemon to start)
+echo "Generating SSH host keys..."
+mkosi-chroot ssh-keygen -A || {
+    # Fallback: generate keys manually if ssh-keygen fails
+    echo "ssh-keygen failed, generating keys manually..."
+    mkosi-chroot sh -c 'ssh-keygen -q -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N "" -C ""' || true
+    mkosi-chroot sh -c 'ssh-keygen -q -t ecdsa -b 256 -f /etc/ssh/ssh_host_ecdsa_key -N "" -C ""' || true
+    mkosi-chroot sh -c 'ssh-keygen -q -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N "" -C ""' || true
+}
+
+# Start SSH service
 if [ -f "$BUILDROOT/etc/default/dropbear" ]; then
     # Remove -s, -w, -g flags from dropbear args
     sed -i '/^DROPBEAR_EXTRA_ARGS=/s/-[swg] \?//g' "$BUILDROOT/etc/default/dropbear"
@@ -16,3 +37,27 @@ else
     mkosi-chroot systemctl enable ssh.service
     mkosi-chroot systemctl unmask ssh.service ssh.socket
 fi
+
+# Create direct shell service for serial console
+echo "Setting up serial console shell..."
+cat > "$BUILDROOT/etc/systemd/system/console-shell.service" << 'EOF'
+[Unit]
+Description=Direct Console Shell
+After=basic.target
+
+[Service]
+ExecStart=/bin/bash
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyS0
+Type=idle
+Restart=always
+
+[Install]
+WantedBy=minimal.target
+WantedBy=rescue.target
+WantedBy=emergency.target
+EOF
+
+mkosi-chroot systemctl enable console-shell.service
