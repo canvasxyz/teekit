@@ -5,13 +5,6 @@ set -euxo pipefail
 SERVICE_DIR="$BUILDROOT/etc/systemd/system"
 mkdir -p "$SERVICE_DIR"
 
-install -m 644 "tdx-dummy/kettle-launcher.service" "$SERVICE_DIR/"
-install -m 644 "tdx-dummy/kettle-log-dumper.service" "$SERVICE_DIR/"
-
-# Install log dumper script
-mkdir -p "$BUILDROOT/usr/local/bin"
-install -m 755 "tdx-dummy/dump-kettle-logs.sh" "$BUILDROOT/usr/local/bin/"
-
 # Create kettle database directory
 mkdir -p "$BUILDROOT/var/lib/kettle/db"
 
@@ -49,6 +42,6 @@ fi
 
 # Note: sqld (libsql server) is built and installed to /usr/bin/sqld during mkosi.build
 
-# Enable kettle-launcher and log dumper services
+# Create kettle-launcher service
+install -m 644 "tdx-dummy/kettle-launcher.service" "$SERVICE_DIR/"
 systemctl --root="$BUILDROOT" enable kettle-launcher.service
-systemctl --root="$BUILDROOT" enable kettle-log-dumper.service
