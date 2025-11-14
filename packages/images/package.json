@@ -2,6 +2,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"clean": "rm -rf build/* kettle-artifacts/* mkosi.cache/* mkosi.builddir/*",
 		"build": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
 		"build:vm": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=gcp --profile=devtools -I tdx-dummy.conf",
 		"build:vm:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=gcp --profile=devtools -I tdx-dummy.conf"
