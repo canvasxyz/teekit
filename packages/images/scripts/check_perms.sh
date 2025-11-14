@@ -22,7 +22,7 @@ check_perms() {
 
 err=0
 
-check_perms "base/mkosi.skeleton/init" "755" || err=1
+check_perms "base/mkosi.skeleton/init" "755" || chmod 755 base/mkosi.skeleton/init
 check_perms "base/mkosi.skeleton/etc" "755" || err=1
 check_perms "base/mkosi.skeleton/etc/resolv.conf" "644" || err=1
 
