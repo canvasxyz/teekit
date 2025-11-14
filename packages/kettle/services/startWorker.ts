@@ -191,6 +191,7 @@ export async function startWorker(
   const configText = `using Workerd = import "/workerd/workerd.capnp";
 
 const config :Workerd.Config = (
+  v8Flags = ["--abort-on-uncaught-exception"],
   services = [
     (
       name = "main",
@@ -310,8 +311,8 @@ const config :Workerd.Config = (
             esModule = embed "${EXTERNALS_JS}"
           ),
         ],
-        compatibilityDate = "2024-11-18",
-        compatibilityFlags = ["nodejs_compat"],
+        compatibilityDate = "2025-11-05",
+        compatibilityFlags = ["nodejs_compat", "new_module_registry"],
 
 
         bindings = [
@@ -389,6 +390,7 @@ const config :Workerd.Config = (
     workerdBin,
     [
       "serve",
+      "--experimental",
       tmpConfigPath,
       "--socket-addr",
       `http=0.0.0.0:${workerPort}`,
