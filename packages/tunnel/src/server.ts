@@ -218,7 +218,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   async #setupExpressHttpServer(): Promise<void> {
     try {
       const httpModule = await import("http")
-      this.server = httpModule.createServer(this.app as any) // TODO
+      this.server = httpModule.createServer(this.app as Express)
       if (this.server) {
         this.server.on("close", () => {
           if (this.heartbeatTimer) {
