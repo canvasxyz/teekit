@@ -8,11 +8,11 @@ support for nested virtualization (/dev/kvm).
 
 ## Usage
 
-1. Install make, qemu-utils, and nix:
+1. Install qemu-utils and nix:
 
    ```
    sudo apt update
-   sudo apt install -y make qemu-utils qemu-system-x86
+   sudo apt install -y qemu-utils qemu-system-x86
    NONINTERACTIVE=1 ./scripts/setup_deps.sh
    . ~/.nix-profile/etc/profile.d/nix.sh
    ```
@@ -49,7 +49,7 @@ support for nested virtualization (/dev/kvm).
 5. Export measurements:
 
    ```
-   make measure
+   scripts/env_wrapper.sh measured-boot build/tdx-debian.efi build/measurements.json --direct-uki
    ```
 
 ## Testing Locally
@@ -119,10 +119,6 @@ chmod +x "$BUILDROOT/usr/bin/myapp"
 
 # Set ownership (must use mkosi-chroot for user/group operations)
 mkosi-chroot chown root:root /home/myuser/config
-```
-
-# View all available targets
-make help
 ```
 
 ## Configuration Service
