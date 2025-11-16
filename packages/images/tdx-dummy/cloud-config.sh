@@ -15,6 +15,18 @@ mkdir -p "$CONFIG_DIR"
 
 # Detect cloud provider and run appropriate configuration script
 # Try to detect based on metadata service availability
+# Check local first (for QEMU/testing) to avoid false positives from cloud checks
+
+# Check for local metadata service (QEMU/testing)
+if timeout 2 curl -s -f http://10.0.2.2:8090/health > /dev/null 2>&1; then
+  echo "$LOG_PREFIX Detected local metadata service (QEMU)"
+  if [ -x /usr/lib/kettle/config_local ]; then
+    /usr/lib/kettle/config_local
+    exit 0
+  else
+    echo "$LOG_PREFIX Warning: config_local not found"
+  fi
+fi
 
 # Check for GCP metadata service
 if timeout 2 curl -s -f -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/ > /dev/null 2>&1; then
@@ -35,17 +47,6 @@ if timeout 2 curl -s -f -H "Metadata: true" http://169.254.169.254/metadata/inst
     exit 0
   else
     echo "$LOG_PREFIX Warning: config_azure not found"
-  fi
-fi
-
-# Check for local metadata service (QEMU/testing)
-if timeout 2 curl -s -f http://10.0.2.2:8090/manifest > /dev/null 2>&1; then
-  echo "$LOG_PREFIX Detected local metadata service (QEMU)"
-  if [ -x /usr/lib/kettle/config_local ]; then
-    /usr/lib/kettle/config_local
-    exit 0
-  else
-    echo "$LOG_PREFIX Warning: config_local not found"
   fi
 fi
 
