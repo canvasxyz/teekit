@@ -27,6 +27,20 @@ const PolyfilledCloseEvent = globalThis.CloseEvent
   ? CloseEvent
   : PolyfillCloseEvent
 
+// ErrorEvent may not be available
+class PolyfillErrorEvent extends Event {
+  message: string
+  error: any
+  constructor(type: string, options: any = {}) {
+    super(type)
+    this.message = options?.message ?? ""
+    this.error = options?.error ?? null
+  }
+}
+const PolyfilledErrorEvent = globalThis.ErrorEvent
+  ? ErrorEvent
+  : PolyfillErrorEvent
+
 export class ClientRAMockWebSocket extends EventTarget {
   public readonly CONNECTING = 0
   public readonly OPEN = 1
@@ -238,8 +252,9 @@ export class ClientRAMockWebSocket extends EventTarget {
   }
 
   private handleError(errorMessage: string): void {
-    const errorEvent = new Event("error")
-    ;(errorEvent as any).message = errorMessage // TODO
+    const errorEvent = new PolyfilledErrorEvent("error", {
+      message: errorMessage,
+    })
 
     this.dispatchEvent(errorEvent)
     if (this.onerror) {
