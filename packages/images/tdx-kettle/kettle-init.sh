@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# Kettle launcher wrapper that supports manifest from environment variable
-# This script is installed to /usr/bin/kettle-launcher-wrapper in the VM
+# Kettle launcher init script that supports manifest from environment variable
+# This script is installed to /usr/bin/kettle-init in the VM
 
-LOG_PREFIX="[kettle-launcher-wrapper]"
+LOG_PREFIX="[kettle-init]"
 
-echo "$LOG_PREFIX Starting kettle launcher wrapper..."
+echo "$LOG_PREFIX Starting kettle launcher init script..."
 
 # Check if MANIFEST environment variable is set
 if [ -n "${MANIFEST:-}" ]; then

@@ -9,7 +9,7 @@ User=root
 Group=root
 # Load cloud-specific environment variables (MANIFEST) if available
 EnvironmentFile=-/etc/kettle/cloud-config.env
-ExecStart=/usr/bin/kettle-launcher-wrapper
+ExecStart=/usr/bin/kettle-init
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/var/log/kettle.log

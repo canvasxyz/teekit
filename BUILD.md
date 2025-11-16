@@ -74,7 +74,7 @@ allow git to use the ~/mnt directory inside the tee-builder image.
 Now build in the container:
 
 ```
-make build IMAGE=tdx-dummy
+make build IMAGE=tdx-kettle
 ```
 
 Now you should have an image at `build/tdx-debian`.
@@ -134,7 +134,7 @@ Now, we'll make builds for GCP and Azure.
 To build an image for GCP:
 
 ```
-scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf
+scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-kettle.conf
 ```
 
 This creates an image at `build/tdx-debian.tar.gz` which contains a

@@ -40,10 +40,10 @@ support for nested virtualization (/dev/kvm).
    scripts/check_perms.sh
    scripts/setup_deps.sh
 
-   # If building tdx-dummy with kettle integration, bundle kettle first
+   # If building tdx-kettle with kettle integration, bundle kettle first
    scripts/bundle_kettle.sh
 
-   scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-dummy.conf
+   scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-kettle.conf
    ```
 
 5. Export measurements:
