@@ -1,0 +1,17 @@
+[Unit]
+Description=Cloud Configuration Service (Fetch Manifest from Metadata)
+After=network-setup.service
+Wants=network-setup.service
+Before=kettle-launcher.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/cloud-config
+RemainAfterExit=yes
+StandardOutput=append:/var/log/cloud-config.log
+StandardError=append:/var/log/cloud-config-error.log
+
+[Install]
+WantedBy=minimal.target

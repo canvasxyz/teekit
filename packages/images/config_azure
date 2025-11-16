@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+# Azure-specific cloud configuration script
+# This script runs on Azure VMs to fetch the manifest from instance metadata
+
+LOG_PREFIX="[config_azure]"
+CONFIG_DIR="/etc/kettle"
+ENV_FILE="$CONFIG_DIR/cloud-config.env"
+
+echo "$LOG_PREFIX Fetching manifest from Azure metadata service..."
+
+# Fetch manifest from Azure instance metadata
+# The manifest should be set as a custom tag named "manifest"
+TAGS_JSON=$(curl -s -f -H "Metadata: true" \
+  "http://169.254.169.254/metadata/instance/compute/tagsList?api-version=2021-02-01" || echo "[]")
+
+# Extract manifest value using Python (available in the VM)
+MANIFEST=$(python3 -c "
+import json, sys
+try:
+    tags = json.loads('$TAGS_JSON')
+    for tag in tags:
+        if tag.get('name') == 'manifest':
+            print(tag.get('value', ''))
+            break
+except:
+    pass
+" || echo "")
+
+if [ -z "$MANIFEST" ]; then
+  echo "$LOG_PREFIX ERROR: Failed to fetch manifest from Azure metadata"
+  echo "$LOG_PREFIX The VM must be created with a 'manifest' tag"
+  echo "$LOG_PREFIX Example: az vm create ... --tags manifest=\$(base64 -w0 manifest.json)"
+  exit 1
+fi
+
+echo "$LOG_PREFIX Successfully fetched manifest from Azure metadata"
+
+# Write environment file for kettle-launcher service
+echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
+
+echo "$LOG_PREFIX Configuration complete"

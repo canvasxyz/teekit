@@ -42,6 +42,23 @@ fi
 
 # Note: sqld (libsql server) is built and installed to /usr/bin/sqld during mkosi.build
 
-# Create kettle-launcher service
+# Install kettle launcher wrapper script
+install -m 755 "tdx-dummy/kettle-launcher-wrapper.sh" "$BUILDROOT/usr/bin/kettle-launcher-wrapper"
+
+# Install cloud config scripts
+KETTLE_LIB_DIR="$BUILDROOT/usr/lib/kettle"
+mkdir -p "$KETTLE_LIB_DIR"
+install -m 755 "images/config_gcp" "$KETTLE_LIB_DIR/"
+install -m 755 "images/config_azure" "$KETTLE_LIB_DIR/"
+install -m 755 "images/config_local" "$KETTLE_LIB_DIR/"
+
+# Install cloud config service wrapper
+install -m 755 "tdx-dummy/cloud-config.sh" "$BUILDROOT/usr/bin/cloud-config"
+
+# Install systemd services
+install -m 644 "tdx-dummy/cloud-config.service" "$SERVICE_DIR/"
 install -m 644 "tdx-dummy/kettle-launcher.service" "$SERVICE_DIR/"
+
+# Enable services
+systemctl --root="$BUILDROOT" enable cloud-config.service
 systemctl --root="$BUILDROOT" enable kettle-launcher.service

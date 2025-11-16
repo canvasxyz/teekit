@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure at least 8GB swap
-required_kb=$((8 * 1024 * 1024))
-total_swap_kb=$(grep -i '^SwapTotal:' /proc/meminfo | awk '{print $2}')
-if (( total_swap_kb >= required_kb )); then
-    echo "OK: System has swap: ($((total_swap_kb / 1024 / 1024)) GB)."
-else
-    echo "Warning: System has $((total_swap_kb / 1024 / 1024)) GB swap, recommended 8GB for build."
+# Ensure at least 8GB swap (Linux only)
+if [ -f /proc/meminfo ]; then
+    required_kb=$((8 * 1024 * 1024))
+    total_swap_kb=$(grep -i '^SwapTotal:' /proc/meminfo | awk '{print $2}')
+    if (( total_swap_kb >= required_kb )); then
+        echo "OK: System has swap: ($((total_swap_kb / 1024 / 1024)) GB)."
+    else
+        echo "Warning: System has $((total_swap_kb / 1024 / 1024)) GB swap, recommended 8GB for build."
+    fi
 fi
 
 # Test the built image locally with QEMU, exposing serial console via Unix socket
@@ -18,6 +20,7 @@ BUILD_DIR="$IMAGES_DIR/build"
 
 IMAGE="$BUILD_DIR/tdx-debian.efi"
 SERIAL_SOCKET="/tmp/qemu-teekit-serial.sock"
+METADATA_SERVICE_LOG="/tmp/qemu-teekit-metadata.log"
 
 if [ ! -f "$IMAGE" ]; then
   echo "Error: Image not found at $IMAGE"
@@ -27,6 +30,42 @@ fi
 
 # Remove old socket if it exists
 rm -f "$SERIAL_SOCKET"
+
+# Start local metadata service
+echo "Starting local metadata service..."
+METADATA_SERVICE_PID=""
+if [ -f "$SCRIPT_DIR/metadata-service.js" ]; then
+  # Try to use manifest from kettle-artifacts if available
+  MANIFEST_PATH=""
+  if [ -f "$IMAGES_DIR/kettle-artifacts/manifest.json" ]; then
+    MANIFEST_PATH="$IMAGES_DIR/kettle-artifacts/manifest.json"
+    echo "Using manifest from: $MANIFEST_PATH"
+  fi
+
+  if [ -n "$MANIFEST_PATH" ]; then
+    node "$SCRIPT_DIR/metadata-service.js" "$MANIFEST_PATH" > "$METADATA_SERVICE_LOG" 2>&1 &
+  else
+    node "$SCRIPT_DIR/metadata-service.js" > "$METADATA_SERVICE_LOG" 2>&1 &
+  fi
+  METADATA_SERVICE_PID=$!
+
+  # Give the service a moment to start
+  sleep 1
+
+  # Check if service is running
+  if kill -0 "$METADATA_SERVICE_PID" 2>/dev/null; then
+    echo "Metadata service started (PID: $METADATA_SERVICE_PID)"
+    echo "Metadata service log: $METADATA_SERVICE_LOG"
+    echo "Test with: curl http://localhost:8090/manifest/decoded"
+  else
+    echo "Warning: Failed to start metadata service"
+    cat "$METADATA_SERVICE_LOG" 2>/dev/null || true
+    METADATA_SERVICE_PID=""
+  fi
+else
+  echo "Warning: Metadata service script not found at $SCRIPT_DIR/metadata-service.js"
+fi
+echo ""
 
 # Check if OVMF firmware is available
 OVMF_CODE="/usr/share/OVMF/OVMF_CODE.fd"
@@ -43,6 +82,7 @@ fi
 echo "Starting VM with image: $IMAGE"
 echo "Kettle service should be available on http://localhost:3001"
 echo "Dummy TDX DCAP on http://localhost:8080"
+echo "Local metadata service on http://localhost:8090"
 echo ""
 echo "Serial console available at: $SERIAL_SOCKET"
 echo "Connect from another terminal with:"
@@ -97,6 +137,12 @@ cleanup_vm() {
     kill "-$signal" "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
     QEMU_PID=""
+  fi
+  # Stop metadata service
+  if [[ -n "$METADATA_SERVICE_PID" ]] && kill -0 "$METADATA_SERVICE_PID" 2>/dev/null; then
+    echo "Stopping metadata service..."
+    kill "$METADATA_SERVICE_PID" 2>/dev/null || true
+    wait "$METADATA_SERVICE_PID" 2>/dev/null || true
   fi
   # Clean up socket
   rm -f "$SERIAL_SOCKET"

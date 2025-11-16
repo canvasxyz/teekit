@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+
+# Local/QEMU-specific cloud configuration script
+# This script runs in QEMU VMs to fetch the manifest from the host metadata service
+
+LOG_PREFIX="[config_local]"
+CONFIG_DIR="/etc/kettle"
+ENV_FILE="$CONFIG_DIR/cloud-config.env"
+
+echo "$LOG_PREFIX Fetching manifest from local metadata service..."
+
+# Fetch manifest from local metadata service
+# The metadata service runs on the QEMU host at 10.0.2.2:8090
+MANIFEST=$(curl -s -f http://10.0.2.2:8090/manifest || echo "")
+
+if [ -z "$MANIFEST" ]; then
+  echo "$LOG_PREFIX ERROR: Failed to fetch manifest from local metadata service"
+  echo "$LOG_PREFIX Make sure the metadata service is running on the host at port 8090"
+  exit 1
+fi
+
+echo "$LOG_PREFIX Successfully fetched manifest from local metadata service"
+
+# Write environment file for kettle-launcher service
+echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
+
+echo "$LOG_PREFIX Configuration complete"

@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+
+# GCP-specific cloud configuration script
+# This script runs on GCP VMs to fetch the manifest from instance metadata
+
+LOG_PREFIX="[config_gcp]"
+CONFIG_DIR="/etc/kettle"
+ENV_FILE="$CONFIG_DIR/cloud-config.env"
+
+echo "$LOG_PREFIX Fetching manifest from GCP metadata service..."
+
+# Fetch manifest from GCP instance metadata
+# The manifest should be set as a custom metadata attribute named "manifest"
+MANIFEST=$(curl -s -f -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/manifest" || echo "")
+
+if [ -z "$MANIFEST" ]; then
+  echo "$LOG_PREFIX ERROR: Failed to fetch manifest from GCP metadata"
+  echo "$LOG_PREFIX The VM must be created with a 'manifest' metadata attribute"
+  echo "$LOG_PREFIX Example: gcloud compute instances create ... --metadata=manifest=\$(base64 -w0 manifest.json)"
+  exit 1
+fi
+
+echo "$LOG_PREFIX Successfully fetched manifest from GCP metadata"
+
+# Write environment file for kettle-launcher service
+echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
+
+echo "$LOG_PREFIX Configuration complete"

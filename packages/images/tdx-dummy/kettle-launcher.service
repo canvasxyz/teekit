@@ -1,13 +1,15 @@
 [Unit]
 Description=Kettle Application Launcher
-After=network-setup.service
-Wants=network-setup.service
+After=network-setup.service cloud-config.service
+Wants=network-setup.service cloud-config.service
 
 [Service]
 Type=exec
 User=root
 Group=root
-ExecStart=/usr/bin/kettle launch /usr/lib/kettle/manifest.json --port 3001 --db-dir /var/lib/kettle/db
+# Load cloud-specific environment variables (MANIFEST) if available
+EnvironmentFile=-/etc/kettle/cloud-config.env
+ExecStart=/usr/bin/kettle-launcher-wrapper
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/var/log/kettle.log
