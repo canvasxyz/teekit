@@ -4,7 +4,11 @@
 	"scripts": {
 		"clean": "rm -rf build/* kettle-artifacts/* mkosi.cache/* mkosi.builddir/*",
 		"build": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
-		"build:vm": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=gcp --profile=devtools -I tdx-dummy.conf",
-		"build:vm:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=gcp --profile=devtools -I tdx-dummy.conf"
+		"build:gcp": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=gcp -I tdx-dummy.conf",
+		"build:gcp:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=gcp -I tdx-dummy.conf",
+		"build:az": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=azure -I tdx-dummy.conf",
+		"build:az:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=azure -I tdx-dummy.conf",
+		"build:devtools": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=devtools -I tdx-dummy.conf",
+		"build:devtools:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=devtools -I tdx-dummy.conf"
 	}
 }
