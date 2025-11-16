@@ -22,7 +22,7 @@ export function parseBody(body: string, contentType?: string) {
 }
 
 export function sanitizeHeaders(
-  headers: any, // TODO
+  headers: Record<string, string | string[] | number | undefined>,
 ): Record<string, string | string[]> {
   const sanitized: Record<string, string | string[]> = {}
 
