@@ -48,9 +48,9 @@ install -m 755 "tdx-dummy/kettle-launcher-wrapper.sh" "$BUILDROOT/usr/bin/kettle
 # Install cloud config scripts
 KETTLE_LIB_DIR="$BUILDROOT/usr/lib/kettle"
 mkdir -p "$KETTLE_LIB_DIR"
-install -m 755 "images/config_gcp" "$KETTLE_LIB_DIR/"
-install -m 755 "images/config_azure" "$KETTLE_LIB_DIR/"
-install -m 755 "images/config_local" "$KETTLE_LIB_DIR/"
+install -m 755 "scripts/config_gcp" "$KETTLE_LIB_DIR/"
+install -m 755 "scripts/config_azure" "$KETTLE_LIB_DIR/"
+install -m 755 "scripts/config_local" "$KETTLE_LIB_DIR/"
 
 # Install cloud config service wrapper
 install -m 755 "tdx-dummy/cloud-config.sh" "$BUILDROOT/usr/bin/cloud-config"
