@@ -100,6 +100,7 @@ QEMU_CMD=(
   -smp 2
   -nographic
   -serial "unix:$SERIAL_SOCKET,server,nowait"
+  -monitor stdio
 )
 
 # Add EFI firmware if available
@@ -152,13 +153,7 @@ trap 'cleanup_vm INT; exit 130' INT
 trap 'cleanup_vm TERM' TERM
 trap 'cleanup_vm TERM' EXIT
 
-"${QEMU_CMD[@]}" &
-QEMU_PID=$!
-
-set +e
-wait "$QEMU_PID"
+"${QEMU_CMD[@]}"
 EXIT_CODE=$?
-set -e
 
-QEMU_PID=""
 exit "$EXIT_CODE"
