@@ -6,9 +6,9 @@ mkosi.builddir/
 mkosi.tools/
 
 env.json
+lima.yaml
 *.qcow2
 NvVars
 
 kettle-artifacts/
 cli.bundle.js
-

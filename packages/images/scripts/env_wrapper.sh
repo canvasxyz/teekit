@@ -15,6 +15,12 @@ should_use_lima() {
 
 # Setup Lima if needed
 setup_lima() {
+    # Regenerate lima.yaml with absolute path if template exists
+    if [ -f "lima.template.yaml" ]; then
+        images_dir="$(pwd)"
+        sed "s|ABSOLUTE_IMAGES_PATH|$images_dir|g" lima.template.yaml > lima.yaml
+    fi
+
     # Check if Lima is installed
     if ! command -v limactl &>/dev/null; then
         echo -e "Lima is not installed. Please install Lima to use this script."

@@ -19,7 +19,7 @@ containerd:
   user: false
 mountTypesUnsupported: [9p]
 mounts:
-  - location: "." # cwd of `limactl start` command
+  - location: ABSOLUTE_IMAGES_PATH
     mountPoint: /home/debian/mnt
     writable: true
 ssh:
