@@ -58,6 +58,7 @@
             which
             qemu-utils
             parted
+            kmod
           ]
           ++ [reprepro];
       };
@@ -69,7 +70,7 @@
           --map-auto --map-current-user \
           --setuid=0 --setgid=0 \
           -- \
-          env PATH="${mkosi-unwrapped}/bin:$PATH" \
+          env PATH="${mkosi-unwrapped}/bin:${pkgsForSystem.kmod}/bin:$PATH" \
           ${mkosi-unwrapped}/bin/mkosi "$@"
       '';
   in {

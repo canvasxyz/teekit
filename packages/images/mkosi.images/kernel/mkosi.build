@@ -4,7 +4,7 @@ set -euo pipefail
 # Configuration
 KERNEL_VERSION="6.13.12"
 KERNEL_REPO="https://github.com/gregkh/linux"
-BASE_CONFIG="$SRCDIR/kernel/kernel-yocto.config"
+BASE_CONFIG="$SRCDIR/mkosi.images/kernel/kernel-yocto.config"
 
 echo "Building kernel $KERNEL_VERSION with snippets: ${KERNEL_CONFIG_SNIPPETS:-none}"
 

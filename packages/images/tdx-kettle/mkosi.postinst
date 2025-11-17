@@ -40,7 +40,7 @@ if [ -f "$BUILDROOT/usr/lib/node_modules/esbuild/bin/esbuild" ]; then
     ln -sf /usr/lib/node_modules/esbuild/bin/esbuild "$BUILDROOT/usr/local/bin/esbuild"
 fi
 
-# Note: sqld (libsql server) is built and installed to /usr/bin/sqld during mkosi.build
+# Note: sqld (libsql server) is built in sqld stage and included via BaseTrees
 
 # Install kettle launcher wrapper script
 install -m 755 "tdx-kettle/kettle-init.sh" "$BUILDROOT/usr/bin/kettle-init"

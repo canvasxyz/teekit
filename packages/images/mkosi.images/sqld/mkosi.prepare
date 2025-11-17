@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+# Create os-release file required by mkosi
+mkdir -p "$BUILDROOT/usr/lib"
+cat > "$BUILDROOT/usr/lib/os-release" <<EOF
+PRETTY_NAME="Debian GNU/Linux trixie/sid"
+NAME="Debian GNU/Linux"
+VERSION_CODENAME=trixie
+ID=debian
+EOF
+
+# Create /boot directory for kernel-install
+mkdir -p "$BUILDROOT/boot"

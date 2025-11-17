@@ -1,10 +1,7 @@
 #!/bin/bash
 set -euxo pipefail
 
-source scripts/make_git_package.sh
-
-# Build sqld (libsql server) - required for kettle
-make_git_package "libsql" "libsql-server-v0.24.30" "https://github.com/tursodatabase/libsql" 'cargo build --release --bin sqld --manifest-path libsql-server/Cargo.toml' "target/release/sqld:/usr/bin/sqld"
+# Note: sqld is built separately in the sqld stage and included via BaseTrees
 
 # Use pre-built kettle CLI bundle and generate manifest/app
 # SRCDIR points to packages/images in the mkosi build environment

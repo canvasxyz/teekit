@@ -6,6 +6,15 @@ based on Debian 16 and [flashbots-images](https://github.com/flashbots/flashbots
 Requirements: A Linux VM with systemd v250 or greater, e.g. Ubuntu 24.04, with
 support for nested virtualization (/dev/kvm).
 
+The build uses a multi-stage mkosi pipeline to optimize caching and separate build-time dependencies from the final image:
+
+- Kernel (`kernel/`): Outputs compiled kernel at `/usr/lib/modules/$KERNEL_VERSION/vmlinuz`
+- Base System (`base/`): Minimal Debian runtime environment (systemd, busybox, kmod, etc.)
+- Build Tools (`build-tools/`): Used only during build, not in final image
+- sqld: (`sqld/`): Builds the libsql server binary, depends on build-tools stage
+- TDX Kettle (`tdx-kettle/`): Includes kettle artifacts, services, and configuration
+  - Depends on base (for runtime) and sqld (for binary)
+
 ## Usage
 
 1. Install make, qemu-utils, and nix:

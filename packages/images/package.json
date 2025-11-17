@@ -3,12 +3,18 @@
 	"type": "module",
 	"scripts": {
 		"clean": "rm -rf build/* kettle-artifacts/* mkosi.cache/* mkosi.builddir/*",
+		"clean:lima": "ssh -F \"$HOME/.lima/tee-builder/ssh.config\" \"lima-tee-builder\" -t -o LogLevel=QUIET -- \"cd ~/mnt && /home/debian/.nix-profile/bin/nix flake update && /home/debian/.nix-profile/bin/nix-collect-garbage -d && echo 'Nix environment cleaned and updated successfully'\"",
+		"reset:lima": "limactl stop tee-builder && limactl delete tee-builder",
 		"build": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
+		"build:vm": "npm run build && scripts/env_wrapper.sh mkosi -i -I tdx-kettle.conf",
+		"build:vm:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force -I tdx-kettle.conf",
 		"build:gcp": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=gcp -I tdx-kettle.conf",
 		"build:gcp:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=gcp -I tdx-kettle.conf",
 		"build:az": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=azure -I tdx-kettle.conf",
 		"build:az:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=azure -I tdx-kettle.conf",
 		"build:devtools": "npm run build && scripts/env_wrapper.sh mkosi -i --profile=devtools -I tdx-kettle.conf",
-		"build:devtools:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=devtools -I tdx-kettle.conf"
+		"build:devtools:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force --profile=devtools -I tdx-kettle.conf",
+		"build:all": "npm run build && scripts/env_wrapper.sh mkosi -i -I tdx-kettle.conf && scripts/env_wrapper.sh mkosi -i --profile=gcp -I tdx-kettle.conf && scripts/env_wrapper.sh mkosi -i --profile=azure -I tdx-kettle.conf",
+		"build:all:clean": "npm run build && scripts/env_wrapper.sh mkosi -i --force --force -I tdx-kettle.conf && scripts/env_wrapper.sh mkosi -i --force --force --profile=gcp -I tdx-kettle.conf && scripts/env_wrapper.sh mkosi -i --force --force --profile=azure -I tdx-kettle.conf"
 	}
 }
