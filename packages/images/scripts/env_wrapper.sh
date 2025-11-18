@@ -15,6 +15,18 @@ should_use_lima() {
 
 # Setup Lima if needed
 setup_lima() {
+    # Check KVM availability on Linux
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        if [ ! -e /dev/kvm ]; then
+            echo -e "\033[1;33m⚠ WARNING: /dev/kvm not found. KVM acceleration unavailable.\033[0m"
+            echo -e "\033[1;33m  VM performance will be significantly degraded.\033[0m"
+        elif [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            echo -e "\033[1;33m⚠ WARNING: No permission to access /dev/kvm.\033[0m"
+            echo -e "\033[1;33m  Add your user to the kvm group: sudo usermod -aG kvm \$USER\033[0m"
+            echo -e "\033[1;33m  Then log out and log back in, or run: sg kvm -c 'your-command'\033[0m"
+        fi
+    fi
+
     # Regenerate lima.yaml with absolute path if template exists
     if [ -f "lima.template.yaml" ]; then
         images_dir="$(pwd)"
