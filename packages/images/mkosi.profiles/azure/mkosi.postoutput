@@ -16,8 +16,8 @@ echo "Converting $EFI_FILE to VHD format..."
 # Create working directory
 mkdir -p "$WORK_DIR"
 
-# Create ESP filesystem image (500MB should be plenty)
-ESP_SIZE_MB=500
+# Create ESP filesystem image (1024MB minimum)
+ESP_SIZE_MB=1024
 ESP_IMAGE="$WORK_DIR/esp.img"
 
 # Create empty ESP image and format it as FAT32
@@ -47,9 +47,232 @@ parted "$DISK_IMAGE" --script -- \
 # Skip first 1MB (2048 sectors) to account for GPT header
 dd if="$ESP_IMAGE" of="$DISK_IMAGE" bs=512 seek=2048 conv=notrunc
 
-# Convert to VHD
-truncate -s %1MiB "$DISK_IMAGE"
-qemu-img convert -O vpc -o subformat=fixed,force_size "$DISK_IMAGE" "$VHD_FILE"
+# Azure requirements:
+# 1. Virtual size must be whole MiB (1,048,576 bytes) - Azure calls this "MB" but means MiB
+# 2. Virtual size must be divisible by 512 (page blob alignment)
+# 3. Virtual size must equal (File size - 512)
+# 4. VHD must have proper footer structure
+#
+# Since 1 MiB = 1,048,576 = 2048 × 512, requirement #2 is automatically satisfied
+# qemu-img rounds virtual size to cylinder boundaries, which breaks these requirements
+# So we'll create the VHD footer manually
+
+CURRENT_SIZE=$(stat -c%s "$DISK_IMAGE")
+MiB=$((1024 * 1024))
+
+# Round raw disk up to nearest MiB
+VIRTUAL_SIZE_MiB=$(( ((CURRENT_SIZE + MiB - 1) / MiB) ))
+VIRTUAL_SIZE=$((VIRTUAL_SIZE_MiB * MiB))
+truncate -s "$VIRTUAL_SIZE" "$DISK_IMAGE"
+
+echo "Raw disk (virtual size): $VIRTUAL_SIZE bytes ($VIRTUAL_SIZE_MiB MiB)"
+
+# Create VHD by appending a manually-crafted 512-byte footer to the raw disk
+# We copy the raw disk to the VHD file, then append the footer
+cp "$DISK_IMAGE" "$VHD_FILE"
+
+echo "Creating VHD footer manually..."
+python3 << EOF
+import struct
+import uuid
+import time
+
+vhd_path = "$VHD_FILE"
+virtual_size = $VIRTUAL_SIZE
+
+# Calculate CHS geometry (using standard VHD algorithm)
+total_sectors = virtual_size // 512
+if total_sectors > 65535 * 16 * 255:
+    total_sectors = 65535 * 16 * 255
+
+if total_sectors >= 65535 * 16 * 63:
+    sectors_per_track = 255
+    heads = 16
+    cylinder_times_heads = total_sectors // sectors_per_track
+else:
+    sectors_per_track = 17
+    cylinder_times_heads = total_sectors // sectors_per_track
+    heads = (cylinder_times_heads + 1023) // 1024
+    if heads < 4:
+        heads = 4
+    if cylinder_times_heads >= (heads * 1024) or heads > 16:
+        sectors_per_track = 31
+        heads = 16
+        cylinder_times_heads = total_sectors // sectors_per_track
+    if cylinder_times_heads >= (heads * 1024):
+        sectors_per_track = 63
+        heads = 16
+        cylinder_times_heads = total_sectors // sectors_per_track
+
+cylinders = cylinder_times_heads // heads
+
+# Build the 512-byte footer
+footer = bytearray(512)
+
+# Cookie (offset 0): "conectix"
+footer[0:8] = b'conectix'
+
+# Features (offset 8): 0x00000002 (reserved)
+struct.pack_into('>I', footer, 8, 0x00000002)
+
+# File Format Version (offset 12): 0x00010000
+struct.pack_into('>I', footer, 12, 0x00010000)
+
+# Data Offset (offset 16): 0xFFFFFFFFFFFFFFFF for fixed disk
+struct.pack_into('>Q', footer, 16, 0xFFFFFFFFFFFFFFFF)
+
+# Timestamp (offset 24): seconds since 2000-01-01 00:00:00 UTC
+epoch_2000 = 946684800  # Unix timestamp for 2000-01-01
+current_time = int(time.time())
+vhd_timestamp = current_time - epoch_2000
+struct.pack_into('>I', footer, 24, vhd_timestamp)
+
+# Creator Application (offset 28): "qemu" (pretend to be qemu)
+footer[28:32] = b'qemu'
+
+# Creator Version (offset 32): 0x00060100 (qemu 6.1)
+struct.pack_into('>I', footer, 32, 0x00060100)
+
+# Creator Host OS (offset 36): 0x5769326B ("Wi2k" - Windows)
+footer[36:40] = b'Wi2k'
+
+# Original Size (offset 40): same as current size
+struct.pack_into('>Q', footer, 40, virtual_size)
+
+# Current Size (offset 48): the virtual disk size
+struct.pack_into('>Q', footer, 48, virtual_size)
+
+# Disk Geometry (offset 56): C/H/S
+struct.pack_into('>H', footer, 56, cylinders)
+footer[58] = heads
+footer[59] = sectors_per_track
+
+# Disk Type (offset 60): 0x00000002 (fixed hard disk)
+struct.pack_into('>I', footer, 60, 0x00000002)
+
+# Unique ID (offset 68): random UUID
+footer[68:84] = uuid.uuid4().bytes
+
+# Saved State (offset 84): 0x00 (not in saved state)
+footer[84] = 0x00
+
+# Reserved (offset 85-511): zeros (already initialized)
+
+# Checksum (offset 64): one's complement of sum of all bytes (with checksum field = 0)
+# IMPORTANT: Calculate this LAST after all other fields are set
+struct.pack_into('>I', footer, 64, 0)  # Zero it first
+# Calculate checksum as one's complement
+footer_sum = 0
+for byte in footer:
+    footer_sum = (footer_sum + byte) & 0xFFFFFFFF
+checksum = (~footer_sum) & 0xFFFFFFFF
+struct.pack_into('>I', footer, 64, checksum)
+
+# Append footer to VHD file
+with open(vhd_path, 'ab') as f:
+    f.write(footer)
+
+print(f"Created VHD footer:")
+print(f"  Virtual size: {virtual_size} bytes ({virtual_size // 1048576} MiB)")
+print(f"  Geometry: C={cylinders} H={heads} S={sectors_per_track}")
+print(f"  Checksum: 0x{checksum:08x}")
+EOF
+
+VHD_SIZE=$(stat -c%s "$VHD_FILE")
+echo "VHD created: $VHD_SIZE bytes"
+
+# Verify Azure requirements
+echo ""
+echo "Verifying VHD meets Azure requirements..."
+python3 << EOF
+import struct
+
+vhd_path = "$VHD_FILE"
+expected_virtual = $VIRTUAL_SIZE
+expected_file = $VHD_SIZE
+
+with open(vhd_path, 'rb') as f:
+    # Read footer
+    f.seek(-512, 2)
+    footer = f.read(512)
+
+    # Check cookie
+    cookie = footer[0:8]
+    if cookie != b'conectix':
+        print(f"  ✗ ERROR: Invalid cookie: {cookie}")
+        exit(1)
+    print(f"  ✓ Cookie: 'conectix'")
+
+    # Check virtual size
+    current_size = struct.unpack('>Q', footer[48:56])[0]
+    if current_size != expected_virtual:
+        print(f"  ✗ ERROR: Virtual size mismatch: {current_size} != {expected_virtual}")
+        exit(1)
+    print(f"  ✓ Virtual size: {current_size} bytes ({current_size // 1048576} MiB)")
+
+    # Check if whole MiB (Azure requirement - they call it "MB" but mean MiB)
+    if current_size % 1048576 != 0:
+        print(f"  ✗ ERROR: Virtual size not whole MiB: {current_size % 1048576} remainder")
+        exit(1)
+    print(f"  ✓ Virtual size is whole MiB (what Azure calls 'MB')")
+
+    # Check if divisible by 512 (Azure page blob requirement - automatically satisfied by MiB)
+    if current_size % 512 != 0:
+        print(f"  ✗ ERROR: Virtual size not divisible by 512: {current_size % 512} remainder")
+        exit(1)
+    print(f"  ✓ Virtual size is divisible by 512 (page blob aligned)")
+
+    # Check file size
+    f.seek(0, 2)
+    file_size = f.tell()
+    if file_size != expected_file:
+        print(f"  ✗ ERROR: File size mismatch: {file_size} != {expected_file}")
+        exit(1)
+    print(f"  ✓ File size: {file_size} bytes")
+
+    # Check if file size is divisible by 512 (Azure page blob requirement)
+    if file_size % 512 != 0:
+        print(f"  ✗ ERROR: File size not divisible by 512: {file_size % 512} remainder")
+        exit(1)
+    print(f"  ✓ File size is divisible by 512 (page blob aligned)")
+
+    # Check formula
+    if file_size != current_size + 512:
+        print(f"  ✗ ERROR: File size != Virtual + 512 ({file_size} != {current_size + 512})")
+        exit(1)
+    print(f"  ✓ File size = Virtual size + 512")
+
+    # Verify checksum
+    checksum_in_footer = struct.unpack('>I', footer[64:68])[0]
+    # To verify: zero out the checksum field and recalculate
+    footer_for_check = bytearray(footer)
+    struct.pack_into('>I', footer_for_check, 64, 0)
+    # Calculate sum the same way we did when creating
+    footer_sum = 0
+    for byte in footer_for_check:
+        footer_sum = (footer_sum + byte) & 0xFFFFFFFF
+    calculated_checksum = (~footer_sum) & 0xFFFFFFFF
+
+    if checksum_in_footer != calculated_checksum:
+        print(f"  ✗ ERROR: Checksum mismatch: 0x{checksum_in_footer:08x} != 0x{calculated_checksum:08x}")
+        exit(1)
+    print(f"  ✓ Checksum valid: 0x{checksum_in_footer:08x}")
+
+print("")
+print("✓ VHD meets all Azure requirements!")
+EOF
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "ERROR: VHD verification failed"
+    exit 1
+fi
+
+echo ""
+echo "VHD Summary:"
+echo "  File: $VHD_FILE"
+echo "  Virtual size: $VIRTUAL_SIZE bytes ($VIRTUAL_SIZE_MiB MiB)"
+echo "  File size: $VHD_SIZE bytes"
 
 # Clean up
 rm -rf "$WORK_DIR"
