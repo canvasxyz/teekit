@@ -61,6 +61,21 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
    make measure
    ```
 
+## Build Artifacts
+
+After building, artifacts are located in the `build/` directory:
+
+```
+build/
+├── tdx-debian.efi           # Base UKI image (no profile)
+├── tdx-debian.tar.gz         # GCP disk image (gcp profile)
+├── tdx-debian-azure.efi      # Azure UKI image (azure profile)
+├── tdx-debian-azure.vhd      # Azure VHD image (azure profile)
+└── tdx-debian-devtools.efi   # Development UKI image (devtools profile)
+```
+
+The different ImageId values ensure that building multiple profiles (via `npm run build:all`) won't overwrite each other's EFI artifacts.
+
 ## Testing Locally
 
 After building the image, you can test it locally with QEMU:
