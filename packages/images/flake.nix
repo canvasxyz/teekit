@@ -69,7 +69,7 @@
           --map-auto --map-current-user \
           --setuid=0 --setgid=0 \
           -- \
-          env PATH="$PATH" \
+          env PATH="${mkosi-unwrapped}/bin:$PATH" \
           ${mkosi-unwrapped}/bin/mkosi "$@"
       '';
   in {
