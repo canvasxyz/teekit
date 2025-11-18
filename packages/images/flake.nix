@@ -79,6 +79,10 @@
         nativeBuildInputs = [(mkosi system) measured-boot];
         shellHook = ''
           mkdir -p mkosi.packages mkosi.cache mkosi.builddir ~/.cache/mkosi
+          # Ensure mkosi.tools/nix symlink exists if mkosi.tools was generated
+          if [ -d mkosi.tools ] && [ ! -e mkosi.tools/nix ]; then
+            ln -sf /nix mkosi.tools/nix
+          fi
         '';
       };
     }) ["x86_64-linux" "aarch64-linux"]);

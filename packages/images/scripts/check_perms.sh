@@ -31,3 +31,11 @@ if [ $err -eq 1 ]; then
     echo "Please run umask 0022 and re-clone the repository."
     exit 1
 fi
+
+# Ensure mkosi.tools/nix symlink exists for nix store access in sandbox
+if [ -d "mkosi.tools" ]; then
+    if [ ! -e "mkosi.tools/nix" ]; then
+        echo "Creating mkosi.tools/nix symlink for sandbox nix store access..."
+        ln -sf /nix mkosi.tools/nix
+    fi
+fi
