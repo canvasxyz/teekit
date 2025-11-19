@@ -22,6 +22,26 @@ fi
 
 echo "$LOG_PREFIX Successfully fetched manifest from local metadata service"
 
+# Print the manifest(s) to the log
+if [[ "$MANIFEST" == *","* ]]; then
+  IFS=',' read -ra MANIFEST_ARRAY <<< "$MANIFEST"
+  for i in "${!MANIFEST_ARRAY[@]}"; do
+    if echo "${MANIFEST_ARRAY[$i]}" | base64 -d &>/dev/null; then
+      echo "$LOG_PREFIX Manifest $i (decoded):"
+      echo "${MANIFEST_ARRAY[$i]}" | base64 -d | sed 's/^/  /'
+    else
+      echo "$LOG_PREFIX Manifest $i does not appear to be base64-encoded"
+    fi
+  done
+else
+  if echo "$MANIFEST" | base64 -d &>/dev/null; then
+    echo "$LOG_PREFIX Manifest (decoded):"
+    echo "$MANIFEST" | base64 -d | sed 's/^/  /'
+  else
+    echo "$LOG_PREFIX Manifest does not appear to be base64-encoded"
+  fi
+fi
+
 # Write environment file for kettle-launcher service
 echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
 

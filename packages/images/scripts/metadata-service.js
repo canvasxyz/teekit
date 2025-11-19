@@ -2,7 +2,8 @@
 
 /**
  * Local metadata service for QEMU testing
- * This service mimics cloud metadata services and provides the manifest to the VM
+ * This service mimics cloud metadata services and provides manifests to the VM
+ * Supports multiple manifests as comma-separated base64 strings
  */
 
 import http from 'http';
@@ -21,23 +22,37 @@ const DEFAULT_MANIFEST = {
   sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 };
 
-// Try to load manifest from file if provided as argument
-let manifest = DEFAULT_MANIFEST;
-const manifestPath = process.argv[2];
+// Try to load manifests from files if provided as arguments
+// Usage: node metadata-service.js [manifest1.json] [manifest2.json] ...
+let manifests = [DEFAULT_MANIFEST];
+const manifestPaths = process.argv.slice(2);
 
-if (manifestPath) {
-  try {
-    const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
-    manifest = JSON.parse(manifestContent);
-    console.log(`[metadata-service] Loaded manifest from ${manifestPath}`);
-  } catch (err) {
-    console.error(`[metadata-service] Warning: Failed to load manifest from ${manifestPath}: ${err.message}`);
-    console.log('[metadata-service] Using default manifest');
+if (manifestPaths.length > 0) {
+  manifests = [];
+  for (const manifestPath of manifestPaths) {
+    try {
+      const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+      const manifest = JSON.parse(manifestContent);
+      manifests.push(manifest);
+      console.log(`[metadata-service] Loaded manifest from ${manifestPath}`);
+    } catch (err) {
+      console.error(`[metadata-service] Warning: Failed to load manifest from ${manifestPath}: ${err.message}`);
+      console.log('[metadata-service] Skipping this manifest');
+    }
+  }
+
+  if (manifests.length === 0) {
+    console.log('[metadata-service] No manifests loaded, using default manifest');
+    manifests = [DEFAULT_MANIFEST];
   }
 }
 
-// Encode manifest as base64
-const manifestBase64 = Buffer.from(JSON.stringify(manifest)).toString('base64');
+// Encode manifests as base64
+// If single manifest, return single base64 string
+// If multiple manifests, return comma-separated base64 strings
+const manifestBase64 = manifests.length === 1
+  ? Buffer.from(JSON.stringify(manifests[0])).toString('base64')
+  : manifests.map(m => Buffer.from(JSON.stringify(m)).toString('base64')).join(',');
 
 const server = http.createServer((req, res) => {
   const now = new Date().toISOString();
@@ -55,15 +70,14 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.url === '/manifest' && req.method === 'GET') {
-    // Return base64-encoded manifest
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end(manifestBase64);
-    console.log(`[metadata-service] Served manifest (${manifestBase64.length} bytes, base64)`);
+    console.log(`[metadata-service] Served manifest config (${manifestBase64.length} bytes)`);
   } else if (req.url === '/manifest/decoded' && req.method === 'GET') {
-    // Return decoded manifest for debugging
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(manifest, null, 2));
-    console.log('[metadata-service] Served decoded manifest (debug endpoint)');
+    const decoded = manifests.length === 1 ? manifests[0] : manifests;
+    res.end(JSON.stringify(decoded, null, 2));
+    console.log('[metadata-service] Served decoded manifest config');
   } else if (req.url === '/health' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
@@ -76,14 +90,17 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`[metadata-service] Local metadata service listening on http://${HOST}:${PORT}`);
   console.log('[metadata-service] Endpoints:');
-  console.log('[metadata-service]   GET /manifest         - Returns base64-encoded manifest');
-  console.log('[metadata-service]   GET /manifest/decoded - Returns decoded manifest (debug)');
+  console.log('[metadata-service]   GET /manifest         - Returns base64-encoded manifest(s)');
+  console.log('[metadata-service]   GET /manifest/decoded - Returns decoded manifest(s) (debug)');
   console.log('[metadata-service]   GET /health           - Health check');
   console.log('[metadata-service]');
-  console.log('[metadata-service] Manifest:');
-  console.log(JSON.stringify(manifest, null, 2));
+  console.log(`[metadata-service] Loaded ${manifests.length} manifest(s):`);
+  for (let i = 0; i < manifests.length; i++) {
+    console.log(`[metadata-service] Manifest ${i}:`);
+    console.log(JSON.stringify(manifests[i], null, 2).split('\n').map(line => `  ${line}`).join('\n'));
+  }
   console.log('[metadata-service]');
-  console.log('[metadata-service] Base64-encoded manifest:');
+  console.log(`[metadata-service] Manifest config:`);
   console.log(manifestBase64);
 });
 
