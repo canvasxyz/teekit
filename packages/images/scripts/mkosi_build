@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# Shorthand script for mkosi build commands.
+#
+# Supports --force which expands into --force --force (since our builds are all incremental).
+# Supports any list of profiles passed afterwards.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$IMAGES_DIR"
+
+echo "Running 'npm run build'..."
+npm run build
+
+force_args=()
+profiles=()
+
+while (( "$#" )); do
+  case "$1" in
+    --force|--clean)
+      force_args=(--force --force)
+      shift
+      ;;
+    *)
+      profiles+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ ${#profiles[@]} -eq 0 ]; then
+  echo "Building default mkosi image (no profile)..."
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i "${force_args[@]}" -I tdx-kettle.conf
+  exit 0
+fi
+
+# Build profile flags for a single mkosi invocation
+profile_args=()
+profile_names=()
+
+for profile in "${profiles[@]}"; do
+  if [ "$profile" != "default" ]; then
+    profile_args+=(--profile="$profile")
+    profile_names+=("$profile")
+  fi
+done
+
+if [ ${#profile_names[@]} -eq 0 ]; then
+  echo "Building default mkosi image (no profile)..."
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i "${force_args[@]}" -I tdx-kettle.conf
+else
+  echo "Building mkosi image with profiles: ${profile_names[*]}"
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i "${force_args[@]}" "${profile_args[@]}" -I tdx-kettle.conf
+fi
