@@ -5,6 +5,7 @@ import * as chalk from "colorette"
 
 export interface BuildManifestArgs {
   file: string
+  path?: string
 }
 
 export async function buildManifestCommand(argv: BuildManifestArgs) {
@@ -12,6 +13,12 @@ export async function buildManifestCommand(argv: BuildManifestArgs) {
   if (!filename) {
     console.error(
       chalk.red("[kettle] Error: Please provide a filename or relative path"),
+    )
+    process.exit(1)
+  }
+  if (argv.path && !argv.path.startsWith('/')) {
+    console.error(
+      chalk.red("[kettle] Error: Only absolute paths are accepted for --path overrides"),
     )
     process.exit(1)
   }
@@ -27,7 +34,7 @@ export async function buildManifestCommand(argv: BuildManifestArgs) {
 
   // Generate manifest file
   const manifest = {
-    app: `file://${appPath}`,
+    app: `file://${argv.path || appPath}`,
     sha256: sha256Hash,
   }
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8")

@@ -29,11 +29,16 @@ async function main() {
       "publish-local <file>",
       "Generate an app manifest, using a file:/// url",
       (yargs: Argv) => {
-        return yargs.positional("file", {
-          describe: "Path to the app source file (relative to package root)",
-          type: "string",
-          demandOption: true,
-        })
+        return yargs
+          .positional("file", {
+            describe: "Path to the app source file (relative to package root)",
+            type: "string",
+            demandOption: true,
+          })
+          .option("path", {
+            type: "string",
+            description: "Custom path to use in manifest (overrides default file:/// path)",
+          })
       },
       buildManifestCommand,
     )
