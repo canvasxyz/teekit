@@ -1,0 +1,9 @@
+packages/images
+packages/images-*
+packages/seal
+
+*.efi
+*.vhd
+*.tar.gz
+
+node_modules/*
