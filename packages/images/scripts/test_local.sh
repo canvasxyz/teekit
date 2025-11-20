@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Parse arguments
+USE_DEVTOOLS=false
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --devtools)
+      USE_DEVTOOLS=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--devtools]"
+      exit 1
+      ;;
+  esac
+done
+
 # Ensure at least 8GB swap (Linux only)
 if [ -f /proc/meminfo ]; then
     required_kb=$((8 * 1024 * 1024))
@@ -18,9 +34,34 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$IMAGES_DIR/build"
 
-IMAGE="$BUILD_DIR/tdx-debian.efi"
+# Select image based on devtools flag
+if [ "$USE_DEVTOOLS" = true ]; then
+  # Check for tdx-debian-devtools.efi, fall back to tdx-debian-azure.efi if not found
+  if [ -f "$BUILD_DIR/tdx-debian-devtools.efi" ]; then
+    IMAGE_NAME="tdx-debian-devtools.efi"
+  elif [ -f "$BUILD_DIR/tdx-debian-azure.efi" ]; then
+    IMAGE_NAME="tdx-debian-azure.efi"
+    echo "Note: Using tdx-debian-azure.efi (tdx-debian-devtools.efi not found)"
+  else
+    IMAGE_NAME="tdx-debian-devtools.efi"  # Set to default for error message
+  fi
+else
+  # Check for tdx-debian.efi, fall back to tdx-debian-azure.efi if not found
+  if [ -f "$BUILD_DIR/tdx-debian.efi" ]; then
+    IMAGE_NAME="tdx-debian.efi"
+  elif [ -f "$BUILD_DIR/tdx-debian-azure.efi" ]; then
+    IMAGE_NAME="tdx-debian-azure.efi"
+    echo "Note: Using tdx-debian-azure.efi (tdx-debian.efi not found)"
+  else
+    IMAGE_NAME="tdx-debian.efi"  # Set to default for error message
+  fi
+fi
+
+IMAGE="$BUILD_DIR/$IMAGE_NAME"
 SERIAL_SOCKET="/tmp/qemu-teekit-serial.sock"
 METADATA_SERVICE_LOG="/tmp/qemu-teekit-metadata.log"
+
+echo "Using image: $IMAGE_NAME"
 
 if [ ! -f "$IMAGE" ]; then
   echo "Error: Image not found at $IMAGE"
@@ -79,7 +120,6 @@ if [ ! -f "$OVMF_CODE" ]; then
   fi
 fi
 
-echo "Starting VM with image: $IMAGE"
 echo "Kettle service should be available on http://localhost:3001"
 echo "Dummy TDX DCAP on http://localhost:8080"
 echo "Local metadata service on http://localhost:8090"
