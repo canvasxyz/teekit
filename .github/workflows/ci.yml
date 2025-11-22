@@ -9,6 +9,7 @@ jobs:
   qvl-tests:
     name: QVL tests
     runs-on: ubuntu-latest
+    if: github.event.repository.private == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +37,7 @@ jobs:
   tunnel-tests:
     name: Tunnel tests
     runs-on: ubuntu-latest
+    if: github.event.repository.private == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,6 +65,7 @@ jobs:
   kettle-tests:
     name: Kettle tests
     runs-on: ubuntu-latest
+    if: github.event.repository.private == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4

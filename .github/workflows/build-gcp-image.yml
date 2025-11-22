@@ -1,0 +1,322 @@
+name: Build GCP TDX Image
+
+on:
+  # Trigger on pushes to main branch only. Do not trigger on PR (for security reasons!)
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/images/**'
+      - 'packages/kettle/**'
+      - '.github/workflows/build-gcp-image.yml'
+
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      clean_build:
+        description: 'Perform a clean build (deletes cache)'
+        required: false
+        type: boolean
+        default: false
+      upload_to_gcp:
+        description: 'Upload built image to GCP'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  # Set build directory for caching
+  BUILD_DIR: packages/images/build
+  ARTIFACT_NAME: tdx-debian-gcp
+
+jobs:
+  build-gcp-image:
+    name: Build GCP TDX Image
+    # Run on self-hosted runner with KVM support
+    runs-on: [self-hosted, Linux, X64]
+    # Only run on push events when commit message contains [build], or on manual workflow_dispatch
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build]')
+
+    # Timeout after 90 minutes (builds typically take 30 minutes)
+    timeout-minutes: 90
+
+    # Set working directory for all steps
+    defaults:
+      run:
+        working-directory: packages/images
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for proper versioning
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup PATH for build tools
+        run: |
+          echo "Setting up PATH for Lima and other build tools..."
+
+          # Add common installation paths to PATH
+          export PATH="/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
+
+          # Make PATH available to subsequent steps
+          echo "PATH=$PATH" >> $GITHUB_ENV
+
+          # Verify tools are available
+          echo "Checking for required tools:"
+          command -v limactl && limactl --version || echo "⚠ limactl not found"
+          command -v nix && nix --version || echo "⚠ nix not found (may be installed later)"
+
+      - name: Setup KVM permissions
+        run: |
+          echo "Checking KVM device..."
+          ls -l /dev/kvm
+
+          echo "Checking CPU virtualization support..."
+          if grep -qE 'vmx|svm' /proc/cpuinfo; then
+            echo "✓ CPU virtualization support detected"
+          else
+            echo "✗ CPU virtualization not available"
+            exit 1
+          fi
+
+          echo "Checking user KVM access..."
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            echo "✓ User already has KVM access"
+          else
+            echo "User does not have KVM access, attempting to grant permissions..."
+
+            # Try to add user to kvm group
+            if sudo usermod -aG kvm $USER; then
+              echo "✓ Added $USER to kvm group"
+
+              # Change /dev/kvm permissions for immediate access (without logout)
+              sudo chmod 666 /dev/kvm
+              echo "✓ Set /dev/kvm permissions to 666 for immediate access"
+
+              # Verify access
+              if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+                echo "✓ User now has KVM access"
+              else
+                echo "✗ Failed to grant KVM access"
+                exit 1
+              fi
+            else
+              echo "✗ Failed to add user to kvm group (sudo may not be available)"
+              exit 1
+            fi
+          fi
+
+      - name: Check disk space
+        run: |
+          echo "Disk space before build:"
+          df -h .
+
+          # Require at least 100GB free
+          FREE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
+          if [ "$FREE_SPACE" -lt 100 ]; then
+            echo "✗ Insufficient disk space: ${FREE_SPACE}GB free (need 100GB+)"
+            exit 1
+          fi
+          echo "✓ Sufficient disk space: ${FREE_SPACE}GB free"
+
+      - name: Install system dependencies
+        run: |
+          echo "Installing build dependencies..."
+          ./scripts/setup_deps.sh
+
+      - name: Install root dependencies
+        run: |
+          echo "Installing root workspace dependencies..."
+          cd ../..
+          npm ci
+
+      # - name: Install Kettle dependencies
+      #   run: |
+      #     echo "Installing Kettle workspace dependencies..."
+      #     cd ../kettle
+      #     npm ci
+
+      - name: Clean previous build (if requested)
+        if: ${{ github.event.inputs.clean_build == 'true' }}
+        run: |
+          echo "Performing clean build..."
+          npm run clean:lima || true
+          rm -rf build/ || true
+          rm -rf kettle-artifacts/ || true
+
+      - name: Prepare Kettle artifacts
+        run: |
+          echo "Preparing Kettle artifacts..."
+          ./scripts/prep_kettle.sh
+
+      - name: Build GCP image
+        run: |
+          echo "Starting build for base EFI image and GCP .tar.gz..."
+          echo "Build started at: $(date)"
+
+          # Use clean build if requested via workflow_dispatch
+          if [ "${{ github.event.inputs.clean_build }}" == "true" ]; then
+            npm run build:gcp:clean
+          else
+            npm run build:gcp
+          fi
+
+          echo "Build completed at: $(date)"
+
+      - name: Verify build output
+        run: |
+          echo "Verifying build artifacts..."
+
+          if [ ! -f "build/tdx-debian.tar.gz" ]; then
+            echo "✗ Build artifact not found: build/tdx-debian.tar.gz"
+            exit 1
+          fi
+
+          echo "✓ Build artifact found"
+          ls -lh build/
+
+          # Check file size (should be 400MB+)
+          SIZE=$(stat -c%s "build/tdx-debian.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian.tar.gz")
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Artifact size: ${SIZE_MB}MB"
+
+          if [ "$SIZE_MB" -lt 50 ]; then
+            echo "✗ Artifact seems too small: ${SIZE_MB}MB"
+            exit 1
+          fi
+
+      - name: Generate build metadata
+        id: metadata
+        run: |
+          echo "Generating build metadata..."
+
+          # Get commit info
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          COMMIT_DATE=$(git show -s --format=%ci HEAD)
+          BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+
+          # Get build timestamp
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Get artifact info
+          ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian.tar.gz")
+          ARTIFACT_SIZE_MB=$((ARTIFACT_SIZE / 1024 / 1024))
+
+          # Create metadata file
+          cat > build/metadata.json <<EOF
+          {
+            "build_date": "$BUILD_DATE",
+            "commit_sha": "$COMMIT_SHA",
+            "commit_short": "$COMMIT_SHORT",
+            "commit_date": "$COMMIT_DATE",
+            "branch": "$BRANCH_NAME",
+            "artifact_size_bytes": $ARTIFACT_SIZE,
+            "artifact_size_mb": $ARTIFACT_SIZE_MB,
+            "builder": "github-actions",
+            "runner": "${{ runner.name }}",
+            "workflow_run_id": "${{ github.run_id }}",
+            "workflow_run_number": "${{ github.run_number }}"
+          }
+          EOF
+
+          echo "Metadata:"
+          cat build/metadata.json
+
+          # Set outputs for use in later steps
+          echo "artifact_name=tdx-debian-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "commit_short=$COMMIT_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Calculate checksums
+        run: |
+          echo "Generating checksums..."
+          cd build
+          sha256sum tdx-debian.tar.gz > tdx-debian.tar.gz.sha256
+
+          echo "Checksums:"
+          cat tdx-debian.tar.gz.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: |
+            packages/images/build/tdx-debian.tar.gz
+            packages/images/build/tdx-debian.tar.gz.sha256
+            packages/images/build/metadata.json
+          retention-days: 30
+          compression-level: 0  # Already compressed
+
+      - name: Disk space after build
+        if: always()
+        run: |
+          echo "Disk space after build:"
+          df -h .
+
+      - name: Upload to GCP (optional, experimental)
+        if: ${{ github.event.inputs.upload_to_gcp == 'true' && github.event_name == 'workflow_dispatch' }}
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_BUCKET: ${{ secrets.GCP_BUILD_BUCKET }}
+        run: |
+          echo "Uploading to GCP..."
+
+          # Check if GCP credentials are configured
+          if [ -z "$GCP_PROJECT_ID" ] || [ -z "$GCP_BUCKET" ]; then
+            echo "⚠ GCP credentials not configured. Skipping upload."
+            echo "Set GCP_PROJECT_ID and GCP_BUILD_BUCKET secrets to enable."
+            exit 0
+          fi
+
+          # Authenticate with GCP (assumes workload identity or service account)
+          gcloud auth configure-docker
+
+          # Upload to bucket
+          ARTIFACT_PATH="builds/${{ steps.metadata.outputs.commit_short }}/tdx-debian.tar.gz"
+          gsutil cp build/tdx-debian.tar.gz "gs://$GCP_BUCKET/$ARTIFACT_PATH"
+          gsutil cp build/metadata.json "gs://$GCP_BUCKET/builds/${{ steps.metadata.outputs.commit_short }}/metadata.json"
+
+          echo "✓ Uploaded to: gs://$GCP_BUCKET/$ARTIFACT_PATH"
+
+      - name: Cleanup old builds
+        if: always()
+        run: |
+          echo "Cleaning up old builds..."
+
+          # Keep only the last 3 builds
+          cd build
+          ls -t tdx-debian*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -v
+
+          echo "Cleanup complete"
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ steps.metadata.outputs.commit_short }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifact**: \`${{ steps.metadata.outputs.artifact_name }}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "build/metadata.json" ]; then
+            echo "### Metadata" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/metadata.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "build/tdx-debian.tar.gz.sha256" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat build/tdx-debian.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
