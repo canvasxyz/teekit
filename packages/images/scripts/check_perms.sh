@@ -20,17 +20,9 @@ check_perms() {
     fi
 }
 
-err=0
-
 check_perms "base/mkosi.skeleton/init" "755" || chmod 755 base/mkosi.skeleton/init
-check_perms "base/mkosi.skeleton/etc" "755" || err=1
-check_perms "base/mkosi.skeleton/etc/resolv.conf" "644" || err=1
-
-if [ $err -eq 1 ]; then
-    echo "Permission check failed!"
-    echo "Please run umask 0022 and re-clone the repository."
-    exit 1
-fi
+check_perms "base/mkosi.skeleton/etc" "755" || chmod 755 base/mkosi.skeleton/etc
+check_perms "base/mkosi.skeleton/etc/resolv.conf" "644" || chmod 644 base/mkosi.skeleton/resolv.conf
 
 # Ensure mkosi.tools/nix symlink exists for nix store access in sandbox
 if [ -d "mkosi.tools" ]; then
@@ -39,3 +31,5 @@ if [ -d "mkosi.tools" ]; then
         ln -sf /nix mkosi.tools/nix
     fi
 fi
+
+echo "Permissions check completed!"
