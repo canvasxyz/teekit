@@ -24,8 +24,27 @@ const DEFAULT_MANIFEST = {
 
 // Try to load manifests from files if provided as arguments
 // Usage: node metadata-service.js [manifest1.json] [manifest2.json] ...
+// Or with hostname: node metadata-service.js --hostname example.com [manifest1.json] ...
 let manifests = [DEFAULT_MANIFEST];
-const manifestPaths = process.argv.slice(2);
+let hostname = null;
+
+// Parse arguments
+const args = process.argv.slice(2);
+let manifestPaths = [];
+
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--hostname' && i + 1 < args.length) {
+    hostname = args[i + 1];
+    i++; // Skip the next arg since it's the hostname value
+  } else {
+    manifestPaths.push(args[i]);
+  }
+}
+
+// Load hostname from environment variable if not provided as argument
+if (!hostname && process.env.HOSTNAME_CONFIG) {
+  hostname = process.env.HOSTNAME_CONFIG;
+}
 
 if (manifestPaths.length > 0) {
   manifests = [];
@@ -78,6 +97,26 @@ const server = http.createServer((req, res) => {
     const decoded = manifests.length === 1 ? manifests[0] : manifests;
     res.end(JSON.stringify(decoded, null, 2));
     console.log('[metadata-service] Served decoded manifest config');
+  } else if (req.url === '/hostname' && req.method === 'GET') {
+    if (hostname) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(hostname);
+      console.log(`[metadata-service] Served hostname config: ${hostname}`);
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('No hostname configured');
+      console.log('[metadata-service] No hostname configured');
+    }
+  } else if (req.url === '/hostname/decoded' && req.method === 'GET') {
+    if (hostname) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ hostname }, null, 2));
+      console.log('[metadata-service] Served decoded hostname config');
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No hostname configured' }));
+      console.log('[metadata-service] No hostname configured');
+    }
   } else if (req.url === '/health' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
@@ -92,6 +131,8 @@ server.listen(PORT, HOST, () => {
   console.log('[metadata-service] Endpoints:');
   console.log('[metadata-service]   GET /manifest         - Returns base64-encoded manifest(s)');
   console.log('[metadata-service]   GET /manifest/decoded - Returns decoded manifest(s) (debug)');
+  console.log('[metadata-service]   GET /hostname         - Returns hostname configuration (optional)');
+  console.log('[metadata-service]   GET /hostname/decoded - Returns decoded hostname (debug)');
   console.log('[metadata-service]   GET /health           - Health check');
   console.log('[metadata-service]');
   console.log(`[metadata-service] Loaded ${manifests.length} manifest(s):`);
@@ -102,6 +143,10 @@ server.listen(PORT, HOST, () => {
   console.log('[metadata-service]');
   console.log(`[metadata-service] Manifest config:`);
   console.log(manifestBase64);
+  if (hostname) {
+    console.log('[metadata-service]');
+    console.log(`[metadata-service] Hostname config: ${hostname}`);
+  }
 });
 
 // Handle shutdown gracefully

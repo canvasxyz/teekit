@@ -149,7 +149,7 @@ mkosi-chroot chown root:root /home/myuser/config
 make help
 ```
 
-## Configuration Service
+## Metadata Configuration
 
 When the VM boots, `cloud-config.service` runs to obtain a manifest
 before launching `kettle-launcher.service`.
@@ -211,7 +211,71 @@ You may also inspect the generated default manifest used for testing at:
 - `packages/images/build/tdx-debian/build/kettle/manifest.json` (during build)
 - `packages/images/kettle-artifacts/manifest.json` (for testing)
 
-### Troubleshooting
+## HTTPS Configuration
+
+You may also provide a `hostname` metadata config variable to enable HTTPS support
+via Let's Encrypt and nginx reverse proxy. This can be:
+- A single hostname (e.g., `example.com`)
+- A comma-delimited list of hostnames (e.g., `foo.com,bar.com,baz.com`)
+
+For Google Cloud, set the hostname as a metadata attribute:
+```
+gcloud compute instances create my-tee-vm \
+  --metadata=hostname="foo.com,bar.com"
+```
+
+For Azure, set the hostname as a tag:
+```
+az vm create \
+  --name my-tee-vm \
+  --tags hostname="foo.com,bar.com"
+```
+
+### Certificate and Proxy Behavior
+
+When hostnames are provided, the VM will:
+1. **Obtain a single SAN certificate** for all specified hostnames using certbot
+2. **Configure nginx as a reverse proxy** to route HTTPS traffic to kettles
+3. **Map hostnames to kettles** in sequential order (first hostname → first kettle, etc.)
+
+### Hostname-to-Kettle Mapping
+
+The mapping between hostnames and manifests works as follows:
+
+- **Equal counts** (e.g., 3 manifests, 3 hostnames):
+  - `hostname1:443` → kettle 0 on port 3001
+  - `hostname2:443` → kettle 1 on port 3002
+  - `hostname3:443` → kettle 2 on port 3003
+  - All kettles are accessible via HTTPS ✓
+
+- **More hostnames than manifests** (e.g., 2 manifests, 3 hostnames):
+  - `hostname1:443` → kettle 0 on port 3001 ✓
+  - `hostname2:443` → kettle 1 on port 3002 ✓
+  - `hostname3:443` → tries to proxy to port 3003 (no kettle exists) ✗
+  - Extra hostnames will return 502 Bad Gateway errors
+
+- **More manifests than hostnames** (e.g., 3 manifests, 2 hostnames):
+  - `hostname1:443` → kettle 0 on port 3001
+  - `hostname2:443` → kettle 1 on port 3002
+  - Third kettle on port 3003 has **no HTTPS proxy** ⚠️
+  - The unmapped kettle is only accessible via `http://<vm-ip>:3003`
+
+- **Duplicate hostnames** (e.g., `foo.com,foo.com,bar.com`):
+  - Duplicates are automatically removed: `foo.com,bar.com`
+  - Behaves the same as if unique hostnames were provided
+  - Only the first occurrence of each hostname is used
+
+### Error Handling
+
+If certificate acquisition fails (e.g., DNS not configured, rate limits hit), the
+cert-nginx-setup service will exit gracefully and kettles will run without HTTPS
+support. Kettles remain accessible via HTTP on ports 3001, 3002, etc.
+
+**Note**: Let's Encrypt limits a domain to 50 certificates/week by default.
+A new certificate is obtained at each VM boot, so avoid frequent reboots in
+production.
+
+## Troubleshooting
 
 - Check cloud-config logs:
   - journalctl -u cloud-config.service

@@ -16,7 +16,7 @@ echo "$LOG_PREFIX Fetching manifest from Azure metadata service..."
 TAGS_JSON=$(curl -s -f -H "Metadata: true" \
   "http://169.254.169.254/metadata/instance/compute/tagsList?api-version=2021-02-01" || echo "[]")
 
-# Extract manifest value using Python (available in the VM)
+# Extract manifest and hostname values using Python (available in the VM)
 MANIFEST=$(python3 -c "
 import json, sys
 try:
@@ -38,6 +38,25 @@ fi
 
 echo "$LOG_PREFIX Successfully fetched manifest from Azure metadata"
 
+# Fetch hostname configuration (optional)
+HOSTNAME_CONFIG=$(python3 -c "
+import json, sys
+try:
+    tags = json.loads('$TAGS_JSON')
+    for tag in tags:
+        if tag.get('name') == 'hostname':
+            print(tag.get('value', ''))
+            break
+except:
+    pass
+" || echo "")
+
+if [ -n "$HOSTNAME_CONFIG" ]; then
+  echo "$LOG_PREFIX Successfully fetched hostname configuration: $HOSTNAME_CONFIG"
+else
+  echo "$LOG_PREFIX No hostname configuration found (this is optional)"
+fi
+
 # Print the manifest(s) to the log
 if [[ "$MANIFEST" == *","* ]]; then
   IFS=',' read -ra MANIFEST_ARRAY <<< "$MANIFEST"
@@ -58,7 +77,10 @@ else
   fi
 fi
 
-# Write environment file for kettle-launcher service
+# Write environment file for kettle-launcher and cert-nginx-setup services
 echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
+if [ -n "$HOSTNAME_CONFIG" ]; then
+  echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
+fi
 
 echo "$LOG_PREFIX Configuration complete"
