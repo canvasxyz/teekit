@@ -39,39 +39,7 @@ gcloud compute images create tdx-debian \
 gcloud compute instances delete gcp-tdx-vm --quiet --zone us-central1-a
 ```
 
-To start a GCE VM, first create a manifest.json, and then encode it as base64.
-
-If we have built the kettle and kettle artifacts in packages/images,
-this will encode a default manifest, pointing to an app.js embedded in the VM:
-
-```
-export MANIFEST=$(base64 -i packages/images/kettle-artifacts/manifest.json | tr -d '\n')
-
-# Result should be: ewogICJhcHAiOiAiZmlsZTovLy91c3IvbGliL2tldHRsZS9hcHAuanMiLAogICJzaGEyNTYiOiAiNTc3MWUxOWFiNDBhZTQzNWY1ZGUzNjEzYjVjMWQ4NTA0M2IyN2RhNmIzNGJmN2JhNDAyOWYwNDQ3MWU4NGRkOCIKfQ==
-```
-
-Then, start the VM:
-
-```
-gcloud compute instances create gcp-tdx-vm \
-    --image=tdx-debian \
-    --machine-type=c3-standard-4 \
-    --zone=us-central1-a \
-    --confidential-compute-type=TDX \
-    --maintenance-policy=TERMINATE \
-    --boot-disk-size=200GB
-    --metadata=manifest="$MANIFEST"
-```
-
-To set the manifest later, you can also run:
-
-```
-gcloud compute instances add-metadata gcp-tdx-vm \
-    --metadata=manifest="$MANIFEST"
-gcloud compute instances reset gcp-tdx-vm
-```
-
-Assuming you haven't created firewall rules for the group yet, do so now:
+Create firewall rules before creating the VM:
 
 ```
 gcloud compute firewall-rules create allow-ports \
@@ -84,28 +52,49 @@ gcloud compute firewall-rules create allow-ports \
     --target-tags=gcp-tdx-vm
 ```
 
-Then, attach the firewall rules to the new VM:
+To start a GCE VM, first create a manifest.json, and then encode it as base64.
+
+If we have built the kettle and kettle artifacts in packages/images,
+this will encode a default manifest, pointing to an app.js embedded in the VM:
 
 ```
-gcloud compute instances add-tags gcp-tdx-vm --tags gcp-tdx-vm
+export MANIFEST=$(base64 -i packages/images/kettle-artifacts/manifest.json | tr -d '\n')
+
+# Result should be: ewogICJhcHAiOiAiZmlsZTovLy9saWIva2V0dGxlL2FwcC5qcyIsCiAgInNoYTI1NiI6ICI1NzcxZTE5YWI0MGFlNDM1ZjVkZTM2MTNiNWMxZDg1MDQzYjI3ZGE2YjM0YmY3YmE0MDI5ZjA0NDcxZTg0ZGQ4Igp9Cg
 ```
 
-Wait for the firewall rules to be applied. Then, check the VM is working:
+Then, start the VM:
+
+```
+gcloud compute instances create gcp-tdx-vm \
+    --image=tdx-debian \
+    --machine-type=c3-standard-4 \
+    --zone=us-central1-a \
+    --confidential-compute-type=TDX \
+    --maintenance-policy=TERMINATE \
+    --boot-disk-size=200GB \
+    --tags=gcp-tdx-vm \
+    --metadata=manifest="$MANIFEST"
+```
+
+You can also set the manifest later:
+
+```
+gcloud compute instances add-metadata gcp-tdx-vm --metadata=manifest="$MANIFEST"
+gcloud compute instances reset gcp-tdx-vm
+```
+
+To wait for the machine to boot, you can check for output on the serial port:
+
+```
+gcloud compute instances tail-serial-port-output gcp-tdx-vm
+```
+
+Then, check the VM is working:
 
 ```
 export EXTERNAL_IP=$(gcloud compute instances describe gcp-tdx-vm \
     --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+echo gcp-tdx-vm is at $EXTERNAL_IP
 curl http://$EXTERNAL_IP:8080/uptime
-```
-
-For troubleshooting, check for output on the serial port:
-
-```
-gcloud compute instances get-serial-port-output gcp-tdx-vm
-```
-
-Or, to tail the output:
-
-```
-gcloud compute instances tail-serial-port-output gcp-tdx-vm
 ```
