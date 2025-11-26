@@ -2,8 +2,14 @@
 
 # Shorthand script for mkosi build commands.
 #
-# Supports --force which expands into --force --force (since our builds are all incremental).
+# By default, uses single --force to allow rebuilding over existing output while
+# preserving the incremental cache.
+#
+# Use --clean to also clear the incremental cache (equivalent to --force --force).
 # Supports any list of profiles passed afterwards.
+#
+# To clear the full package cache (equivalent to --force --force --force) use
+# "npm run clean" instead.
 
 set -euo pipefail
 
@@ -15,12 +21,14 @@ cd "$IMAGES_DIR"
 echo "Running 'npm run build'..."
 npm run build
 
-force_args=()
+# Default: single --force to allow rebuilding while preserving incremental cache
+force_args=(--force)
 profiles=()
 
 while (( "$#" )); do
   case "$1" in
-    --force|--clean)
+    --clean)
+      # Double --force clears the incremental cache
       force_args=(--force --force)
       shift
       ;;

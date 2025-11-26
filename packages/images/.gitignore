@@ -12,3 +12,5 @@ NvVars
 
 kettle-artifacts/
 cli.bundle.js
+
+.storageaccount

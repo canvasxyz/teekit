@@ -2,21 +2,24 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"clean": "rm -rf build/* kettle-artifacts/* mkosi.cache/* mkosi.builddir/*",
-		"clean:lima": "ssh -F \"$HOME/.lima/tee-builder/ssh.config\" \"lima-tee-builder\" -t -o LogLevel=QUIET -- \"cd ~/mnt && /home/debian/.nix-profile/bin/nix flake update && /home/debian/.nix-profile/bin/nix-collect-garbage -d && echo 'Nix environment cleaned and updated successfully'\"",
-		"reset:lima": "limactl stop tee-builder && limactl delete tee-builder",
 		"build": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
 		"build:vm": "bash scripts/mkosi_build",
-		"build:vm:clean": "bash scripts/mkosi_build --force",
+		"build:vm:clean": "bash scripts/mkosi_build --clean",
 		"build:devtools": "bash scripts/mkosi_build devtools",
-		"build:devtools:clean": "bash scripts/mkosi_build --force devtools",
+		"build:devtools:clean": "bash scripts/mkosi_build --clean devtools",
 		"build:gcp": "bash scripts/mkosi_build gcp",
-		"build:gcp:clean": "bash scripts/mkosi_build --force gcp",
+		"build:gcp:clean": "bash scripts/mkosi_build --clean gcp",
 		"build:gcp:devtools": "bash scripts/mkosi_build devtools gcp",
-		"build:gcp:devtools:clean": "bash scripts/mkosi_build --force devtools gcp",
+		"build:gcp:devtools:clean": "bash scripts/mkosi_build --clean devtools gcp",
 		"build:az": "bash scripts/mkosi_build azure",
-		"build:az:clean": "bash scripts/mkosi_build --force azure",
+		"build:az:clean": "bash scripts/mkosi_build --clean azure",
 		"build:az:devtools": "bash scripts/mkosi_build devtools azure",
-		"build:az:devtools:clean": "bash scripts/mkosi_build --force devtools azure"
+		"build:az:devtools:clean": "bash scripts/mkosi_build --clean devtools azure",
+		"clean": "rm -rf build/* kettle-artifacts/* mkosi.cache/* mkosi.builddir/*",
+		"clean:az": "bash scripts/cleanup_azure.sh",
+		"clean:lima": "ssh -F \"$HOME/.lima/tee-builder/ssh.config\" \"lima-tee-builder\" -t -o LogLevel=QUIET -- \"/home/debian/.nix-profile/bin/nix-collect-garbage -d && /home/debian/.nix-profile/bin/nix store optimise && echo 'Nix cache cleaned successfully'\"",
+		"deploy:az": "bash scripts/deploy_azure.sh build/tdx-debian-azure.vhd",
+		"deploy:az:devtools": "bash scripts/deploy_azure.sh build/tdx-debian-devtools.vhd",
+		"reset:lima": "limactl stop tee-builder && limactl delete tee-builder"
 	}
 }

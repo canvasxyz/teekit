@@ -30,10 +30,12 @@ except:
 " || echo "")
 
 if [ -z "$MANIFEST" ]; then
-  echo "$LOG_PREFIX ERROR: Failed to fetch manifest from Azure metadata"
-  echo "$LOG_PREFIX The VM must be created with a 'manifest' tag"
-  echo "$LOG_PREFIX Example: az vm create ... --tags manifest=\$(base64 -w0 manifest.json)"
-  exit 1
+  echo "$LOG_PREFIX No manifest tag found in Azure metadata"
+  echo "$LOG_PREFIX Kettle will use default manifest if available"
+  echo "$LOG_PREFIX To provide a manifest, create VM with: --tags manifest=\$(base64 -w0 manifest.json)"
+  # Create empty env file so kettle-init can fall back to default manifest
+  touch "$ENV_FILE"
+  exit 0
 fi
 
 echo "$LOG_PREFIX Successfully fetched manifest from Azure metadata"
