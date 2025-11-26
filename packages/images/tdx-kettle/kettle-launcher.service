@@ -13,7 +13,6 @@ ExecStart=/usr/bin/kettle-init
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/var/log/kettle.log
-StandardError=append:/var/log/kettle-error.log
 
 [Install]
 WantedBy=minimal.target
