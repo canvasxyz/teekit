@@ -8,7 +8,7 @@ should_use_lima() {
     # Use Lima by default for now
     true ||
     # Use Lima on macOS or if FORCE_LIMA is set
-    [[ "$OSTYPE" == "darwin"* ]] || [ -n "${FORCE_LIMA:-}" ] || 
+    [[ "$OSTYPE" == "darwin"* ]] || [ -n "${FORCE_LIMA:-}" ] ||
     # Use Lima if it's available but Nix is not
     (command -v limactl &>/dev/null && ! command -v nix &>/dev/null)
 }
@@ -123,11 +123,13 @@ if should_use_lima; then
     lima_exec "cd ~/mnt && git config --global --add safe.directory ~/mnt && /home/debian/.nix-profile/bin/nix develop -c ${cmd[*]@Q}"
 
     if is_mkosi_cmd; then
-        lima_exec "mkdir -p ~/mnt/build; mv '$mkosi_output'/* ~/mnt/build/ || true"
+        # Use cp --no-preserve=ownership instead of mv to avoid permission errors,
+        # as user IDs in the unshare namespace don't map to valid users on the host.
+        lima_exec "mkdir -p ~/mnt/build && cp -a --no-preserve=ownership '$mkosi_output'/* ~/mnt/build/ && rm -rf '$mkosi_output'/*" || true
 
         echo "Check ./build/ directory for output files"
         echo
-        fi
+    fi
 
     echo "Note: Lima VM is still running. To stop it, run: limactl stop $LIMA_VM"
 else

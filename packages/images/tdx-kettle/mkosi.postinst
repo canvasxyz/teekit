@@ -22,7 +22,8 @@ mkosi-chroot sh -c "$npm_install_cmd" || echo "Warning: Failed to install npm pa
 # Move the packages to the correct location
 echo "Moving npm packages to /usr/lib/node_modules..."
 if [ -d "$BUILDROOT/usr/node_modules" ]; then
-    mv "$BUILDROOT/usr/node_modules"/* "$BUILDROOT/usr/lib/node_modules/" 2>/dev/null || echo "Warning: Failed to move some packages"
+    cp -a --no-preserve=ownership "$BUILDROOT/usr/node_modules"/* "$BUILDROOT/usr/lib/node_modules/" 2>/dev/null || echo "Warning: Failed to move some packages"
+    rm -rf "$BUILDROOT/usr/node_modules"/* 2>/dev/null || true
     rmdir "$BUILDROOT/usr/node_modules" 2>/dev/null || echo "Warning: Could not remove usr/node_modules"
 fi
 
