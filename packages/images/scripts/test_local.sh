@@ -128,6 +128,12 @@ echo "Serial console available at: $SERIAL_SOCKET"
 echo "Connect from another terminal with:"
 echo "  socat - UNIX-CONNECT:$SERIAL_SOCKET"
 echo ""
+if [ "$USE_DEVTOOLS" = true ]; then
+  echo "SSH access (password: devtools):"
+  echo "  ssh-keygen -f '~/.ssh/known_hosts' -R '[localhost]:2222'"
+  echo "  ssh -p 2222 root@localhost"
+  echo ""
+fi
 echo "Press Ctrl+C to stop the VM"
 echo ""
 
