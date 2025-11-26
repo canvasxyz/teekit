@@ -33,9 +33,8 @@ config.json
 .env
 manifest.json
 
-tdx-debian.vhd
-tdx-debian.efi
-tdx-debian.manifest
-tdx-debian.tar.gz
-tdx-debian.initrd
-tdx-debian.vmlinuz
+tdx-debian.*
+tdx-debian-devtools.*
+tdx-debian-azure.*
+tdx-debian-azure-devtools.*
+*.vhd

@@ -104,9 +104,10 @@ if should_use_lima; then
 
     mkosi_cache=/home/debian/mkosi-cache
     mkosi_output=/home/debian/mkosi-output
+    mkosi_builddir=/home/debian/mkosi-builddir
 
     if is_mkosi_cmd; then
-        lima_exec mkdir -p "$mkosi_cache" "$mkosi_output"
+        lima_exec mkdir -p "$mkosi_cache" "$mkosi_output" "$mkosi_builddir"
 
         cmd+=(
             # We can't use default cache dir from mnt/, because it is mounted
@@ -117,6 +118,8 @@ if should_use_lima; then
             # mkosi tries to preserve ownership of output files, which fails,
             # as it is running from root in a user namespace.
             "--output-dir=$mkosi_output"
+            # Same issue for build directory - must be on local filesystem
+            "--build-dir=$mkosi_builddir"
         )
     fi
 

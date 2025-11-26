@@ -10,17 +10,31 @@ if [ ! -f "$EFI_FILE" ]; then
     exit 1
 fi
 
-echo "Converting $EFI_FILE to VHD format..."
+echo "Converting $EFI_FILE to VHD format for Azure..."
 
 # Create working directory
 mkdir -p "$WORK_DIR"
 
-# Create ESP filesystem image (1024MB minimum)
+# Azure Confidential VMs disk configuration
+# The ESP only needs to hold the UKI file (~50-100MB), but we size it to 1GB for safety
 ESP_SIZE_MB=1024
+
+# Azure doesn't document a minimum for Gen2 VHDs, use 30GB to match Ubuntu images
+DISK_SIZE_MB=${AZURE_DISK_SIZE_MB:-30720}
+
+# Ensure disk is at least as large as ESP + GPT overhead
+MIN_DISK_SIZE_MB=$((ESP_SIZE_MB + 2))
+if [ "$DISK_SIZE_MB" -lt "$MIN_DISK_SIZE_MB" ]; then
+    echo "WARNING: AZURE_DISK_SIZE_MB ($DISK_SIZE_MB) is less than minimum ($MIN_DISK_SIZE_MB), using minimum"
+    DISK_SIZE_MB=$MIN_DISK_SIZE_MB
+fi
 ESP_IMAGE="$WORK_DIR/esp.img"
 
+echo "EFI file size: $(stat -c%s "$EFI_FILE") bytes"
+echo "Creating ${ESP_SIZE_MB}MB ESP partition in ${DISK_SIZE_MB}MB disk..."
+
 # Create empty ESP image and format it as FAT32
-dd if=/dev/zero of="$ESP_IMAGE" bs=1M count=$ESP_SIZE_MB
+dd if=/dev/zero of="$ESP_IMAGE" bs=1M count=$ESP_SIZE_MB status=progress
 mformat -i "$ESP_IMAGE" -F -v "ESP" ::
 
 # Create EFI directory structure and copy the UKI file using mtools
@@ -28,23 +42,62 @@ mmd -i "$ESP_IMAGE" ::EFI
 mmd -i "$ESP_IMAGE" ::EFI/BOOT
 mcopy -i "$ESP_IMAGE" "$EFI_FILE" ::EFI/BOOT/BOOTX64.EFI
 
+# Verify the EFI file was copied correctly
+echo "Verifying ESP contents..."
+mdir -i "$ESP_IMAGE" ::EFI/BOOT/
+
 # Create the final disk image with GPT
-DISK_SIZE_MB=$((ESP_SIZE_MB + 2))  # ESP + 1MB for GPT headers
 DISK_IMAGE="$WORK_DIR/azure_image.raw"
 
-# Create empty disk
-dd if=/dev/zero of="$DISK_IMAGE" bs=1M count=$DISK_SIZE_MB
+# Create empty disk using truncate for speed (creates sparse file)
+truncate -s "${DISK_SIZE_MB}M" "$DISK_IMAGE"
 
-# Create GPT partition table and ESP partition
-# Use sector size of 512 bytes, so 1MB = 2048 sectors
-parted "$DISK_IMAGE" --script -- \
-  mklabel gpt \
-  mkpart ESP fat32 2048s $(($ESP_SIZE_MB * 2048 + 2047))s \
-  set 1 boot on
+# Calculate partition boundaries
+# Sector size: 512 bytes
+# 1 MiB = 2048 sectors
+# Start ESP at 1MiB (sector 2048) for alignment
+# End ESP at start + ESP_SIZE_MB - 1 sector
+ESP_START_SECTOR=2048
+ESP_SIZE_SECTORS=$((ESP_SIZE_MB * 2048))
+ESP_END_SECTOR=$((ESP_START_SECTOR + ESP_SIZE_SECTORS - 1))
+
+echo "Creating GPT partition table..."
+echo "  ESP start: sector $ESP_START_SECTOR ($(($ESP_START_SECTOR * 512 / 1024 / 1024)) MiB)"
+echo "  ESP end: sector $ESP_END_SECTOR"
+echo "  ESP size: $ESP_SIZE_SECTORS sectors ($ESP_SIZE_MB MiB)"
+
+# Use sfdisk for better control over partition type GUIDs
+# EFI System Partition GUID: C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+sfdisk "$DISK_IMAGE" << EOF
+label: gpt
+first-lba: 34
+sector-size: 512
+
+start=$ESP_START_SECTOR, size=$ESP_SIZE_SECTORS, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="EFI System Partition"
+EOF
+
+# Verify partition table was created correctly
+echo "Verifying GPT partition table..."
+sfdisk -l "$DISK_IMAGE"
+
+# Additional verification: Check partition type GUID is correct for EFI System Partition
+echo "Verifying EFI System Partition type GUID..."
+PART_TYPE=$(sfdisk --dump "$DISK_IMAGE" | grep 'type=' | head -1 | sed 's/.*type=\([A-F0-9-]*\).*/\1/')
+if [ "$PART_TYPE" != "C12A7328-F81F-11D2-BA4B-00A0C93EC93B" ]; then
+    echo "ERROR: Partition type GUID is '$PART_TYPE', expected 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B'"
+    exit 1
+fi
+echo "  ✓ EFI System Partition type GUID verified: $PART_TYPE"
 
 # Copy the ESP filesystem into the partition
-# Skip first 1MB (2048 sectors) to account for GPT header
-dd if="$ESP_IMAGE" of="$DISK_IMAGE" bs=512 seek=2048 conv=notrunc
+echo "Copying ESP filesystem to partition..."
+dd if="$ESP_IMAGE" of="$DISK_IMAGE" bs=1M seek=1 conv=notrunc,sparse status=progress
+
+# Verify the disk image structure before creating VHD
+echo ""
+echo "Disk image structure verification:"
+echo "  Total size: $(stat -c%s "$DISK_IMAGE") bytes"
+echo "  ESP at offset 1MiB, size ${ESP_SIZE_MB}MiB"
 
 # Azure requirements:
 # 1. Virtual size must be whole MiB (1,048,576 bytes) - Azure calls this "MB" but means MiB
@@ -67,8 +120,9 @@ truncate -s "$VIRTUAL_SIZE" "$DISK_IMAGE"
 echo "Raw disk (virtual size): $VIRTUAL_SIZE bytes ($VIRTUAL_SIZE_MiB MiB)"
 
 # Create VHD by appending a manually-crafted 512-byte footer to the raw disk
-# We copy the raw disk to the VHD file, then append the footer
-cp "$DISK_IMAGE" "$VHD_FILE"
+# The disk image may be sparse (mostly zeros), which is fine - Azure page blob
+# uploads handle sparse files correctly by filling unallocated space with zeros
+mv "$DISK_IMAGE" "$VHD_FILE"
 
 echo "Creating VHD footer manually..."
 python3 << EOF
