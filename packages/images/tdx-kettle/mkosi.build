@@ -23,30 +23,11 @@ if [ ! -d "$KETTLE_ARTIFACTS" ]; then
   exit 1
 fi
 
-# Update manifest to use the final image path and correct SHA256 hash
-echo "Updating manifest for image..."
+# Prepare manifest for the VM
+echo "Preparing manifest for image..."
 BUILD_DIR="$BUILDROOT/build/kettle"
 mkdir -p "$BUILD_DIR"
 cp "$KETTLE_ARTIFACTS/manifest.json" "$BUILD_DIR/manifest.json"
-
-# Calculate SHA256 hash of app.js
-APP_JS_HASH=$(sha256sum "$KETTLE_ARTIFACTS/app.js" | awk '{print $1}')
-
-python3 <<EOF
-import json
-with open("$BUILD_DIR/manifest.json", "r") as f:
-    manifest = json.load(f)
-manifest["app"] = "file:///usr/lib/kettle/app.js"
-manifest["sha256"] = "$APP_JS_HASH"
-with open("$BUILD_DIR/manifest.json", "w") as f:
-    json.dump(manifest, f, indent=2)
-# Also save to kettle-artifacts so metadata service can use it
-with open("$KETTLE_ARTIFACTS/manifest.json", "w") as f:
-    json.dump(manifest, f, indent=2)
-EOF
-
-echo "Generated manifest with SHA256: $APP_JS_HASH"
-echo "Manifest saved to: $BUILD_DIR/manifest.json and $KETTLE_ARTIFACTS/manifest.json"
 
 # Copy CLI bundle to image
 mkdir -p "$DESTDIR/usr/bin"
@@ -54,8 +35,7 @@ CLI_BUNDLE="$IMAGES_DIR/cli.bundle.js"
 cp "$CLI_BUNDLE" "$DESTDIR/usr/bin/kettle"
 chmod +x "$DESTDIR/usr/bin/kettle"
 
-# Copy app.ts and built files to image (but NOT manifest.json)
-# The manifest will be provided via cloud metadata service
+# Copy kettle artifacts to image
 KETTLE_LIB_DIR="$DESTDIR/usr/lib/kettle"
 mkdir -p "$KETTLE_LIB_DIR"
 
@@ -69,11 +49,41 @@ for file in app.ts app.js worker.js externals.js; do
   fi
 done
 
-# Copy files to VM (manifest.json will be provided via metadata service)
+# Copy files to VM
 cp "$KETTLE_ARTIFACTS/app.ts" "$KETTLE_LIB_DIR/"
 cp "$KETTLE_ARTIFACTS/app.js" "$KETTLE_LIB_DIR/"
 cp "$KETTLE_ARTIFACTS/worker.js" "$KETTLE_LIB_DIR/"
 cp "$KETTLE_ARTIFACTS/externals.js" "$KETTLE_LIB_DIR/"
+cp "$BUILD_DIR/manifest.json" "$KETTLE_LIB_DIR/"
+
+# Calculate SHA256 hash from the file that's actually in the VM
+# This ensures the hash matches exactly what the VM will read
+APP_JS_IN_VM="$KETTLE_LIB_DIR/app.js"
+APP_JS_HASH_VM=$(sha256sum "$APP_JS_IN_VM" | awk '{print $1}')
+
+echo "Hash of app.js in VM:"
+echo $APP_JS_HASH_VM
+echo ""
+echo "Manifest:"
+cat $BUILD_DIR/manifest.json
+echo ""
+
+# Update manifest with the hash from the VM file
+python3 <<EOF
+import json
+with open("$BUILD_DIR/manifest.json", "r") as f:
+    manifest = json.load(f)
+manifest["app"] = "file:///usr/lib/kettle/app.js"
+manifest["sha256"] = "$APP_JS_HASH_VM"
+with open("$BUILD_DIR/manifest.json", "w") as f:
+    json.dump(manifest, f, indent=2)
+# Also save to kettle-artifacts so metadata service can use it
+with open("$KETTLE_ARTIFACTS/manifest.json", "w") as f:
+    json.dump(manifest, f, indent=2)
+EOF
+
+# Copy manifest.json to VM for default fallback (when no MANIFEST env var is set)
+cp "$BUILD_DIR/manifest.json" "$KETTLE_LIB_DIR/manifest.json"
 
 echo "Successfully copied kettle files to image:"
 echo "  - CLI bundle: /usr/bin/kettle"
@@ -81,6 +91,9 @@ echo "  - App source: /usr/lib/kettle/app.ts"
 echo "  - App build: /usr/lib/kettle/app.js"
 echo "  - Worker: /usr/lib/kettle/worker.js"
 echo "  - Externals: /usr/lib/kettle/externals.js"
+echo "  - Default Manifest: /usr/lib/kettle/manifest.json"
 echo ""
-echo "NOTE: Manifest will be provided via cloud metadata service"
-echo "      The generated manifest is available at: $BUILD_DIR/manifest.json"
+echo "SHA256: $APP_JS_HASH_VM"
+echo ""
+echo "The default manifest is embedded in the image."
+echo "Custom manifests can be provided via cloud metadata service."

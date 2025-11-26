@@ -204,12 +204,17 @@ The manifest is expected to be a JSON file with the following structure:
 ```
 
 The VM build creates a demo app inside the VM at `/usr/lib/kettle/app.js`
-which is what the test_local.sh script initializes. This allows us to bypass
-publishing the manifest to S3 or Github Gists.
+along with a default manifest at `/usr/lib/kettle/manifest.json`. This allows
+the VM to start automatically without any metadata configuration, bypassing
+the need to publish the manifest to S3 or Github Gists.
+
+If no `MANIFEST` environment variable is provided via cloud metadata, the
+kettle launcher will automatically use the embedded default manifest.
 
 You may also inspect the generated default manifest used for testing at:
 - `packages/images/build/tdx-debian/build/kettle/manifest.json` (during build)
 - `packages/images/kettle-artifacts/manifest.json` (for testing)
+- `/usr/lib/kettle/manifest.json` (inside the VM)
 
 ## HTTPS Configuration
 

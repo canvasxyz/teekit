@@ -36,7 +36,7 @@ node "$CLI_COMPILED" build-worker
 
 # 5. Generate manifest
 echo "Generating manifest..."
-node "$CLI_COMPILED" publish-local "app.ts" --path "/lib/kettle/app.js"
+node "$CLI_COMPILED" publish-local "dist/app.js" --path "/lib/kettle/app.js"
 
 # 6. Copy necessary files to images directory for mkosi
 echo "Copying artifacts to images directory..."
