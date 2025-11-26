@@ -12,3 +12,60 @@ EOF
 
 # Create /boot directory for kernel-install
 mkdir -p "$BUILDROOT/boot"
+
+# Pre-create /etc with essential users and groups for package installation.
+#
+# During mkosi image builds, Debian packages run their postinst scripts which
+# may expect certain users/groups to exist. Notably:
+#   - nginx-common runs `chown root:adm /var/log/nginx` requiring the 'adm' group
+#   - www-data user/group is needed by nginx and other web packages
+#
+# These files are created BEFORE apt installs packages. While systemd-sysusers
+# would normally create users during the "Generating system users" phase, that
+# happens AFTER package installation, which is too late for postinst scripts.
+#
+# The sqld image output (including these files) is used as BaseTrees for the
+# main tdx-kettle image, so these users/groups will be available when nginx
+# and other packages are installed in that stage.
+mkdir -p "$BUILDROOT/etc"
+
+if [ ! -f "$BUILDROOT/etc/passwd" ]; then
+    cat > "$BUILDROOT/etc/passwd" <<'PASSWDEOF'
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin
+nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
+PASSWDEOF
+fi
+if [ ! -f "$BUILDROOT/etc/group" ]; then
+    cat > "$BUILDROOT/etc/group" <<'GROUPEOF'
+root:x:0:
+daemon:x:1:
+bin:x:2:
+sys:x:3:
+adm:x:4:
+tty:x:5:
+disk:x:6:
+www-data:x:33:
+shadow:x:42:
+nogroup:x:65534:
+GROUPEOF
+fi
+if [ ! -f "$BUILDROOT/etc/shadow" ]; then
+    cat > "$BUILDROOT/etc/shadow" <<'SHADOWEOF'
+root:*:19000:0:99999:7:::
+daemon:*:19000:0:99999:7:::
+bin:*:19000:0:99999:7:::
+sys:*:19000:0:99999:7:::
+www-data:*:19000:0:99999:7:::
+nobody:*:19000:0:99999:7:::
+SHADOWEOF
+fi
+
+# Remove sysusers.d and tmpfiles.d that use newer systemd syntax (v256+)
+# The host's systemd tools may be older and won't understand these modifiers
+rm -rf "$BUILDROOT/usr/lib/sysusers.d"
+rm -rf "$BUILDROOT/usr/lib/tmpfiles.d"
+rm -rf "$BUILDROOT/usr/lib/systemd/network"
