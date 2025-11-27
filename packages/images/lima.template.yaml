@@ -1,7 +1,8 @@
+# Pin Lima VM images for reproducible builds (2025-05-20 daily build)
 images:
-  - location: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
+  - location: https://cloud.debian.org/images/cloud/trixie/20251117-2299/debian-13-genericcloud-amd64-20251117-2299.qcow2
     arch: x86_64
-  - location: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-arm64.qcow2
+  - location: https://cloud.debian.org/images/cloud/trixie/20251117-2299/debian-13-genericcloud-arm64-20251117-2299.qcow2
     arch: aarch64
 cpus: 6
 memory: 12GiB
