@@ -29,6 +29,7 @@ env:
   BUILD_DIR: packages/images/build
   ARTIFACT_NAME: tdx-debian-gcp
   FORCE_LIMA: "1"
+  # SOURCE_DATE_EPOCH will be set dynamically from git commit timestamp for reproducible builds
 
 jobs:
   build-gcp-image:
@@ -52,6 +53,14 @@ jobs:
         with:
           # Fetch full history for proper versioning
           fetch-depth: 0
+
+      - name: Set SOURCE_DATE_EPOCH for reproducible builds
+        run: |
+          # Use git commit timestamp for reproducible builds
+          # This ensures the same commit always produces the same build timestamp
+          COMMIT_TIMESTAMP=$(git log -1 --format=%ct HEAD)
+          echo "SOURCE_DATE_EPOCH=$COMMIT_TIMESTAMP" >> $GITHUB_ENV
+          echo "Set SOURCE_DATE_EPOCH=$COMMIT_TIMESTAMP ($(date -d @$COMMIT_TIMESTAMP -u +%Y-%m-%dT%H:%M:%SZ))"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
