@@ -19,12 +19,12 @@ mkdir -p "$MEASUREMENTS_DIR"
 generate_file_list() {
     local dir="$1"
     local output_file="$2"
-    
+
     if [ ! -d "$dir" ]; then
         echo "Directory not found: $dir"
         return 1
     fi
-    
+
     echo "Generating file list for: $dir"
     find "$dir" -type f -exec sha256sum {} \; | sort > "$output_file" || true
     find "$dir" -type f -exec stat -c "%s %y %n" {} \; 2>/dev/null | sort > "${output_file}.metadata" || \
@@ -35,23 +35,23 @@ generate_file_list() {
 measure_directory() {
     local dir="$1"
     local name="$2"
-    
+
     if [ ! -d "$dir" ]; then
         echo "Directory not found: $dir (skipping)"
         return 0
     fi
-    
+
     echo "Measuring directory: $dir"
     generate_file_list "$dir" "$MEASUREMENTS_DIR/${name}_files.txt"
-    
+
     # Calculate total size
     local total_size=$(du -sb "$dir" 2>/dev/null | cut -f1 || echo "0")
     echo "$total_size" > "$MEASUREMENTS_DIR/${name}_size.txt"
-    
+
     # Count files
     local file_count=$(find "$dir" -type f | wc -l)
     echo "$file_count" > "$MEASUREMENTS_DIR/${name}_count.txt"
-    
+
     echo "  Size: $(numfmt --to=iec-i --suffix=B $total_size 2>/dev/null || echo "${total_size} bytes")"
     echo "  Files: $file_count"
 }
@@ -60,18 +60,18 @@ measure_directory() {
 measure_file() {
     local file="$1"
     local name="$2"
-    
+
     if [ ! -f "$file" ]; then
         echo "File not found: $file (skipping)"
         return 0
     fi
-    
+
     echo "Measuring file: $file"
     sha256sum "$file" > "$MEASUREMENTS_DIR/${name}_sha256.txt"
-    
+
     local size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
     echo "$size" > "$MEASUREMENTS_DIR/${name}_size.txt"
-    
+
     echo "  SHA256: $(cat "$MEASUREMENTS_DIR/${name}_sha256.txt" | cut -d' ' -f1)"
     echo "  Size: $(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "${size} bytes")"
 }

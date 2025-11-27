@@ -207,8 +207,55 @@ export KETTLE_IP=<...>
 Check for running services:
 
 ```
-curl http://${KETTLE_IP}/uptime
+curl http://${KETTLE_IP}:3001/uptime
 ```
+
+### Configuring HTTPS with Custom Hostname
+
+To enable HTTPS with Let's Encrypt certificates and nginx reverse proxy, configure the VM with a `hostname` tag **before** the initial boot or **before** restarting the VM:
+
+```bash
+# Configure hostname for the VM
+az vm update \
+  --name tdx-kettle \
+  --resource-group tdx-group \
+  --set tags.hostname="your-domain.example.com"
+
+# Restart the VM to apply the hostname configuration
+az vm restart --name tdx-kettle --resource-group tdx-group
+```
+
+**Important Prerequisites:**
+- The hostname DNS must be configured to point to the VM's public IP address **before** the VM boots
+- Ensure DNS propagation is complete (test with `dig +short your-domain.example.com`)
+- The VM will automatically obtain Let's Encrypt certificates during boot using the ACME HTTP-01 challenge
+- If DNS is not ready when the VM boots, certbot will fail and the VM will fall back to HTTP-only mode on port 3001
+
+**Multiple Hostnames:**
+You can specify multiple comma-separated hostnames:
+```bash
+az vm update \
+  --name tdx-kettle \
+  --resource-group tdx-group \
+  --set tags.hostname="domain1.example.com,domain2.example.com"
+```
+
+After the VM restarts and certificates are obtained (typically 1-3 minutes after boot):
+- HTTP requests on port 80 will redirect to HTTPS
+- HTTPS will be available on port 443
+- The kettle service will be proxied through nginx with TLS termination
+
+Test the HTTPS endpoint:
+```bash
+curl https://your-domain.example.com/uptime
+```
+
+**Troubleshooting HTTPS Setup:**
+If HTTPS is not working after 5 minutes:
+1. Verify DNS is resolving correctly: `dig +short your-domain.example.com`
+2. The kettle service should still be accessible via HTTP: `curl http://${KETTLE_IP}:3001/uptime`
+3. Check if ports 80 and 443 are open: `nc -zv ${KETTLE_IP} 443`
+4. If certbot failed during boot, restart the VM again after confirming DNS is working
 
 To get a serial console to monitor the machine, you can also use:
 
