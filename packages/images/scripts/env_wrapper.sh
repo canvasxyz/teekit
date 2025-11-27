@@ -3,6 +3,48 @@ set -euo pipefail
 
 LIMA_VM="${LIMA_VM:-tee-builder}"
 
+# Minimum free space in GB before triggering cleanup (default: 10GB)
+NIX_MIN_FREE_SPACE_GB="${NIX_MIN_FREE_SPACE_GB:-10}"
+
+# Check nix store free space and clean if needed
+check_nix_free_space() {
+    local nix_store="/nix/store"
+
+    # Skip if nix store doesn't exist
+    if [ ! -d "$nix_store" ]; then
+        return 0
+    fi
+
+    # Get free space in GB (using df on the nix store mount point)
+    local free_space_kb
+    free_space_kb=$(df -P "$nix_store" 2>/dev/null | awk 'NR==2 {print $4}')
+
+    if [ -z "$free_space_kb" ]; then
+        return 0
+    fi
+
+    local free_space_gb=$((free_space_kb / 1024 / 1024))
+
+    echo "Nix store free space: ${free_space_gb}GB (threshold: ${NIX_MIN_FREE_SPACE_GB}GB)"
+
+    if [ "$free_space_gb" -lt "$NIX_MIN_FREE_SPACE_GB" ]; then
+        echo -e "\033[1;33m⚠ Low disk space detected in nix store. Running cleanup...\033[0m"
+
+        echo "Running nix-collect-garbage..."
+        nix-collect-garbage -d 2>/dev/null || nix-collect-garbage 2>/dev/null || true
+
+        echo "Running nix store optimise..."
+        nix store optimise 2>/dev/null || true
+
+        # Report new free space
+        free_space_kb=$(df -P "$nix_store" 2>/dev/null | awk 'NR==2 {print $4}')
+        if [ -n "$free_space_kb" ]; then
+            free_space_gb=$((free_space_kb / 1024 / 1024))
+            echo -e "\033[1;32m✓ Cleanup complete. Free space now: ${free_space_gb}GB\033[0m"
+        fi
+    fi
+}
+
 # Check if Lima should be used
 should_use_lima() {
     # Use Lima by default for now
@@ -123,6 +165,9 @@ if should_use_lima; then
         )
     fi
 
+    # Check nix store free space inside Lima VM and clean if needed
+    lima_exec "$(declare -f check_nix_free_space); NIX_MIN_FREE_SPACE_GB=$NIX_MIN_FREE_SPACE_GB check_nix_free_space"
+
     lima_exec "cd ~/mnt && git config --global --add safe.directory ~/mnt && /home/debian/.nix-profile/bin/nix develop -c ${cmd[*]@Q}"
 
     if is_mkosi_cmd; then
@@ -139,6 +184,8 @@ else
     if in_nix_env; then
         exec "${cmd[@]}"
     else
+        # Check nix store free space and clean if needed before entering nix environment
+        check_nix_free_space
         exec nix develop -c "${cmd[@]}"
     fi
 fi
