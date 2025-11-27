@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 WRAPPER := scripts/env_wrapper.sh
 
-.PHONY: all build build-dev measure clean
+.PHONY: all build build-dev measure measure-gcp clean
 
 # Default target
 all: build
@@ -18,14 +18,23 @@ build-dev:
 	scripts/setup_deps.sh
 	$(WRAPPER) mkosi --force --profile=devtools -I $(IMAGE).conf
 
-# Export TDX measurements for the built image
+# Export TPM PCR measurements for the built image
 measure:
 	@if [ ! -f build/tdx-debian.efi ]; then \
 		echo "Error: build/tdx-debian.efi not found. Run 'make build' first."; \
 		exit 1; \
 	fi
-	$(WRAPPER) measured-boot build/tdx-debian.efi build/measurements.json --direct-uki
-	echo "Measurements exported to build/measurements.json"
+	$(WRAPPER) measured-boot build/tdx-debian.efi build/pcr_measurements.json --direct-uki
+	@echo "PCR measurements exported to build/pcr_measurements.json"
+
+# Export TDX MRTD/RTMR measurements for GCP
+measure-gcp:
+	@if [ ! -f build/tdx-debian.efi ]; then \
+		echo "Error: build/tdx-debian.efi not found. Run 'make build' first."; \
+		exit 1; \
+	fi
+	$(WRAPPER) dstack-mr -uki build/tdx-debian.efi -json > build/tdx_measurements.json
+	@echo "TDX measurements (MRTD, RTMR0-2) exported to build/tdx_measurements.json"
 
 # Remove cache and build artifacts
 clean:

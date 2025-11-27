@@ -230,6 +230,32 @@ jobs:
           echo "artifact_name=tdx-debian-$COMMIT_SHORT" >> $GITHUB_OUTPUT
           echo "commit_short=$COMMIT_SHORT" >> $GITHUB_OUTPUT
 
+      - name: Generate TDX measurements
+        run: |
+          echo "Generating TDX measurements..."
+
+          if [ ! -f "build/tdx-debian.efi" ]; then
+            echo "✗ EFI file not found: build/tdx-debian.efi"
+            echo "Skipping measurement generation"
+            exit 0
+          fi
+
+          # Generate TPM PCR measurements using measured-boot
+          ./scripts/env_wrapper.sh measured-boot build/tdx-debian.efi build/pcr_measurements.json --direct-uki
+          echo "✓ PCR measurements generated"
+
+          # Generate TDX MRTD/RTMR measurements using dstack-mr
+          ./scripts/env_wrapper.sh dstack-mr -uki build/tdx-debian.efi -json > build/tdx_measurements.json
+          echo "✓ TDX measurements generated (MRTD, RTMR0-2)"
+
+          echo ""
+          echo "=== TDX Measurements (MRTD/RTMRs) ==="
+          cat build/tdx_measurements.json
+
+          echo ""
+          echo "=== PCR Measurements ==="
+          cat build/pcr_measurements.json
+
       - name: Calculate checksums
         run: |
           echo "Generating checksums..."
@@ -247,6 +273,8 @@ jobs:
             packages/images/build/tdx-debian.tar.gz
             packages/images/build/tdx-debian.tar.gz.sha256
             packages/images/build/metadata.json
+            packages/images/build/tdx_measurements.json
+            packages/images/build/pcr_measurements.json
           retention-days: 30
           compression-level: 0  # Already compressed
 
@@ -314,5 +342,21 @@ jobs:
             echo "### SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             cat build/tdx-debian.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "build/tdx_measurements.json" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### TDX Measurements (MRTD/RTMRs)" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/tdx_measurements.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "build/pcr_measurements.json" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### TPM PCR Measurements" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/pcr_measurements.json >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
