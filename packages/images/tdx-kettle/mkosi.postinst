@@ -14,7 +14,8 @@ mkdir -p "$BUILDROOT/usr/lib/node_modules"
 
 # Install packages using mkosi-chroot with chroot-relative path
 # Inside the chroot, /usr maps to $BUILDROOT/usr
-npm_install_cmd="npm install --global-style --no-bin-links --prefix /usr workerd@^1.20250107.0 esbuild@^0.24.2"
+# Pin exact versions for reproducible builds (no caret ranges)
+npm_install_cmd="npm install --global-style --no-bin-links --prefix /usr workerd@1.20251128.0 esbuild@0.24.2"
 echo "Running in chroot: $npm_install_cmd"
 mkosi-chroot sh -c "$npm_install_cmd" || echo "Warning: Failed to install npm packages"
 
