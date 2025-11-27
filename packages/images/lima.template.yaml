@@ -5,7 +5,7 @@ images:
     arch: aarch64
 cpus: 6
 memory: 12GiB
-disk: 100GiB
+disk: 160GiB
 user:
   name: debian
   uid: 1000

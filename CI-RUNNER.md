@@ -19,7 +19,7 @@ gcloud compute instances create ci-builder \
       --zone=us-east1-b \
       --image-family=ubuntu-2404-lts-amd64 \
       --image-project=ubuntu-os-cloud \
-      --boot-disk-size=200GB \
+      --boot-disk-size=400GB \
       --metadata=startup-script='#!/bin/bash
         # Add default user to kvm group
         usermod -aG kvm $(logname)
