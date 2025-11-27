@@ -119,10 +119,10 @@ jobs:
           echo "Disk space before build:"
           df -h .
 
-          # Require at least 100GB free
+          # Require at least 50GB free
           FREE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
-          if [ "$FREE_SPACE" -lt 100 ]; then
-            echo "✗ Insufficient disk space: ${FREE_SPACE}GB free (need 100GB+)"
+          if [ "$FREE_SPACE" -lt 50 ]; then
+            echo "✗ Insufficient disk space: ${FREE_SPACE}GB free (need 50GB+)"
             exit 1
           fi
           echo "✓ Sufficient disk space: ${FREE_SPACE}GB free"
