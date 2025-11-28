@@ -17,6 +17,13 @@ TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
 # This ensures the ESP filesystem is reproducible
 FAT_SERIAL=$(printf '%08x' "$SOURCE_DATE_EPOCH" | sed 's/\(..\)\(..\)\(..\)\(..\)/\4\3\2\1/' | tr '[:lower:]' '[:upper:]')
 
+# Set MTOOLS_DATE_STRING for deterministic timestamps in FAT filesystem
+# Format: "YYYY-MM-DD HH:MM:SS" or "DD/MM/YYYY HH:MM:SS"
+# This ensures mformat, mmd, and mcopy use consistent timestamps
+export MTOOLS_DATE_STRING=$(date -u -d "@$SOURCE_DATE_EPOCH" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || \
+                           date -u -r "$SOURCE_DATE_EPOCH" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || \
+                           echo "1970-01-01 00:00:00")
+
 mkdir -p "$TMP"
 
 # Normalize EFI file timestamp before copying
@@ -27,8 +34,9 @@ dd if=/dev/zero of="$TMP/esp.img" bs=1M count=500 status=none
 # -N sets a fixed volume serial number for reproducibility
 mformat -i "$TMP/esp.img" -F -v "ESP" -N "$FAT_SERIAL" ::
 mmd -i "$TMP/esp.img" ::EFI ::EFI/BOOT
-# -m sets the modification time (uses SOURCE_DATE_EPOCH if available)
-mcopy -i "$TMP/esp.img" "$EFI" ::EFI/BOOT/BOOTX64.EFI
+# -m preserves the source file modification time (which we normalized above)
+# Combined with MTOOLS_DATE_STRING, this ensures deterministic FAT timestamps
+mcopy -m -i "$TMP/esp.img" "$EFI" ::EFI/BOOT/BOOTX64.EFI
 
 # Create 1GB disk with GPT + ESP partition
 dd if=/dev/zero of="$TMP/disk.raw" bs=1M count=1024 status=none
