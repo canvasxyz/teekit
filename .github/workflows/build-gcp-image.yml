@@ -209,6 +209,11 @@ jobs:
             exit 1
           fi
 
+      - name: Measure build output
+        run: |
+          echo "Measuring build output..."
+          ./scripts/measure_build.sh "gcp-image" "build"
+
       - name: Generate build metadata
         id: metadata
         run: |
@@ -298,6 +303,7 @@ jobs:
             packages/images/build/metadata.json
             packages/images/build/tdx_measurements.json
             packages/images/build/pcr_measurements.json
+            packages/images/build/measurements/
           retention-days: 30
           compression-level: 0  # Already compressed
 
@@ -381,5 +387,13 @@ jobs:
             echo "### TPM PCR Measurements" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
             cat build/pcr_measurements.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -d "build/measurements" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Build Measurements" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            find build/measurements -type f -exec sha256sum {} \; | sort -k2 >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
