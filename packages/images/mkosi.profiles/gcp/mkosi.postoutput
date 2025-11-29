@@ -39,8 +39,23 @@ mmd -i "$TMP/esp.img" ::EFI ::EFI/BOOT
 mcopy -m -i "$TMP/esp.img" "$EFI" ::EFI/BOOT/BOOTX64.EFI
 
 # Create 1GB disk with GPT + ESP partition
+# Use deterministic GUIDs derived from SOURCE_DATE_EPOCH for reproducibility
+# GPT normally uses random GUIDs which would cause non-determinism
+DISK_GUID="00000000-0000-0000-0000-$(printf '%012x' "$SOURCE_DATE_EPOCH")"
+PART_GUID="00000000-0000-0000-0001-$(printf '%012x' "$SOURCE_DATE_EPOCH")"
+
 dd if=/dev/zero of="$TMP/disk.raw" bs=1M count=1024 status=none
-parted "$TMP/disk.raw" --script -- mklabel gpt mkpart ESP fat32 2048s 1026047s set 1 boot on
+
+# Use sfdisk for deterministic GPT creation with fixed GUIDs
+# sfdisk supports label-id and partition uuid for reproducible builds
+sfdisk --label gpt "$TMP/disk.raw" <<EOF
+label-id: $DISK_GUID
+unit: sectors
+first-lba: 2048
+
+start=2048, size=1024000, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=$PART_GUID, name="ESP", attrs="LegacyBIOSBootable"
+EOF
+
 dd if="$TMP/esp.img" of="$TMP/disk.raw" bs=512 seek=2048 conv=notrunc status=none
 
 # Normalize timestamps of files before creating tar.gz for reproducibility
