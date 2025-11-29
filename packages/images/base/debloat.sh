@@ -5,6 +5,15 @@ set -euo pipefail
 find "$BUILDROOT/var/log" -type f -delete
 find "$BUILDROOT/var/cache" -type f -delete
 
+# Remove Python bytecode files for reproducibility
+# .pyc files contain embedded timestamps that vary between builds
+find "$BUILDROOT" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find "$BUILDROOT" -name "*.pyc" -delete 2>/dev/null || true
+find "$BUILDROOT" -name "*.pyo" -delete 2>/dev/null || true
+
+# Remove ldconfig cache - may contain non-deterministic content
+rm -f "$BUILDROOT/etc/ld.so.cache" 2>/dev/null || true
+
 debloat_paths=(
     "/etc/machine-id"
     "/etc/*-"
@@ -38,6 +47,7 @@ debloat_paths=(
     "/etc/systemd/network"
     "/etc/credstore"
     "/nix"
+    "/.npm"
 )
 
 for p in "${debloat_paths[@]}"; do rm -rf $BUILDROOT$p; done
