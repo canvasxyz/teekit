@@ -1,0 +1,214 @@
+name: Build Stage 5 - Full GCP Build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
+
+env:
+  BUILD_DIR: packages/images/build
+  STAGE_NAME: stage5-gcp
+  FORCE_LIMA: "1"
+
+jobs:
+  build-stage5:
+    name: Build Stage 5 - Full GCP Build
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 90
+
+    defaults:
+      run:
+        working-directory: packages/images
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set SOURCE_DATE_EPOCH for reproducible builds
+        run: |
+          echo "SOURCE_DATE_EPOCH=0" >> $GITHUB_ENV
+          echo "Set SOURCE_DATE_EPOCH=0 (1970-01-01 00:00:00 UTC) for reproducible builds"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup PATH for build tools
+        run: |
+          export PATH="/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
+          echo "PATH=$PATH" >> $GITHUB_ENV
+          command -v limactl && limactl --version || echo "⚠ limactl not found"
+
+      - name: Setup KVM permissions
+        run: |
+          ls -l /dev/kvm
+          if grep -qE 'vmx|svm' /proc/cpuinfo; then
+            echo "✓ CPU virtualization support detected"
+          else
+            echo "✗ CPU virtualization not available"
+            exit 1
+          fi
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm || exit 1
+          fi
+
+      - name: Check disk space
+        run: |
+          FREE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
+          if [ "$FREE_SPACE" -lt 100 ]; then
+            echo "✗ Insufficient disk space: ${FREE_SPACE}GB free (need 100GB+)"
+            exit 1
+          fi
+          echo "✓ Sufficient disk space: ${FREE_SPACE}GB free"
+
+      - name: Install system dependencies
+        run: ./scripts/setup_deps.sh
+
+      - name: Install root dependencies
+        run: |
+          cd ../..
+          npm ci
+
+      - name: Prepare Kettle artifacts
+        run: |
+          echo "Preparing Kettle artifacts..."
+          ./scripts/prep_kettle.sh
+
+      - name: Clean build directory
+        run: |
+          rm -rf build/stage5-* || true
+          mkdir -p build
+
+      - name: Build Stage 5 - Full GCP Build
+        run: |
+          echo "Building Stage 5: Full GCP build with postoutput..."
+          echo "Build started at: $(date)"
+          ./scripts/env_wrapper.sh mkosi -i --force --profile=gcp -I mkosi.stages/stage5-gcp.conf
+          echo "Build completed at: $(date)"
+
+      - name: Normalize build output timestamps
+        run: |
+          echo "Normalizing build output timestamps for reproducibility..."
+          # Normalize all file timestamps in build directory to SOURCE_DATE_EPOCH
+          TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       echo "197001010000.00")
+          
+          # Normalize all files and directories
+          find build -mindepth 1 -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+          
+          echo "Timestamp normalization complete"
+
+      - name: Measure build output
+        run: |
+          echo "Measuring build output..."
+          ./scripts/measure_build.sh "$STAGE_NAME" "build"
+
+      - name: Generate build metadata
+        id: metadata
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # Get artifact info if available
+          # GCP profile creates tar.gz with ImageId name
+          if [ -f "build/tdx-debian-stage5.tar.gz" ]; then
+            ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian-stage5.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian-stage5.tar.gz")
+            ARTIFACT_SIZE_MB=$((ARTIFACT_SIZE / 1024 / 1024))
+          elif [ -f "build/tdx-debian.tar.gz" ]; then
+            # Fallback to default name if ImageId wasn't used
+            ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian.tar.gz")
+            ARTIFACT_SIZE_MB=$((ARTIFACT_SIZE / 1024 / 1024))
+          else
+            ARTIFACT_SIZE=0
+            ARTIFACT_SIZE_MB=0
+          fi
+          
+          cat > build/stage5_metadata.json <<EOF
+          {
+            "stage": "$STAGE_NAME",
+            "build_date": "$BUILD_DATE",
+            "commit_sha": "$COMMIT_SHA",
+            "commit_short": "$COMMIT_SHORT",
+            "source_date_epoch": "${SOURCE_DATE_EPOCH}",
+            "artifact_size_bytes": $ARTIFACT_SIZE,
+            "artifact_size_mb": $ARTIFACT_SIZE_MB,
+            "workflow_run_id": "${{ github.run_id }}",
+            "workflow_run_number": "${{ github.run_number }}"
+          }
+          EOF
+          
+          cat build/stage5_metadata.json
+          echo "artifact_name=stage5-gcp-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Calculate checksums
+        run: |
+          echo "Generating checksums..."
+          cd build
+          if [ -f "tdx-debian-stage5.tar.gz" ]; then
+            sha256sum tdx-debian-stage5.tar.gz > tdx-debian-stage5.tar.gz.sha256
+            echo "Checksums:"
+            cat tdx-debian-stage5.tar.gz.sha256
+          elif [ -f "tdx-debian.tar.gz" ]; then
+            sha256sum tdx-debian.tar.gz > tdx-debian.tar.gz.sha256
+            echo "Checksums:"
+            cat tdx-debian.tar.gz.sha256
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: |
+            packages/images/build/measurements/
+            packages/images/build/stage5_metadata.json
+            packages/images/build/tdx-debian-stage5.tar.gz.sha256
+            packages/images/build/tdx-debian.tar.gz.sha256
+            packages/images/build/tdx-debian-stage5.efi
+            packages/images/build/tdx-debian-stage5.initrd
+          retention-days: 30
+          compression-level: 0
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Stage 5 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stage**: Full GCP Build with Postoutput" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ steps.metadata.outputs.artifact_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "build/stage5_metadata.json" ]; then
+            echo "### Metadata" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/stage5_metadata.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "build/tdx-debian-stage5.tar.gz.sha256" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat build/tdx-debian-stage5.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          elif [ -f "build/tdx-debian.tar.gz.sha256" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat build/tdx-debian.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -d "build/measurements" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Measurements" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            find build/measurements -type f -exec sha256sum {} \; | sort -k2 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi

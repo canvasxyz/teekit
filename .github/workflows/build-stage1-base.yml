@@ -1,0 +1,158 @@
+name: Build Stage 1 - Base Image
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run daily at 2 AM UTC to test consistency
+    - cron: '0 2 * * *'
+
+env:
+  BUILD_DIR: packages/images/build
+  STAGE_NAME: stage1-base
+  FORCE_LIMA: "1"
+
+jobs:
+  build-stage1:
+    name: Build Stage 1 - Base Image
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        working-directory: packages/images
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set SOURCE_DATE_EPOCH for reproducible builds
+        run: |
+          echo "SOURCE_DATE_EPOCH=0" >> $GITHUB_ENV
+          echo "Set SOURCE_DATE_EPOCH=0 (1970-01-01 00:00:00 UTC) for reproducible builds"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup PATH for build tools
+        run: |
+          export PATH="/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
+          echo "PATH=$PATH" >> $GITHUB_ENV
+          command -v limactl && limactl --version || echo "⚠ limactl not found"
+
+      - name: Setup KVM permissions
+        run: |
+          ls -l /dev/kvm
+          if grep -qE 'vmx|svm' /proc/cpuinfo; then
+            echo "✓ CPU virtualization support detected"
+          else
+            echo "✗ CPU virtualization not available"
+            exit 1
+          fi
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm || exit 1
+          fi
+
+      - name: Check disk space
+        run: |
+          FREE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
+          if [ "$FREE_SPACE" -lt 50 ]; then
+            echo "✗ Insufficient disk space: ${FREE_SPACE}GB free (need 50GB+)"
+            exit 1
+          fi
+          echo "✓ Sufficient disk space: ${FREE_SPACE}GB free"
+
+      - name: Install system dependencies
+        run: ./scripts/setup_deps.sh
+
+      - name: Install root dependencies
+        run: |
+          cd ../..
+          npm ci
+
+      - name: Clean build directory
+        run: |
+          rm -rf build/stage1-* || true
+          mkdir -p build
+
+      - name: Build Stage 1 - Base Image
+        run: |
+          echo "Building Stage 1: Minimal base image..."
+          echo "Build started at: $(date)"
+          ./scripts/env_wrapper.sh mkosi -i --force -I mkosi.stages/stage1-base.conf
+          echo "Build completed at: $(date)"
+
+      - name: Normalize build output timestamps
+        run: |
+          echo "Normalizing build output timestamps for reproducibility..."
+          TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       echo "197001010000.00")
+          find build -mindepth 1 -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+          echo "Timestamp normalization complete"
+
+      - name: Measure build output
+        run: |
+          echo "Measuring build output..."
+          ./scripts/measure_build.sh "$STAGE_NAME" "build"
+
+      - name: Generate build metadata
+        id: metadata
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          cat > build/stage1_metadata.json <<EOF
+          {
+            "stage": "$STAGE_NAME",
+            "build_date": "$BUILD_DATE",
+            "commit_sha": "$COMMIT_SHA",
+            "commit_short": "$COMMIT_SHORT",
+            "source_date_epoch": "${SOURCE_DATE_EPOCH}",
+            "workflow_run_id": "${{ github.run_id }}",
+            "workflow_run_number": "${{ github.run_number }}"
+          }
+          EOF
+          
+          cat build/stage1_metadata.json
+          echo "artifact_name=stage1-base-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: |
+            packages/images/build/measurements/
+            packages/images/build/stage1_metadata.json
+          retention-days: 30
+          compression-level: 0
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Stage 1 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stage**: Base Image Only" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ steps.metadata.outputs.artifact_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "build/stage1_metadata.json" ]; then
+            echo "### Metadata" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/stage1_metadata.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -d "build/measurements" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Measurements" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            find build/measurements -type f -exec sha256sum {} \; | sort -k2 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
