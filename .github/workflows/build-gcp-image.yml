@@ -293,6 +293,14 @@ jobs:
           echo "Checksums:"
           cat tdx-debian.tar.gz.sha256
 
+          # Generate checksum for initrd if it exists
+          if [ -f "tdx-debian.initrd" ]; then
+            sha256sum tdx-debian.initrd > tdx-debian.initrd.sha256
+            echo ""
+            echo "Initrd checksum:"
+            cat tdx-debian.initrd.sha256
+          fi
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -300,6 +308,8 @@ jobs:
           path: |
             packages/images/build/tdx-debian.tar.gz
             packages/images/build/tdx-debian.tar.gz.sha256
+            packages/images/build/tdx-debian.initrd
+            packages/images/build/tdx-debian.initrd.sha256
             packages/images/build/metadata.json
             packages/images/build/tdx_measurements.json
             packages/images/build/pcr_measurements.json
@@ -368,9 +378,12 @@ jobs:
 
           if [ -f "build/tdx-debian.tar.gz.sha256" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
+            echo "### SHA256 Checksums" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             cat build/tdx-debian.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
+            if [ -f "build/tdx-debian.initrd.sha256" ]; then
+              cat build/tdx-debian.initrd.sha256 >> $GITHUB_STEP_SUMMARY
+            fi
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
