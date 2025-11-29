@@ -29,7 +29,7 @@ env:
   BUILD_DIR: packages/images/build
   ARTIFACT_NAME: tdx-debian-gcp
   FORCE_LIMA: "1"
-  # SOURCE_DATE_EPOCH will be set dynamically from git commit timestamp for reproducible builds
+  # SOURCE_DATE_EPOCH is set to 0 (fixed epoch) for truly reproducible builds
 
 jobs:
   build-gcp-image:
@@ -56,11 +56,10 @@ jobs:
 
       - name: Set SOURCE_DATE_EPOCH for reproducible builds
         run: |
-          # Use git commit timestamp for reproducible builds
-          # This ensures the same commit always produces the same build timestamp
-          COMMIT_TIMESTAMP=$(git log -1 --format=%ct HEAD)
-          echo "SOURCE_DATE_EPOCH=$COMMIT_TIMESTAMP" >> $GITHUB_ENV
-          echo "Set SOURCE_DATE_EPOCH=$COMMIT_TIMESTAMP ($(date -d @$COMMIT_TIMESTAMP -u +%Y-%m-%dT%H:%M:%SZ))"
+          # Use fixed epoch (0 = 1970-01-01) for truly reproducible builds
+          # This ensures builds are fully deterministic regardless of when they run
+          echo "SOURCE_DATE_EPOCH=0" >> $GITHUB_ENV
+          echo "Set SOURCE_DATE_EPOCH=0 (1970-01-01 00:00:00 UTC) for reproducible builds"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -175,6 +174,19 @@ jobs:
 
           echo "Build completed at: $(date)"
 
+      - name: Normalize build output timestamps
+        run: |
+          echo "Normalizing build output timestamps for reproducibility..."
+          # Normalize all file timestamps in build directory to SOURCE_DATE_EPOCH
+          TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       echo "197001010000.00")
+          
+          # Normalize all files and directories
+          find build -mindepth 1 -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+          
+          echo "Timestamp normalization complete"
+
       - name: Verify build output
         run: |
           echo "Verifying build artifacts..."
@@ -223,6 +235,7 @@ jobs:
             "commit_short": "$COMMIT_SHORT",
             "commit_date": "$COMMIT_DATE",
             "branch": "$BRANCH_NAME",
+            "source_date_epoch": "${SOURCE_DATE_EPOCH}",
             "artifact_size_bytes": $ARTIFACT_SIZE,
             "artifact_size_mb": $ARTIFACT_SIZE_MB,
             "builder": "github-actions",
@@ -254,7 +267,8 @@ jobs:
           echo "✓ PCR measurements generated"
 
           # Generate TDX MRTD/RTMR measurements using dstack-mr
-          ./scripts/env_wrapper.sh dstack-mr -uki build/tdx-debian.efi -json > build/tdx_measurements.json
+          # Use grep to extract only the JSON object (lines between { and }) since env_wrapper.sh outputs extra messages
+          ./scripts/env_wrapper.sh dstack-mr -uki build/tdx-debian.efi -json | sed -n '/^{/,/^}/p' > build/tdx_measurements.json
           echo "✓ TDX measurements generated (MRTD, RTMR0-2)"
 
           echo ""

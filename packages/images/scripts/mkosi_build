@@ -13,6 +13,9 @@
 
 set -euo pipefail
 
+# Default to unix epoch, otherwise nix will default to fat32 epoch
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 

@@ -47,6 +47,16 @@ cp "$KETTLE_DIR/dist/app.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/worker.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/externals.js" "$IMAGES_DIR/kettle-artifacts/"
 
+# 7. Normalize artifact timestamps for reproducibility
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             echo "197001010000.00")
+
+echo "Normalizing artifact timestamps to $TOUCH_TIME..."
+find "$IMAGES_DIR/kettle-artifacts" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+touch -h -t "$TOUCH_TIME" "$IMAGES_DIR/cli.bundle.js" 2>/dev/null || true
+
 echo "Kettle artifacts prepared successfully!"
 echo "  - CLI bundle: $IMAGES_DIR/cli.bundle.js"
 echo "  - Artifacts: $IMAGES_DIR/kettle-artifacts/"

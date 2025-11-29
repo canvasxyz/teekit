@@ -31,6 +31,22 @@ fi
 echo "Verifying installed packages..."
 ls -la "$BUILDROOT/usr/lib/node_modules/" || echo "No packages in /usr/lib/node_modules"
 
+# Normalize npm package timestamps for reproducibility
+# npm creates various metadata files with timestamps that can vary between builds
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             echo "197001010000.00")
+
+if [ -d "$BUILDROOT/usr/lib/node_modules" ]; then
+    echo "Normalizing npm package timestamps to $TOUCH_TIME..."
+    # Remove npm cache files that might have variable content
+    find "$BUILDROOT/usr/lib/node_modules" -name ".package-lock.json" -delete 2>/dev/null || true
+    find "$BUILDROOT/usr/lib/node_modules" -name "package-lock.json" -delete 2>/dev/null || true
+    # Normalize all timestamps in node_modules
+    find "$BUILDROOT/usr/lib/node_modules" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+fi
+
 # Create symlinks for binaries in PATH
 mkdir -p "$BUILDROOT/usr/local/bin"
 if [ -f "$BUILDROOT/usr/lib/node_modules/workerd/bin/workerd" ]; then

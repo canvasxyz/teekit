@@ -7,20 +7,50 @@ TMP="${OUTPUTDIR}/gcp-tmp"
 
 [ ! -f "$EFI" ] && echo "Error: $EFI not found" && exit 1
 
+# Use SOURCE_DATE_EPOCH for reproducible builds
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             echo "197001010000.00")
+
+# Calculate a deterministic FAT32 volume serial number from SOURCE_DATE_EPOCH
+# This ensures the ESP filesystem is reproducible
+FAT_SERIAL=$(printf '%08x' "$SOURCE_DATE_EPOCH" | sed 's/\(..\)\(..\)\(..\)\(..\)/\4\3\2\1/' | tr '[:lower:]' '[:upper:]')
+
 mkdir -p "$TMP"
 
-# Create 500MB ESP
-dd if=/dev/zero of="$TMP/esp.img" bs=1M count=500
-mformat -i "$TMP/esp.img" -F -v "ESP" ::
+# Normalize EFI file timestamp before copying
+touch -h -t "$TOUCH_TIME" "$EFI" 2>/dev/null || true
+
+# Create 500MB ESP with deterministic serial number
+dd if=/dev/zero of="$TMP/esp.img" bs=1M count=500 status=none
+# -N sets a fixed volume serial number for reproducibility
+mformat -i "$TMP/esp.img" -F -v "ESP" -N "$FAT_SERIAL" ::
 mmd -i "$TMP/esp.img" ::EFI ::EFI/BOOT
+# -m sets the modification time (uses SOURCE_DATE_EPOCH if available)
 mcopy -i "$TMP/esp.img" "$EFI" ::EFI/BOOT/BOOTX64.EFI
 
 # Create 1GB disk with GPT + ESP partition
-dd if=/dev/zero of="$TMP/disk.raw" bs=1M count=1024
+dd if=/dev/zero of="$TMP/disk.raw" bs=1M count=1024 status=none
 parted "$TMP/disk.raw" --script -- mklabel gpt mkpart ESP fat32 2048s 1026047s set 1 boot on
-dd if="$TMP/esp.img" of="$TMP/disk.raw" bs=512 seek=2048 conv=notrunc
+dd if="$TMP/esp.img" of="$TMP/disk.raw" bs=512 seek=2048 conv=notrunc status=none
 
-# Create GCP tar.gz
-tar --format=oldgnu -Sczf "$TAR" -C "$TMP" disk.raw
+# Normalize timestamps of files before creating tar.gz for reproducibility
+touch -h -t "$TOUCH_TIME" "$TMP/disk.raw" 2>/dev/null || true
+touch -h -t "$TOUCH_TIME" "$TMP/esp.img" 2>/dev/null || true
+
+# Create GCP tar.gz with deterministic compression
+# Use --mtime to set timestamp in tar archive for reproducibility
+# Use separate gzip with -n to avoid embedding filename/timestamp in gzip header
+TAR_MTIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d 2>/dev/null || \
+            date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%d 2>/dev/null || \
+            echo "1970-01-01")
+
+# Create tar without compression, then compress with deterministic gzip
+tar --format=oldgnu --mtime="$TAR_MTIME" --owner=0 --group=0 --numeric-owner -Scf - -C "$TMP" disk.raw | \
+    gzip -n -9 > "$TAR"
+
+# Normalize tar.gz file timestamp
+touch -h -t "$TOUCH_TIME" "$TAR" 2>/dev/null || true
 
 rm -rf "$TMP"

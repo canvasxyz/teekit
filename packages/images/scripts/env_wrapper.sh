@@ -168,12 +168,31 @@ if should_use_lima; then
     # Check nix store free space inside Lima VM and clean if needed
     lima_exec "$(declare -f check_nix_free_space); NIX_MIN_FREE_SPACE_GB=$NIX_MIN_FREE_SPACE_GB check_nix_free_space"
 
-    lima_exec "cd ~/mnt && git config --global --add safe.directory ~/mnt && /home/debian/.nix-profile/bin/nix develop -c ${cmd[*]@Q}"
+    # Build environment variables to pass to the Lima VM
+    # SOURCE_DATE_EPOCH is critical for reproducible builds
+    lima_env=""
+    if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+        lima_env="SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH "
+    fi
+
+    lima_exec "cd ~/mnt && git config --global --add safe.directory ~/mnt && ${lima_env}/home/debian/.nix-profile/bin/nix develop -c ${cmd[*]@Q}"
 
     if is_mkosi_cmd; then
         # Use cp --no-preserve=ownership instead of mv to avoid permission errors,
         # as user IDs in the unshare namespace don't map to valid users on the host.
         lima_exec "mkdir -p ~/mnt/build && cp -a --no-preserve=ownership '$mkosi_output'/* ~/mnt/build/ && rm -rf '$mkosi_output'/*" || true
+
+        # Normalize output file timestamps for reproducibility if SOURCE_DATE_EPOCH is set
+        # Normalize ALL files in build directory to ensure reproducible outputs
+        if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+            TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                         date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                         echo "197001010000.00")
+            if [ -n "$TOUCH_TIME" ]; then
+                # Normalize all files and directories in build directory
+                find build -mindepth 1 -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+            fi
+        fi
 
         echo "Check ./build/ directory for output files"
         echo
