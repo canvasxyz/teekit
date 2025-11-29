@@ -2,6 +2,12 @@ name: Build Stage 2 - Base + Kernel
 
 on:
   workflow_dispatch:
+    inputs:
+      clean_build:
+        description: 'Perform a clean build (deletes entire build cache)'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '0 3 * * *'
 
@@ -75,7 +81,13 @@ jobs:
 
       - name: Clean build directory
         run: |
-          rm -rf build/stage2-* || true
+          if [ "${{ github.event.inputs.clean_build }}" == "true" ]; then
+            echo "Performing clean build (deleting entire build cache)..."
+            rm -rf build/ || true
+          else
+            echo "Cleaning stage-specific files only..."
+            rm -rf build/stage2-* || true
+          fi
           mkdir -p build
 
       - name: Build Stage 2 - Base + Kernel
