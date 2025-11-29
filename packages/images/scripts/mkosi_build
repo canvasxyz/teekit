@@ -2,9 +2,9 @@
 
 # Shorthand script for mkosi build commands.
 #
-# By default, uses single --force to allow rebuilding over existing output while
-# preserving the incremental cache.
+# By default, preserves existing outputs (skips images that are already built).
 #
+# Use --rebuild to force rebuilding while preserving incremental cache (--force).
 # Use --clean to also clear the incremental cache (equivalent to --force --force).
 # Supports any list of profiles passed afterwards.
 #
@@ -21,12 +21,17 @@ cd "$IMAGES_DIR"
 echo "Running 'npm run build'..."
 npm run build
 
-# Default: single --force to allow rebuilding while preserving incremental cache
-force_args=(--force)
+# Default: no --force, preserves existing outputs
+force_args=()
 profiles=()
 
 while (( "$#" )); do
   case "$1" in
+    --rebuild)
+      # Single --force to rebuild while preserving incremental cache
+      force_args=(--force)
+      shift
+      ;;
     --clean)
       # Double --force clears the incremental cache
       force_args=(--force --force)
@@ -41,7 +46,7 @@ done
 
 if [ ${#profiles[@]} -eq 0 ]; then
   echo "Building default mkosi image (no profile)..."
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i "${force_args[@]}" -I tdx-kettle.conf
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} -I tdx-kettle.conf
   exit 0
 fi
 
@@ -58,8 +63,8 @@ done
 
 if [ ${#profile_names[@]} -eq 0 ]; then
   echo "Building default mkosi image (no profile)..."
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i "${force_args[@]}" -I tdx-kettle.conf
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} -I tdx-kettle.conf
 else
   echo "Building mkosi image with profiles: ${profile_names[*]}"
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i "${force_args[@]}" "${profile_args[@]}" -I tdx-kettle.conf
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} "${profile_args[@]}" -I tdx-kettle.conf
 fi
