@@ -388,6 +388,26 @@ jobs:
             exit 1
           fi
 
+      - name: Compress Azure VHD image
+        run: |
+          echo "Compressing Azure VHD image..."
+          cd build
+
+          # Create tar.gz of the VHD file
+          tar -czvf tdx-debian-azure.vhd.tar.gz tdx-debian-azure.vhd
+
+          # Show compression results
+          VHD_SIZE=$(stat -c%s "tdx-debian-azure.vhd" 2>/dev/null || stat -f%z "tdx-debian-azure.vhd")
+          COMPRESSED_SIZE=$(stat -c%s "tdx-debian-azure.vhd.tar.gz" 2>/dev/null || stat -f%z "tdx-debian-azure.vhd.tar.gz")
+          VHD_SIZE_MB=$((VHD_SIZE / 1024 / 1024))
+          COMPRESSED_SIZE_MB=$((COMPRESSED_SIZE / 1024 / 1024))
+          RATIO=$((100 - (COMPRESSED_SIZE * 100 / VHD_SIZE)))
+
+          echo "✓ Azure VHD compressed"
+          echo "  Original size: ${VHD_SIZE_MB}MB"
+          echo "  Compressed size: ${COMPRESSED_SIZE_MB}MB"
+          echo "  Compression ratio: ${RATIO}% reduction"
+
       - name: Measure Azure build output
         run: |
           echo "Measuring Azure build output..."
@@ -523,13 +543,13 @@ jobs:
             exit 0
           fi
 
-          # Upload VHD to Azure blob storage
-          ARTIFACT_PATH="builds/${{ steps.metadata.outputs.commit_short }}/tdx-debian-azure.vhd"
+          # Upload compressed VHD to Azure blob storage
+          ARTIFACT_PATH="builds/${{ steps.metadata.outputs.commit_short }}/tdx-debian-azure.vhd.tar.gz"
           az storage blob upload \
             --account-name "$AZURE_STORAGE_ACCOUNT" \
             --container-name "$AZURE_STORAGE_CONTAINER" \
             --name "$ARTIFACT_PATH" \
-            --file build/tdx-debian-azure.vhd \
+            --file build/tdx-debian-azure.vhd.tar.gz \
             --account-key "$AZURE_STORAGE_KEY" \
             --overwrite
 
@@ -542,7 +562,7 @@ jobs:
             --account-key "$AZURE_STORAGE_KEY" \
             --overwrite
 
-          echo "✓ Uploaded to Azure: $AZURE_STORAGE_ACCOUNT/$AZURE_STORAGE_CONTAINER/$ARTIFACT_PATH"
+          echo "✓ Uploaded compressed VHD to Azure: $AZURE_STORAGE_ACCOUNT/$AZURE_STORAGE_CONTAINER/$ARTIFACT_PATH"
 
       - name: Cleanup old builds
         if: always()
