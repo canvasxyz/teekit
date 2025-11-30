@@ -59,7 +59,12 @@ like Let's Encrypt, without custom configuration.
     code, designed to work with @teekit/tunnel and TEE environments
     (e.g. Dstack, GCP, Azure).
 - @teekit/images:
-  - A deterministic VM image for running @teekit/kettle applications.
+  - A reproducible VM image for running @teekit/kettle applications.
+  - Based on Debian 16 with a custom yocto-tiny kernel, which boots a ~200MB
+    read-only ramdisk containing our JS runtime.
+  - Builds are run using mkosi, and configured to automatically run nightly
+    while generating RTMR and PCR measurements (MRTD measurements unavailable
+    since cloud providers generally do not publish hypervisor firmware).
 
 @teekit/tunnel and @teekit/qvl are stable, while other components are under
 active development. These libraries have not been audited.
