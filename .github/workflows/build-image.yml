@@ -408,6 +408,10 @@ jobs:
           echo "  Compressed size: ${COMPRESSED_SIZE_MB}MB"
           echo "  Compression ratio: ${RATIO}% reduction"
 
+          # Remove the original VHD to save disk space
+          rm -f tdx-debian-azure.vhd
+          echo "✓ Removed original VHD to save disk space"
+
       - name: Measure Azure build output
         run: |
           echo "Measuring Azure build output..."
@@ -418,8 +422,8 @@ jobs:
         run: |
           echo "Generating Azure build metadata..."
 
-          # Get artifact info
-          ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian-azure.vhd" 2>/dev/null || stat -f%z "build/tdx-debian-azure.vhd")
+          # Get artifact info (use compressed .tar.gz size)
+          ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian-azure.vhd.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian-azure.vhd.tar.gz")
           ARTIFACT_SIZE_MB=$((ARTIFACT_SIZE / 1024 / 1024))
 
           # Create Azure-specific metadata file
@@ -470,31 +474,23 @@ jobs:
         run: |
           echo "Generating Azure checksums..."
           cd build
-          sha256sum tdx-debian-azure.vhd > tdx-debian-azure.vhd.sha256
-          if [ -f "tdx-debian-azure.vhd.tar.gz" ]; then
-            sha256sum tdx-debian-azure.vhd.tar.gz > tdx-debian-azure.vhd.tar.gz.sha256
-          fi
+          sha256sum tdx-debian-azure.vhd.tar.gz > tdx-debian-azure.vhd.tar.gz.sha256
 
-          echo "Azure Checksums:"
-          cat tdx-debian-azure.vhd.sha256
-          if [ -f "tdx-debian-azure.vhd.tar.gz.sha256" ]; then
-            cat tdx-debian-azure.vhd.tar.gz.sha256
-          fi
+          echo "Azure Checksum:"
+          cat tdx-debian-azure.vhd.tar.gz.sha256
 
       - name: Upload Azure build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.metadata.outputs.azure_artifact_name }}
           path: |
-            packages/images/build/tdx-debian-azure.vhd
-            packages/images/build/tdx-debian-azure.vhd.sha256
             packages/images/build/tdx-debian-azure.vhd.tar.gz
             packages/images/build/tdx-debian-azure.vhd.tar.gz.sha256
             packages/images/build/azure_metadata.json
             packages/images/build/azure_tdx_measurements.json
             packages/images/build/azure_pcr_measurements.json
           retention-days: 30
-          compression-level: 0  # VHD.tar.gz is already compressed
+          compression-level: 0  # Already compressed
 
       - name: Disk space after build
         if: always()
@@ -635,11 +631,11 @@ jobs:
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [ -f "build/tdx-debian-azure.vhd.sha256" ]; then
+          if [ -f "build/tdx-debian-azure.vhd.tar.gz.sha256" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Azure VHD SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
+            echo "### Azure VHD.tar.gz SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            cat build/tdx-debian-azure.vhd.sha256 >> $GITHUB_STEP_SUMMARY
+            cat build/tdx-debian-azure.vhd.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
