@@ -1,4 +1,4 @@
-name: Build GCP TDX Image
+name: Build GCP and Azure TDX Images
 
 on:
   # Trigger on pushes to main branch only. Do not trigger on PR (for security reasons!)
@@ -27,17 +27,23 @@ on:
         required: false
         type: boolean
         default: false
+      upload_to_azure:
+        description: 'Upload built image to Azure'
+        required: false
+        type: boolean
+        default: false
 
 env:
   # Set build directory for caching
   BUILD_DIR: packages/images/build
-  ARTIFACT_NAME: tdx-debian-gcp
+  ARTIFACT_NAME_GCP: tdx-debian-gcp
+  ARTIFACT_NAME_AZURE: tdx-debian-azure
   FORCE_LIMA: "1"
   # SOURCE_DATE_EPOCH is set to 0 (fixed epoch) for truly reproducible builds
 
 jobs:
-  build-gcp-image:
-    name: Build GCP TDX Image
+  build-images:
+    name: Build GCP and Azure TDX Images
     # Run on self-hosted runner with KVM support
     runs-on: [self-hosted, Linux, X64]
     # Only run on push events when commit message contains [build], or on manual workflow_dispatch
@@ -258,7 +264,8 @@ jobs:
           cat build/metadata.json
 
           # Set outputs for use in later steps
-          echo "artifact_name=tdx-debian-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "gcp_artifact_name=tdx-debian-gcp-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "azure_artifact_name=tdx-debian-azure-$COMMIT_SHORT" >> $GITHUB_OUTPUT
           echo "commit_short=$COMMIT_SHORT" >> $GITHUB_OUTPUT
 
       - name: Generate TDX measurements
@@ -297,10 +304,10 @@ jobs:
           echo "Checksums:"
           cat tdx-debian.tar.gz.sha256
 
-      - name: Upload build artifact
+      - name: Upload GCP build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.metadata.outputs.artifact_name }}
+          name: ${{ steps.metadata.outputs.gcp_artifact_name }}
           path: |
             packages/images/build/tdx-debian.tar.gz
             packages/images/build/tdx-debian.tar.gz.sha256
@@ -310,6 +317,164 @@ jobs:
             packages/images/build/measurements/
           retention-days: 30
           compression-level: 0  # Already compressed
+
+      # ============================================
+      # Azure Build Section
+      # ============================================
+
+      - name: Clear final image artifacts for Azure build
+        run: |
+          echo "Clearing final image artifacts for Azure build..."
+          echo "Azure profile adds different packages (dmidecode) and skeleton trees,"
+          echo "so we need to clear the final image output to rebuild with Azure profile."
+          echo ""
+          echo "Note: Subimage caches (kernel, sqld) are preserved since they are"
+          echo "profile-independent and can be reused for the Azure build."
+
+          # Clear only the final image artifacts, not the subimage caches
+          # The .efi file needs to be rebuilt for Azure due to different content
+          rm -f build/tdx-debian.efi || true
+          rm -rf build/tdx-debian/ || true
+
+          echo "Final image artifacts cleared for Azure build"
+
+      - name: Build Azure image
+        run: |
+          echo "Starting build for Azure VHD image..."
+          echo "Build started at: $(date)"
+
+          # Use clean build if requested via workflow_dispatch
+          if [ "${{ github.event.inputs.clean_build }}" == "true" ]; then
+            npm run build:az:clean
+          else
+            npm run build:az
+          fi
+
+          echo "Azure build completed at: $(date)"
+
+      - name: Normalize Azure build output timestamps
+        run: |
+          echo "Normalizing Azure build output timestamps for reproducibility..."
+          TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+                       echo "197001010000.00")
+
+          # Normalize Azure-specific files
+          touch -h -t "$TOUCH_TIME" build/tdx-debian-azure.vhd 2>/dev/null || true
+          touch -h -t "$TOUCH_TIME" build/tdx-debian-azure.vhd.tar.gz 2>/dev/null || true
+          touch -h -t "$TOUCH_TIME" build/tdx-debian-azure.efi 2>/dev/null || true
+
+          echo "Azure timestamp normalization complete"
+
+      - name: Verify Azure build output
+        run: |
+          echo "Verifying Azure build artifacts..."
+
+          if [ ! -f "build/tdx-debian-azure.vhd" ]; then
+            echo "✗ Azure build artifact not found: build/tdx-debian-azure.vhd"
+            exit 1
+          fi
+
+          echo "✓ Azure build artifact found"
+          ls -lh build/tdx-debian-azure*
+
+          # Check VHD file size (should be substantial)
+          SIZE=$(stat -c%s "build/tdx-debian-azure.vhd" 2>/dev/null || stat -f%z "build/tdx-debian-azure.vhd")
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Azure VHD size: ${SIZE_MB}MB"
+
+          if [ "$SIZE_MB" -lt 50 ]; then
+            echo "✗ Azure VHD seems too small: ${SIZE_MB}MB"
+            exit 1
+          fi
+
+      - name: Measure Azure build output
+        run: |
+          echo "Measuring Azure build output..."
+          ./scripts/measure_build.sh "azure-image" "build"
+
+      - name: Generate Azure metadata
+        id: azure_metadata
+        run: |
+          echo "Generating Azure build metadata..."
+
+          # Get artifact info
+          ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian-azure.vhd" 2>/dev/null || stat -f%z "build/tdx-debian-azure.vhd")
+          ARTIFACT_SIZE_MB=$((ARTIFACT_SIZE / 1024 / 1024))
+
+          # Create Azure-specific metadata file
+          cat > build/azure_metadata.json <<EOF
+          {
+            "build_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "commit_sha": "$(git rev-parse HEAD)",
+            "commit_short": "${{ steps.metadata.outputs.commit_short }}",
+            "platform": "azure",
+            "source_date_epoch": "${SOURCE_DATE_EPOCH}",
+            "artifact_size_bytes": $ARTIFACT_SIZE,
+            "artifact_size_mb": $ARTIFACT_SIZE_MB,
+            "builder": "github-actions",
+            "workflow_run_id": "${{ github.run_id }}"
+          }
+          EOF
+
+          echo "Azure Metadata:"
+          cat build/azure_metadata.json
+
+      - name: Generate Azure TDX measurements
+        run: |
+          echo "Generating TDX measurements for Azure..."
+
+          if [ ! -f "build/tdx-debian-azure.efi" ]; then
+            echo "✗ Azure EFI file not found: build/tdx-debian-azure.efi"
+            echo "Skipping Azure measurement generation"
+            exit 0
+          fi
+
+          # Generate TPM PCR measurements using measured-boot
+          ./scripts/env_wrapper.sh measured-boot build/tdx-debian-azure.efi build/azure_pcr_measurements.json --direct-uki
+          echo "✓ Azure PCR measurements generated"
+
+          # Generate TDX MRTD/RTMR measurements using dstack-mr
+          ./scripts/env_wrapper.sh dstack-mr -uki build/tdx-debian-azure.efi -json | sed -n '/^{/,/^}/p' > build/azure_tdx_measurements.json
+          echo "✓ Azure TDX measurements generated (MRTD, RTMR0-2)"
+
+          echo ""
+          echo "=== Azure TDX Measurements (MRTD/RTMRs) ==="
+          cat build/azure_tdx_measurements.json
+
+          echo ""
+          echo "=== Azure PCR Measurements ==="
+          cat build/azure_pcr_measurements.json
+
+      - name: Calculate Azure checksums
+        run: |
+          echo "Generating Azure checksums..."
+          cd build
+          sha256sum tdx-debian-azure.vhd > tdx-debian-azure.vhd.sha256
+          if [ -f "tdx-debian-azure.vhd.tar.gz" ]; then
+            sha256sum tdx-debian-azure.vhd.tar.gz > tdx-debian-azure.vhd.tar.gz.sha256
+          fi
+
+          echo "Azure Checksums:"
+          cat tdx-debian-azure.vhd.sha256
+          if [ -f "tdx-debian-azure.vhd.tar.gz.sha256" ]; then
+            cat tdx-debian-azure.vhd.tar.gz.sha256
+          fi
+
+      - name: Upload Azure build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.azure_artifact_name }}
+          path: |
+            packages/images/build/tdx-debian-azure.vhd
+            packages/images/build/tdx-debian-azure.vhd.sha256
+            packages/images/build/tdx-debian-azure.vhd.tar.gz
+            packages/images/build/tdx-debian-azure.vhd.tar.gz.sha256
+            packages/images/build/azure_metadata.json
+            packages/images/build/azure_tdx_measurements.json
+            packages/images/build/azure_pcr_measurements.json
+          retention-days: 30
+          compression-level: 0  # VHD.tar.gz is already compressed
 
       - name: Disk space after build
         if: always()
@@ -342,6 +507,43 @@ jobs:
 
           echo "✓ Uploaded to: gs://$GCP_BUCKET/$ARTIFACT_PATH"
 
+      - name: Upload to Azure (optional, experimental)
+        if: ${{ github.event.inputs.upload_to_azure == 'true' && github.event_name == 'workflow_dispatch' }}
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          echo "Uploading to Azure..."
+
+          # Check if Azure credentials are configured
+          if [ -z "$AZURE_STORAGE_ACCOUNT" ] || [ -z "$AZURE_STORAGE_CONTAINER" ]; then
+            echo "⚠ Azure credentials not configured. Skipping upload."
+            echo "Set AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_CONTAINER, and AZURE_STORAGE_KEY secrets to enable."
+            exit 0
+          fi
+
+          # Upload VHD to Azure blob storage
+          ARTIFACT_PATH="builds/${{ steps.metadata.outputs.commit_short }}/tdx-debian-azure.vhd"
+          az storage blob upload \
+            --account-name "$AZURE_STORAGE_ACCOUNT" \
+            --container-name "$AZURE_STORAGE_CONTAINER" \
+            --name "$ARTIFACT_PATH" \
+            --file build/tdx-debian-azure.vhd \
+            --account-key "$AZURE_STORAGE_KEY" \
+            --overwrite
+
+          # Upload metadata
+          az storage blob upload \
+            --account-name "$AZURE_STORAGE_ACCOUNT" \
+            --container-name "$AZURE_STORAGE_CONTAINER" \
+            --name "builds/${{ steps.metadata.outputs.commit_short }}/azure_metadata.json" \
+            --file build/azure_metadata.json \
+            --account-key "$AZURE_STORAGE_KEY" \
+            --overwrite
+
+          echo "✓ Uploaded to Azure: $AZURE_STORAGE_ACCOUNT/$AZURE_STORAGE_CONTAINER/$ARTIFACT_PATH"
+
       - name: Cleanup old builds
         if: always()
         run: |
@@ -359,12 +561,18 @@ jobs:
           echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: \`${{ steps.metadata.outputs.commit_short }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Artifact**: \`${{ steps.metadata.outputs.artifact_name }}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **GCP Artifact**: \`${{ steps.metadata.outputs.gcp_artifact_name }}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Azure Artifact**: \`${{ steps.metadata.outputs.azure_artifact_name }}.vhd\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
+          # GCP Section
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "## GCP Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           if [ -f "build/metadata.json" ]; then
-            echo "### Metadata" >> $GITHUB_STEP_SUMMARY
+            echo "### GCP Metadata" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
             cat build/metadata.json >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
@@ -372,7 +580,7 @@ jobs:
 
           if [ -f "build/tdx-debian.tar.gz.sha256" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
+            echo "### GCP SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             cat build/tdx-debian.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
@@ -380,7 +588,7 @@ jobs:
 
           if [ -f "build/tdx_measurements.json" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### TDX Measurements (MRTD/RTMRs)" >> $GITHUB_STEP_SUMMARY
+            echo "### GCP TDX Measurements (MRTD/RTMRs)" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
             cat build/tdx_measurements.json >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
@@ -388,14 +596,53 @@ jobs:
 
           if [ -f "build/pcr_measurements.json" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### TPM PCR Measurements" >> $GITHUB_STEP_SUMMARY
+            echo "### GCP TPM PCR Measurements" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
             cat build/pcr_measurements.json >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
+          # Azure Section
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "## Azure Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "build/azure_metadata.json" ]; then
+            echo "### Azure Metadata" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/azure_metadata.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "build/tdx-debian-azure.vhd.sha256" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Azure VHD SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat build/tdx-debian-azure.vhd.sha256 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "build/azure_tdx_measurements.json" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Azure TDX Measurements (MRTD/RTMRs)" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/azure_tdx_measurements.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "build/azure_pcr_measurements.json" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Azure TPM PCR Measurements" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat build/azure_pcr_measurements.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Shared Build Measurements
           if [ -d "build/measurements" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
+            echo "---" >> $GITHUB_STEP_SUMMARY
             echo "### Build Measurements" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             find build/measurements -type f -exec sha256sum {} \; | sort -k2 >> $GITHUB_STEP_SUMMARY
