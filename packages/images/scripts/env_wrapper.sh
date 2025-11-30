@@ -175,6 +175,10 @@ if should_use_lima; then
         lima_env="SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH "
     fi
 
+    # Mark ~/mnt as a safe directory to avoid "dubious ownership" errors.
+    # The mount is owned by the host user, but Lima runs as debian user.
+    lima_exec "git config --global --add safe.directory /home/debian/mnt"
+
     # Initialize a temporary git repo so Nix respects .gitignore when copying
     # to the store. Without .git, Nix copies ALL files (~1.2GB). With .git,
     # Nix respects .gitignore (~1MB). We remove .git afterward to avoid confusion.
@@ -186,7 +190,7 @@ if should_use_lima; then
     }
     trap cleanup_git EXIT
 
-    lima_exec "cd ~/mnt && git config --global --add safe.directory ~/mnt && ${lima_env}/home/debian/.nix-profile/bin/nix develop -c ${cmd[*]@Q}"
+    lima_exec "cd ~/mnt && ${lima_env}/home/debian/.nix-profile/bin/nix develop -c ${cmd[*]@Q}"
 
     # Clean up temporary git repo (also runs via trap on exit)
     cleanup_git
