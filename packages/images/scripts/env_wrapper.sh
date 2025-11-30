@@ -197,9 +197,10 @@ if should_use_lima; then
     trap - EXIT
 
     if is_mkosi_cmd; then
-        # Use cp --no-preserve=ownership instead of mv to avoid permission errors,
-        # as user IDs in the unshare namespace don't map to valid users on the host.
-        lima_exec "mkdir -p ~/mnt/build && cp -a --no-preserve=ownership '$mkosi_output'/* ~/mnt/build/ && rm -rf '$mkosi_output'/*" || true
+        # Use cp --no-preserve=ownership,timestamps instead of mv to avoid permission errors.
+        # - ownership: user IDs in the unshare namespace don't map to valid users on the host
+        # - timestamps: SSHFS can't preserve timestamps on symlinks; timestamps are normalized afterward anyway
+        lima_exec "mkdir -p ~/mnt/build && cp -a --no-preserve=ownership,timestamps '$mkosi_output'/* ~/mnt/build/ && rm -rf '$mkosi_output'/*" || true
 
         # Normalize output file timestamps for reproducibility if SOURCE_DATE_EPOCH is set
         # Normalize ALL files in build directory to ensure reproducible outputs
