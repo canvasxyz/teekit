@@ -112,7 +112,14 @@ else
     VM_COUNT=$(echo "$VM_LIST" | wc -l)
     log_info "Found $VM_COUNT VM(s) to delete:"
     echo "$VM_LIST" | while read -r vm; do
-        echo "  - $vm"
+        # Get the VM's public IP address
+        VM_IP=$(az vm list-ip-addresses --name "$vm" --resource-group "$RESOURCE_GROUP" \
+            --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" -o tsv 2>/dev/null || echo "")
+        if [ -n "$VM_IP" ]; then
+            echo "  - $vm (IP: $VM_IP)"
+        else
+            echo "  - $vm (IP: <none>)"
+        fi
     done
     echo ""
 
