@@ -22,7 +22,7 @@ check_perms() {
 
 check_perms "base/mkosi.skeleton/init" "755" || chmod 755 base/mkosi.skeleton/init
 check_perms "base/mkosi.skeleton/etc" "755" || chmod 755 base/mkosi.skeleton/etc
-check_perms "base/mkosi.skeleton/etc/resolv.conf" "644" || chmod 644 base/mkosi.skeleton/resolv.conf
+check_perms "base/mkosi.skeleton/etc/resolv.conf" "644" || chmod 644 base/mkosi.skeleton/etc/resolv.conf
 
 # Ensure mkosi.tools/nix symlink exists for nix store access in sandbox
 if [ -d "mkosi.tools" ]; then
