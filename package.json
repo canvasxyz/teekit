@@ -14,7 +14,7 @@
 		"build:vm:clean": "npm --workspace packages/images run build:vm:clean",
 		"build:dstack": "npm --workspace packages/images-dstack run build:dstack",
 		"lint": "eslint .",
-		"publish": "npm run clean && npm run build && npm publish -w=packages/ --access public",
+		"publish": "npm run clean && npm run build && npm publish -w=packages/kettle -w packages/tunnel -w packages/qvl --access public",
 		"dev": "tsc --build --watch",
 		"dev:demo": "npm --workspace packages/demo run dev",
 		"preview": "npm --workspace packages/demo run preview",

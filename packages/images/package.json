@@ -1,4 +1,6 @@
 {
+	"name": "@teekit/images",
+	"version": "0.0.4",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -22,6 +24,5 @@
 		"deploy:az:devtools": "bash scripts/deploy_azure.sh build/tdx-debian-devtools.vhd",
 		"list:az": "bash scripts/ls_azure.sh",
 		"reset:lima": "limactl stop tee-builder && limactl delete tee-builder"
-	},
-	"version": "0.0.4"
+	}
 }

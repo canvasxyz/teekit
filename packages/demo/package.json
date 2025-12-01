@@ -1,7 +1,7 @@
 {
 	"name": "@teekit/demo",
-	"private": true,
 	"version": "0.0.4",
+	"private": true,
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
