@@ -1,6 +1,6 @@
 {
 	"name": "@teekit/tunnel",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
@@ -24,7 +24,7 @@
 		"@noble/ciphers": "^2.0.1",
 		"@noble/curves": "^2.0.1",
 		"@noble/hashes": "^1.8.0",
-		"@teekit/qvl": "0.0.3",
+		"@teekit/qvl": "0.0.4",
 		"cbor-x": "^1.6.0",
 		"isomorphic-ws": "^5.0.0",
 		"node-mocks-http": "^1.17.2",

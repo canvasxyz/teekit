@@ -5,5 +5,5 @@
 	"scripts": {
 		"build:dstack": "cd ../.. && ./packages/images-dstack/docker-build.sh"
 	},
-	"version": "0.0.3"
+	"version": "0.0.4"
 }
