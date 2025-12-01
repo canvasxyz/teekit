@@ -1,5 +1,4 @@
 import {
-  hex,
   parseSgxQuote,
   parseTdxQuote,
   SgxQuote,
@@ -8,6 +7,8 @@ import {
   verifyTdx,
   getExpectedReportDataFromUserdata,
   isUserdataBound,
+  verifyTdxMeasurements,
+  type MeasurementVerifyConfig,
 } from "@teekit/qvl"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
@@ -41,11 +42,11 @@ const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
 export type TunnelClientConfig = {
-  mrtd?: string
-  report_data?: string
+  /** Flexible measurement verification (MRTD, RTMRs, reportData) for TDX quotes */
+  verifyMeasurements?: MeasurementVerifyConfig
   customVerifyQuote?: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
   customVerifyX25519Binding?: (client: TunnelClient) => Awaitable<boolean>
-  sgx?: boolean // default to TDX
+  sgx?: boolean // default to TDX; channels using SGX must implement customVerifyQuote
 }
 
 const debug = createDebug("teekit:TunnelClient")
@@ -54,8 +55,10 @@ const debug = createDebug("teekit:TunnelClient")
  * Client for opening an encrypted remote-attested channel.
  *
  * const enc = await TunnelClient.initialize(baseUrl, {
- *   mtrd: 'any',
- *   report_data: '0000....',
+ *   verifyMeasurements: {
+ *     mrtd: 'c68518...',
+ *     reportData: '0000....',
+ *   },
  *   customVerifyQuote: (quote) => {
  *     return true // additional custom validation logic goes here
  *   },
@@ -264,7 +267,7 @@ export class TunnelClient {
         }
 
         if (isControlChannelKXAnnounce(message)) {
-          let valid, validQuote, mrtd, report_data
+          let valid, validQuote
 
           // Decode and store quote provided by the control channel
           if (!message.quote || message.quote.length === 0) {
@@ -274,13 +277,9 @@ export class TunnelClient {
           if (this.config.sgx) {
             valid = await verifySgx(quote)
             validQuote = parseSgxQuote(quote)
-            mrtd = validQuote.body.mr_enclave
-            report_data = validQuote.body.report_data
           } else {
             valid = await verifyTdx(quote)
             validQuote = parseTdxQuote(quote)
-            mrtd = validQuote.body.mr_td
-            report_data = validQuote.body.report_data
           }
 
           if (!valid) {
@@ -319,17 +318,27 @@ export class TunnelClient {
               "Error opening channel: custom quote body validation failed",
             )
           }
+
+          // Verify measurements using verifyMeasurements config (TDX only)
           if (
-            this.config.mrtd !== undefined &&
-            hex(mrtd) !== this.config.mrtd
+            !this.config.sgx &&
+            this.config.verifyMeasurements !== undefined
           ) {
-            throw new Error("Error opening channel: invalid mrtd")
+            if (
+              !(await verifyTdxMeasurements(
+                validQuote as TdxQuote,
+                this.config.verifyMeasurements,
+              ))
+            ) {
+              throw new Error(
+                "Error opening channel: measurement verification failed",
+              )
+            }
           }
-          if (
-            this.config.report_data !== undefined &&
-            hex(report_data) !== this.config.report_data
-          ) {
-            throw new Error("Error opening channel: invalid report_data")
+          if (this.config.sgx && !this.config.customVerifyQuote) {
+            throw new Error(
+              "Error opening channel: SGX channel must use customVerifyQuote",
+            )
           }
 
           // Validate report_data to X25519 key binding, using default and custom validators

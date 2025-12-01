@@ -45,6 +45,12 @@ test.serial("Verify a V5 TDX quote from Trustee", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })

@@ -77,8 +77,10 @@ export async function startExpressTunnelApp() {
 
   const quoteBodyParsed = parseTdxQuote(quote).body
   const tunnelClient = await TunnelClient.initialize(origin, {
-    mrtd: hex(quoteBodyParsed.mr_td),
-    report_data: hex(quoteBodyParsed.report_data),
+    verifyMeasurements: {
+      mrtd: hex(quoteBodyParsed.mr_td),
+      reportData: hex(quoteBodyParsed.report_data),
+    },
     customVerifyX25519Binding: () => true,
   })
 
@@ -204,8 +206,10 @@ export async function startHonoTunnelApp() {
 
   const quoteBodyParsed = parseTdxQuote(quote).body
   const tunnelClient = await TunnelClient.initialize(origin, {
-    mrtd: hex(quoteBodyParsed.mr_td),
-    report_data: hex(quoteBodyParsed.report_data),
+    verifyMeasurements: {
+      mrtd: hex(quoteBodyParsed.mr_td),
+      reportData: hex(quoteBodyParsed.report_data),
+    },
     customVerifyX25519Binding: () => true,
   })
 

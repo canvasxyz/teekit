@@ -57,6 +57,12 @@ test.serial("Verify a V4 TDX quote from Tappd", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -88,6 +94,12 @@ test.serial("Verify a V4 TDX quote from Edgeless", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -119,6 +131,12 @@ test.serial("Verify a V4 TDX quote from Phala, bin format", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -154,6 +172,12 @@ test.serial("Verify a V4 TDX quote from Phala, hex format", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -187,6 +211,12 @@ test.serial("Verify a V4 TDX quote from MoeMahhouk", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -217,6 +247,12 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -247,6 +283,12 @@ test.serial("Verify a V4 TDX quote from Trustee", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -277,6 +319,12 @@ test.serial("Verify a V4 TDX quote from ZKDCAP", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -333,6 +381,12 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
       extraCertdata: certdata,
       crls,
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })
@@ -366,6 +420,12 @@ test.serial("Verify a V4 TDX quote from GCP", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: expectedMRTD,
+        rtmr1: hex(body.rtmr1),
+        rtmr2: hex(body.rtmr2),
+        reportData: expectedReportData,
+      },
     }),
   )
 })

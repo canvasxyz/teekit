@@ -9,11 +9,42 @@ import {
   toBase64Url,
   concatBytes,
   bytesEqual,
+  hex,
   type Awaitable,
 } from "./utils.js"
 import { intelSgxRootCaPem } from "./rootCa.js"
 import { base64 as scureBase64 } from "@scure/base"
 import { SgxQuote } from "./verifySgx.js"
+
+export type MeasurementHex = string
+
+/**
+ * Configuration for verifying TDX measurements. All specified fields must match (AND).
+ * Fields set to 'any' or undefined are not verified.
+ */
+export interface TdxMeasurements {
+  mrtd?: MeasurementHex // 48 bytes hex
+  rtmr0?: MeasurementHex // typically Intel firmware, 48 bytes hex
+  rtmr1?: MeasurementHex // typically OS/kernel, 48 bytes hex
+  rtmr2?: MeasurementHex // typically application, 48 bytes hex
+  rtmr3?: MeasurementHex // reserved, 48 bytes hex
+  reportData?: MeasurementHex // reserved, 64 bytes hex
+}
+
+export type MeasurementVerifier = (quote: TdxQuote) => Awaitable<boolean>
+
+/**
+ * Measurement verification configuration.
+ * - Single TdxMeasurements: all specified fields must match
+ * - Array of TdxMeasurements: ANY set can match (useful for RTMR on multiple machine configs)
+ * - MeasurementVerifier: custom callback
+ * - Array mixing both: ANY can match
+ */
+export type MeasurementVerifyConfig =
+  | TdxMeasurements
+  | TdxMeasurements[]
+  | MeasurementVerifier
+  | (TdxMeasurements | MeasurementVerifier)[]
 
 export interface VerifyConfig {
   crls: Uint8Array[]
@@ -26,11 +57,104 @@ export interface VerifyConfig {
   pinnedRootCerts?: QV_X509Certificate[]
   date?: number
   extraCertdata?: string[]
+  /** Optional measurement verification (MRTD, RTMRs) */
+  verifyMeasurements?: MeasurementVerifyConfig
 }
 
 export const DEFAULT_PINNED_ROOT_CERTS: QV_X509Certificate[] = [
   new QV_X509Certificate(intelSgxRootCaPem),
 ]
+
+/**
+ * Check if a measurement config item is a function (MeasurementVerifier).
+ */
+function isMeasurementVerifier(
+  item: TdxMeasurements | MeasurementVerifier,
+): item is MeasurementVerifier {
+  return typeof item === "function"
+}
+
+/**
+ * Verify that a single TdxMeasurements config matches the quote.
+ * Returns true if all specified (non-undefined, non-'any') fields match.
+ */
+function matchesMeasurements(
+  quote: TdxQuote,
+  config: TdxMeasurements,
+): boolean {
+  const body = quote.body
+
+  if (config.mrtd !== undefined && config.mrtd !== "any") {
+    if (hex(body.mr_td) !== config.mrtd.toLowerCase()) return false
+  }
+  if (config.rtmr0 !== undefined && config.rtmr0 !== "any") {
+    if (hex(body.rtmr0) !== config.rtmr0.toLowerCase()) return false
+  }
+  if (config.rtmr1 !== undefined && config.rtmr1 !== "any") {
+    if (hex(body.rtmr1) !== config.rtmr1.toLowerCase()) return false
+  }
+  if (config.rtmr2 !== undefined && config.rtmr2 !== "any") {
+    if (hex(body.rtmr2) !== config.rtmr2.toLowerCase()) return false
+  }
+  if (config.rtmr3 !== undefined && config.rtmr3 !== "any") {
+    if (hex(body.rtmr3) !== config.rtmr3.toLowerCase()) return false
+  }
+  if (config.reportData !== undefined && config.reportData !== "any") {
+    if (hex(body.report_data) !== config.reportData.toLowerCase()) return false
+  }
+
+  return true
+}
+
+/**
+ * Verify TDX measurements according to the provided configuration.
+ *
+ * @param quote - Parsed TDX quote
+ * @param config - Measurement verification configuration
+ * @returns true if measurements match the configuration
+ *
+ * @example
+ * // Verify MRTD only
+ * await verifyTdxMeasurements(quote, { mrtd: 'c68518...' })
+ *
+ * @example
+ * // Verify RTMR1 and RTMR2
+ * await verifyTdxMeasurements(quote, { rtmr1: 'abcd...', rtmr2: '1234...' })
+ *
+ * @example
+ * // Accept multiple configurations (OR logic)
+ * await verifyTdxMeasurements(quote, [
+ *   { mrtd: 'v1-mrtd', rtmr2: 'app-v1' },
+ *   { mrtd: 'v1-mrtd', rtmr2: 'app-v2' }
+ * ])
+ *
+ * @example
+ * // Custom verifier
+ * await verifyTdxMeasurements(quote, (q) => isKnownGoodCombination(q))
+ */
+export async function verifyTdxMeasurements(
+  quote: TdxQuote,
+  config: MeasurementVerifyConfig,
+): Promise<boolean> {
+  // Handle single object or function
+  if (!Array.isArray(config)) {
+    if (isMeasurementVerifier(config)) {
+      return await config(quote)
+    }
+    return matchesMeasurements(quote, config)
+  }
+
+  // Handle array: OR logic - any must match
+  for (const item of config) {
+    if (isMeasurementVerifier(item)) {
+      if (await item(quote)) return true
+    } else {
+      if (matchesMeasurements(quote, item)) return true
+    }
+  }
+
+  return false
+}
 
 /**
  * Verify a PCK provisioning certificate chain embedded in cert_data.
@@ -524,6 +648,14 @@ export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
     // throw new Error("verifyTdx: TCB invalid fmspc")
     return false
   }
+
+  // Verify measurements if configured
+  if (config?.verifyMeasurements !== undefined) {
+    if (!(await verifyTdxMeasurements(parsedQuote, config.verifyMeasurements))) {
+      throw new Error("verifyTdx: measurement verification failed")
+    }
+  }
+
   return true
 }
 
