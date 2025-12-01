@@ -234,7 +234,7 @@ test.serial(
     // Tunnel request should succeed
     const tunnelClient = await TunnelClient.initialize(origin, {
       customVerifyQuote: () => true,
-      customVerifyX25519Binding: () => true,
+      x25519Binding: () => true,
     })
 
     const res = await tunnelClient.fetch("/secret")

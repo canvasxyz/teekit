@@ -90,7 +90,7 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
 
   const tunnelClient2 = await TunnelClient.initialize(origin, {
     customVerifyQuote: () => true,
-    customVerifyX25519Binding: () => true,
+    x25519Binding: () => true,
   })
   t.teardown(() => {
     tunnelClient2.close()

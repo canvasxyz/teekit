@@ -63,11 +63,11 @@ export async function startKettleWithTunnel() {
   const quoteBodyParsed = parseTdxQuote(quote).body
 
   const tunnelClient = await TunnelClient.initialize(origin, {
-    verifyMeasurements: {
+    measurements: {
       mrtd: hex(quoteBodyParsed.mr_td),
       reportData: hex(quoteBodyParsed.report_data),
     },
-    customVerifyX25519Binding: () => true,
+    x25519Binding: () => true,
   })
 
   return { kettle, tunnelClient, origin }

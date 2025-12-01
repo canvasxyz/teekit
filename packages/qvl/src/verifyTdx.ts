@@ -16,19 +16,19 @@ import { intelSgxRootCaPem } from "./rootCa.js"
 import { base64 as scureBase64 } from "@scure/base"
 import { SgxQuote } from "./verifySgx.js"
 
-export type MeasurementHex = string
+export type MeasurementHexString = string
 
 /**
  * Configuration for verifying TDX measurements. All specified fields must match (AND).
  * Fields set to undefined are not verified.
  */
 export interface TdxMeasurements {
-  mrtd?: MeasurementHex // 48 bytes hex
-  rtmr0?: MeasurementHex // typically Intel firmware, 48 bytes hex
-  rtmr1?: MeasurementHex // typically OS/kernel, 48 bytes hex
-  rtmr2?: MeasurementHex // typically application, 48 bytes hex
-  rtmr3?: MeasurementHex // reserved, 48 bytes hex
-  reportData?: MeasurementHex // reserved, 64 bytes hex
+  mrtd?: MeasurementHexString // 48 bytes hex
+  rtmr0?: MeasurementHexString // typically Intel firmware, 48 bytes hex
+  rtmr1?: MeasurementHexString // typically OS/kernel, 48 bytes hex
+  rtmr2?: MeasurementHexString // typically application, 48 bytes hex
+  rtmr3?: MeasurementHexString // reserved, 48 bytes hex
+  reportData?: MeasurementHexString // reserved, 64 bytes hex
 }
 
 export type MeasurementVerifier = (quote: TdxQuote) => Awaitable<boolean>
@@ -40,7 +40,7 @@ export type MeasurementVerifier = (quote: TdxQuote) => Awaitable<boolean>
  * - MeasurementVerifier: custom callback
  * - Array mixing both: ANY can match
  */
-export type MeasurementVerifyConfig =
+export type MeasurementConfig =
   | TdxMeasurements
   | TdxMeasurements[]
   | MeasurementVerifier
@@ -58,7 +58,7 @@ export interface VerifyConfig {
   date?: number
   extraCertdata?: string[]
   /** Optional measurement verification (MRTD, RTMRs) */
-  verifyMeasurements?: MeasurementVerifyConfig
+  verifyMeasurements: MeasurementConfig
 }
 
 export const DEFAULT_PINNED_ROOT_CERTS: QV_X509Certificate[] = [
@@ -134,7 +134,7 @@ function matchesMeasurements(
  */
 export async function verifyTdxMeasurements(
   quote: TdxQuote,
-  config: MeasurementVerifyConfig,
+  config: MeasurementConfig,
 ): Promise<boolean> {
   // Handle single object or function
   if (!Array.isArray(config)) {
@@ -651,7 +651,9 @@ export async function verifyTdx(quote: Uint8Array, config?: VerifyConfig) {
 
   // Verify measurements if configured
   if (config?.verifyMeasurements !== undefined) {
-    if (!(await verifyTdxMeasurements(parsedQuote, config.verifyMeasurements))) {
+    if (
+      !(await verifyTdxMeasurements(parsedQuote, config.verifyMeasurements))
+    ) {
       throw new Error("verifyTdx: measurement verification failed")
     }
   }

@@ -62,6 +62,7 @@ test.serial("Verify an SGX quote from Intel, no quote signature", async (t) => {
   const { fmspc, pcesvn } = await _verifySgx(quote, {
     crls: [],
     verifyTcb: () => true,
+    verifyMeasurements: () => true,
     extraCertdata: certdata,
   })
   t.is(fmspc, "00707f000000")
@@ -70,6 +71,7 @@ test.serial("Verify an SGX quote from Intel, no quote signature", async (t) => {
   t.true(
     await verifySgx(quote, {
       verifyTcb: () => true,
+      verifyMeasurements: () => true,
       pinnedRootCerts: [new QV_X509Certificate(root[0])],
       date: BASE_TIME,
       crls,
@@ -101,6 +103,7 @@ test.serial("Verify an SGX quote from Occlum", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: () => true,
     }),
   )
 })
@@ -128,6 +131,7 @@ test.serial("Verify an SGX quote from chinenyeokafor", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: () => true,
     }),
   )
 })
@@ -155,6 +159,7 @@ test.serial("Verify an SGX quote from TLSN, quote9", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: () => true,
     }),
   )
 })
@@ -182,6 +187,7 @@ test.serial("Verify an SGX quote from TLSN, quote_dev", async (t) => {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
+      verifyMeasurements: () => true,
     }),
   )
 })
@@ -197,6 +203,7 @@ test.serial("Reject an SGX quote, missing root cert", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -214,6 +221,7 @@ test.serial("Reject an SGX quote, missing intermediate cert", async (t) => {
         extraCertdata: [leaf, root],
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -231,6 +239,7 @@ test.serial("Reject an SGX quote, missing leaf cert", async (t) => {
         extraCertdata: [intermediate, root],
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -250,6 +259,7 @@ test.serial("Reject an SGX quote, revoked root cert", async (t) => {
         date: BASE_TIME,
         crls: [crl],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -268,6 +278,7 @@ test.serial("Reject an SGX quote, invalid root self-signature", async (t) => {
         extraCertdata: [leaf, intermediate, tamperedRoot],
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -302,6 +313,7 @@ test.serial("Reject an SGX quote, incorrect QE signature", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -336,6 +348,7 @@ test.serial("Reject an SGX quote, incorrect QE binding", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -370,6 +383,7 @@ test.serial("Reject an SGX quote, incorrect quote signature", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -410,6 +424,7 @@ test.serial("Reject an SGX quote, unsupported cert_data_type", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -429,6 +444,7 @@ test.serial(
           date: BASE_TIME,
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -443,7 +459,12 @@ test.serial(
     const early = Date.parse("2000-01-01")
     const err = await t.throwsAsync(
       async () =>
-        await verifySgx(buf, { date: early, crls: [], verifyTcb: () => true }),
+        await verifySgx(buf, {
+          date: early,
+          crls: [],
+          verifyTcb: () => true,
+          verifyMeasurements: () => true,
+        }),
     )
     t.truthy(err)
     t.regex(err!.message, /expired cert chain, or not yet valid/i)
@@ -455,7 +476,12 @@ test.serial("Reject an SGX quote, cert chain expired (too late)", async (t) => {
   const late = Date.parse("2100-01-01")
   const err = await t.throwsAsync(
     async () =>
-      await verifySgx(buf, { date: late, crls: [], verifyTcb: () => true }),
+      await verifySgx(buf, {
+        date: late,
+        crls: [],
+        verifyTcb: () => true,
+        verifyMeasurements: () => true,
+      }),
   )
   t.truthy(err)
   t.regex(err!.message, /expired cert chain, or not yet valid/i)
@@ -474,6 +500,7 @@ test.serial("Reject an SGX quote, revoked intermediate cert", async (t) => {
         date: BASE_TIME,
         crls: [crl],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -491,6 +518,7 @@ test.serial("Reject an SGX quote, revoked leaf cert", async (t) => {
         date: BASE_TIME,
         crls: [crl],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -509,6 +537,7 @@ test.serial("Reject an SGX quote, unsupported TEE type", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -529,6 +558,7 @@ test.serial(
           date: BASE_TIME,
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -548,6 +578,7 @@ test.serial("Reject an SGX quote with unsupported version", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)

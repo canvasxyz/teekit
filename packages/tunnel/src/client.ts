@@ -8,7 +8,7 @@ import {
   getExpectedReportDataFromUserdata,
   isUserdataBound,
   verifyTdxMeasurements,
-  type MeasurementVerifyConfig,
+  type MeasurementConfig,
 } from "@teekit/qvl"
 import { encode as encodeCbor, decode as decodeCbor } from "cbor-x"
 import createDebug from "debug"
@@ -42,11 +42,15 @@ const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
 export type TunnelClientConfig = {
-  /** Flexible measurement verification (MRTD, RTMRs, reportData) for TDX quotes */
-  verifyMeasurements?: MeasurementVerifyConfig
+  measurements?: MeasurementConfig
   customVerifyQuote?: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
-  customVerifyX25519Binding?: (client: TunnelClient) => Awaitable<boolean>
-  sgx?: boolean // default to TDX; channels using SGX must implement customVerifyQuote
+
+  // override default binding:
+  // quote.body.report_data equals sha512(nonce || iat || userdata)
+  x25519Binding?: (client: TunnelClient) => Awaitable<boolean>
+
+  // default to TDX; channels using SGX must implement customVerifyQuote
+  sgx?: boolean
 }
 
 const debug = createDebug("teekit:TunnelClient")
@@ -309,6 +313,12 @@ export class TunnelClient {
           this.serverX25519PublicKey = serverPub
           this.symmetricKey = symmetricKey
 
+          if (!this.config.measurements && !this.config.customVerifyQuote) {
+            throw new Error(
+              "Error opening channel: no validation strategy provided",
+            )
+          }
+
           // Validate quote binding, using default and custom validators
           if (
             this.config.customVerifyQuote !== undefined &&
@@ -320,14 +330,11 @@ export class TunnelClient {
           }
 
           // Verify measurements using verifyMeasurements config (TDX only)
-          if (
-            !this.config.sgx &&
-            this.config.verifyMeasurements !== undefined
-          ) {
+          if (!this.config.sgx && this.config.measurements !== undefined) {
             if (
               !(await verifyTdxMeasurements(
                 validQuote as TdxQuote,
-                this.config.verifyMeasurements,
+                this.config.measurements,
               ))
             ) {
               throw new Error(
@@ -342,7 +349,7 @@ export class TunnelClient {
           }
 
           // Validate report_data to X25519 key binding, using default and custom validators
-          if (this.config.customVerifyX25519Binding === undefined) {
+          if (this.config.x25519Binding === undefined) {
             const val = this.reportBindingData?.verifierData?.val
             const iat = this.reportBindingData?.verifierData?.iat
             if (val === undefined) {
@@ -356,7 +363,7 @@ export class TunnelClient {
               )
             }
           } else {
-            if ((await this.config.customVerifyX25519Binding(this)) !== true) {
+            if ((await this.config.x25519Binding(this)) !== true) {
               throw new Error(
                 "Error opening channel: custom report_data validation failed",
               )

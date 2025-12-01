@@ -89,28 +89,34 @@ test.serial("verifyTdxMeasurements: RTMR1 only - mismatch", async (t) => {
   t.false(result)
 })
 
-test.serial("verifyTdxMeasurements: MRTD + RTMR1 + RTMR2 - all match", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: MRTD + RTMR1 + RTMR2 - all match",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: measurements.mrtd,
-    rtmr1: measurements.rtmr1,
-    rtmr2: measurements.rtmr2,
-  })
-  t.true(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, {
+      mrtd: measurements.mrtd,
+      rtmr1: measurements.rtmr1,
+      rtmr2: measurements.rtmr2,
+    })
+    t.true(result)
+  },
+)
 
-test.serial("verifyTdxMeasurements: MRTD + RTMR2 - MRTD matches, RTMR2 fails", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: MRTD + RTMR2 - MRTD matches, RTMR2 fails",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: measurements.mrtd,
-    rtmr2: "1".repeat(96), // wrong RTMR2
-  })
-  t.false(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, {
+      mrtd: measurements.mrtd,
+      rtmr2: "1".repeat(96), // wrong RTMR2
+    })
+    t.false(result)
+  },
+)
 
 test.serial("verifyTdxMeasurements: all RTMRs - match", async (t) => {
   const { quote, measurements } = getTestQuote()
@@ -125,50 +131,62 @@ test.serial("verifyTdxMeasurements: all RTMRs - match", async (t) => {
   t.true(result)
 })
 
-test.serial("verifyTdxMeasurements: empty config passes (no constraints)", async (t) => {
-  const { quote } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: empty config passes (no constraints)",
+  async (t) => {
+    const { quote } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, {})
-  t.true(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, {})
+    t.true(result)
+  },
+)
 
-test.serial("verifyTdxMeasurements: case-insensitive hex comparison", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: case-insensitive hex comparison",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  // Use uppercase MRTD
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: measurements.mrtd!.toUpperCase(),
-  })
-  t.true(result)
-})
+    // Use uppercase MRTD
+    const result = await verifyTdxMeasurements(parsedQuote, {
+      mrtd: measurements.mrtd!.toUpperCase(),
+    })
+    t.true(result)
+  },
+)
 
 // ============================================================================
 // Array config (OR logic) tests
 // ============================================================================
 
-test.serial("verifyTdxMeasurements: array - first config matches", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: array - first config matches",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, [
-    { mrtd: measurements.mrtd }, // matches
-    { mrtd: "0".repeat(96) }, // doesn't match
-  ])
-  t.true(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, [
+      { mrtd: measurements.mrtd }, // matches
+      { mrtd: "0".repeat(96) }, // doesn't match
+    ])
+    t.true(result)
+  },
+)
 
-test.serial("verifyTdxMeasurements: array - second config matches", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: array - second config matches",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, [
-    { mrtd: "0".repeat(96) }, // doesn't match
-    { mrtd: measurements.mrtd }, // matches
-  ])
-  t.true(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, [
+      { mrtd: "0".repeat(96) }, // doesn't match
+      { mrtd: measurements.mrtd }, // matches
+    ])
+    t.true(result)
+  },
+)
 
 test.serial("verifyTdxMeasurements: array - no config matches", async (t) => {
   const { quote } = getTestQuote()
@@ -182,41 +200,50 @@ test.serial("verifyTdxMeasurements: array - no config matches", async (t) => {
   t.false(result)
 })
 
-test.serial("verifyTdxMeasurements: array - complex OR conditions", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: array - complex OR conditions",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  // Simulate multiple valid deployment configurations
-  const result = await verifyTdxMeasurements(parsedQuote, [
-    // Version 1.0 (different MRTD)
-    { mrtd: "0".repeat(96), rtmr2: "a".repeat(96) },
-    // Version 1.1 (different MRTD)
-    { mrtd: "1".repeat(96), rtmr2: "b".repeat(96) },
-    // Current version (matches)
-    { mrtd: measurements.mrtd, rtmr2: measurements.rtmr2 },
-  ])
-  t.true(result)
-})
+    // Simulate multiple valid deployment configurations
+    const result = await verifyTdxMeasurements(parsedQuote, [
+      // Version 1.0 (different MRTD)
+      { mrtd: "0".repeat(96), rtmr2: "a".repeat(96) },
+      // Version 1.1 (different MRTD)
+      { mrtd: "1".repeat(96), rtmr2: "b".repeat(96) },
+      // Current version (matches)
+      { mrtd: measurements.mrtd, rtmr2: measurements.rtmr2 },
+    ])
+    t.true(result)
+  },
+)
 
 // ============================================================================
 // Custom verifier tests
 // ============================================================================
 
-test.serial("verifyTdxMeasurements: custom verifier - returns true", async (t) => {
-  const { quote } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: custom verifier - returns true",
+  async (t) => {
+    const { quote } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, () => true)
-  t.true(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, () => true)
+    t.true(result)
+  },
+)
 
-test.serial("verifyTdxMeasurements: custom verifier - returns false", async (t) => {
-  const { quote } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: custom verifier - returns false",
+  async (t) => {
+    const { quote } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, () => false)
-  t.false(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, () => false)
+    t.false(result)
+  },
+)
 
 test.serial("verifyTdxMeasurements: async custom verifier", async (t) => {
   const { quote, measurements } = getTestQuote()
@@ -230,45 +257,54 @@ test.serial("verifyTdxMeasurements: async custom verifier", async (t) => {
   t.true(result)
 })
 
-test.serial("verifyTdxMeasurements: custom verifier receives quote", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: custom verifier receives quote",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  let receivedMrtd: string | undefined
+    let receivedMrtd: string | undefined
 
-  await verifyTdxMeasurements(parsedQuote, (q) => {
-    receivedMrtd = hex(q.body.mr_td)
-    return true
-  })
+    await verifyTdxMeasurements(parsedQuote, (q) => {
+      receivedMrtd = hex(q.body.mr_td)
+      return true
+    })
 
-  t.is(receivedMrtd, measurements.mrtd)
-})
+    t.is(receivedMrtd, measurements.mrtd)
+  },
+)
 
 // ============================================================================
 // Mixed array (static configs + custom verifiers) tests
 // ============================================================================
 
-test.serial("verifyTdxMeasurements: mixed array - static config matches", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: mixed array - static config matches",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, [
-    { mrtd: measurements.mrtd }, // matches
-    () => false, // custom verifier fails
-  ])
-  t.true(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, [
+      { mrtd: measurements.mrtd }, // matches
+      () => false, // custom verifier fails
+    ])
+    t.true(result)
+  },
+)
 
-test.serial("verifyTdxMeasurements: mixed array - custom verifier matches", async (t) => {
-  const { quote } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: mixed array - custom verifier matches",
+  async (t) => {
+    const { quote } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, [
-    { mrtd: "0".repeat(96) }, // doesn't match
-    () => true, // custom verifier succeeds
-  ])
-  t.true(result)
-})
+    const result = await verifyTdxMeasurements(parsedQuote, [
+      { mrtd: "0".repeat(96) }, // doesn't match
+      () => true, // custom verifier succeeds
+    ])
+    t.true(result)
+  },
+)
 
 test.serial("verifyTdxMeasurements: mixed array - none match", async (t) => {
   const { quote } = getTestQuote()
@@ -300,37 +336,44 @@ test.serial("verifyTdx with verifyMeasurements: MRTD match", async (t) => {
   t.true(result)
 })
 
-test.serial("verifyTdx with verifyMeasurements: MRTD mismatch throws", async (t) => {
-  const { quote } = getTestQuote()
+test.serial(
+  "verifyTdx with verifyMeasurements: MRTD mismatch throws",
+  async (t) => {
+    const { quote } = getTestQuote()
 
-  const err = await t.throwsAsync(async () =>
-    await verifyTdx(quote, {
+    const err = await t.throwsAsync(
+      async () =>
+        await verifyTdx(quote, {
+          date: BASE_TIME,
+          crls: [],
+          verifyTcb: () => true,
+          verifyMeasurements: {
+            mrtd: "0".repeat(96),
+          },
+        }),
+    )
+    t.truthy(err)
+    t.regex(err!.message, /measurement verification failed/i)
+  },
+)
+
+test.serial(
+  "verifyTdx with verifyMeasurements: RTMR1 + RTMR2 match",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+
+    const result = await verifyTdx(quote, {
       date: BASE_TIME,
       crls: [],
       verifyTcb: () => true,
       verifyMeasurements: {
-        mrtd: "0".repeat(96),
+        rtmr1: measurements.rtmr1,
+        rtmr2: measurements.rtmr2,
       },
-    }),
-  )
-  t.truthy(err)
-  t.regex(err!.message, /measurement verification failed/i)
-})
-
-test.serial("verifyTdx with verifyMeasurements: RTMR1 + RTMR2 match", async (t) => {
-  const { quote, measurements } = getTestQuote()
-
-  const result = await verifyTdx(quote, {
-    date: BASE_TIME,
-    crls: [],
-    verifyTcb: () => true,
-    verifyMeasurements: {
-      rtmr1: measurements.rtmr1,
-      rtmr2: measurements.rtmr2,
-    },
-  })
-  t.true(result)
-})
+    })
+    t.true(result)
+  },
+)
 
 test.serial("verifyTdx with verifyMeasurements: array config", async (t) => {
   const { quote, measurements } = getTestQuote()
@@ -355,18 +398,6 @@ test.serial("verifyTdx with verifyMeasurements: custom verifier", async (t) => {
     crls: [],
     verifyTcb: () => true,
     verifyMeasurements: (q) => hex(q.body.mr_td) === measurements.mrtd,
-  })
-  t.true(result)
-})
-
-test.serial("verifyTdx without verifyMeasurements: no measurement check", async (t) => {
-  const { quote } = getTestQuote()
-
-  // Should pass even though we're not checking measurements
-  const result = await verifyTdx(quote, {
-    date: BASE_TIME,
-    crls: [],
-    verifyTcb: () => true,
   })
   t.true(result)
 })
@@ -424,39 +455,48 @@ test.serial("verifyTdxMeasurements: reportData only - mismatch", async (t) => {
   t.false(result)
 })
 
-test.serial("verifyTdxMeasurements: MRTD + reportData - both match", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
+test.serial(
+  "verifyTdxMeasurements: MRTD + reportData - both match",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
 
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: measurements.mrtd,
-    reportData: measurements.reportData,
-  })
-  t.true(result)
-})
-
-test.serial("verifyTdxMeasurements: MRTD + reportData - reportData fails", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
-
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: measurements.mrtd,
-    reportData: "f".repeat(128), // wrong reportData
-  })
-  t.false(result)
-})
-
-test.serial("verifyTdx with verifyMeasurements: MRTD + reportData", async (t) => {
-  const { quote, measurements } = getTestQuote()
-
-  const result = await verifyTdx(quote, {
-    date: BASE_TIME,
-    crls: [],
-    verifyTcb: () => true,
-    verifyMeasurements: {
+    const result = await verifyTdxMeasurements(parsedQuote, {
       mrtd: measurements.mrtd,
       reportData: measurements.reportData,
-    },
-  })
-  t.true(result)
-})
+    })
+    t.true(result)
+  },
+)
+
+test.serial(
+  "verifyTdxMeasurements: MRTD + reportData - reportData fails",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+    const parsedQuote = parseTdxQuote(quote)
+
+    const result = await verifyTdxMeasurements(parsedQuote, {
+      mrtd: measurements.mrtd,
+      reportData: "f".repeat(128), // wrong reportData
+    })
+    t.false(result)
+  },
+)
+
+test.serial(
+  "verifyTdx with verifyMeasurements: MRTD + reportData",
+  async (t) => {
+    const { quote, measurements } = getTestQuote()
+
+    const result = await verifyTdx(quote, {
+      date: BASE_TIME,
+      crls: [],
+      verifyTcb: () => true,
+      verifyMeasurements: {
+        mrtd: measurements.mrtd,
+        reportData: measurements.reportData,
+      },
+    })
+    t.true(result)
+  },
+)

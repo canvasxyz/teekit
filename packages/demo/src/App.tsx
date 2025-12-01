@@ -37,7 +37,7 @@ const enc = await TunnelClient.initialize(baseUrl, {
   // Don't actually validate anything, since we often use this app with sample quotes.
   // Validation status is shown in the frontend instead.
   customVerifyQuote: async () => true,
-  customVerifyX25519Binding: async () => true,
+  x25519Binding: async () => true,
 })
 
 const buttonStyle = {
@@ -233,18 +233,21 @@ function App() {
         date: Date.parse("2025-09-01"),
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       })
 
       const ok2 = await verifyTdxBase64(trusteeV5Base64, {
         date: Date.parse("2025-09-01"),
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       })
 
       const ok3 = await verifySgxBase64(occlumSgxBase64, {
         date: Date.parse("2025-09-01"),
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       })
 
       if (ok && ok2 && ok3) {

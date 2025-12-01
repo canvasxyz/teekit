@@ -83,14 +83,15 @@ async function assertTcb(
   const quote: Uint8Array = _b64
     ? scureBase64.decode(fs.readFileSync(path, "utf-8"))
     : _json
-      ? scureBase64.decode(JSON.parse(fs.readFileSync(path, "utf-8")).tdx.quote)
-      : fs.readFileSync(path)
+    ? scureBase64.decode(JSON.parse(fs.readFileSync(path, "utf-8")).tdx.quote)
+    : fs.readFileSync(path)
 
   const stateRef: TcbRef = {}
   const ok = await (_tdx ? verifyTdx : verifySgx)(quote, {
     date: BASE_TIME,
     crls: [],
     verifyTcb: getVerifyTcb(stateRef, BASE_TIME),
+    verifyMeasurements: () => true,
   })
 
   t.is(valid, ok)

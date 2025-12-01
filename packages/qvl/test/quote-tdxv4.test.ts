@@ -370,6 +370,7 @@ test.serial("Verify a V4 TDX quote from Intel", async (t) => {
     extraCertdata: certdata,
     crls,
     verifyTcb: () => true,
+    verifyMeasurements: () => true,
   })
   t.is(fmspc, "ed742af8adf5")
   t.is(pcesvn, 24873) // unexpected, but this sample is already very nonstandard
@@ -448,6 +449,7 @@ test.serial("Reject a V4 TDX quote, missing root cert", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -469,6 +471,7 @@ test.serial("Reject a V4 TDX quote, missing intermediate cert", async (t) => {
         extraCertdata: [leaf, root],
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -490,6 +493,7 @@ test.serial("Reject a V4 TDX quote, missing leaf cert", async (t) => {
         extraCertdata: [intermediate, root],
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -512,6 +516,7 @@ test.serial("Reject a V4 TDX quote, revoked root cert", async (t) => {
         date: BASE_TIME,
         crls: [crl],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -534,6 +539,7 @@ test.serial("Reject a V4 TDX quote, revoked intermediate cert", async (t) => {
         date: BASE_TIME,
         crls: [crl],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -554,6 +560,7 @@ test.serial("Reject a V4 TDX quote, revoked leaf cert", async (t) => {
         date: BASE_TIME,
         crls: [crl],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -576,6 +583,7 @@ test.serial("Reject a V4 TDX quote, invalid root self-signature", async (t) => {
         extraCertdata: [leaf, intermediate, tamperedRoot],
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -600,6 +608,7 @@ test.serial(
           extraCertdata: [leaf, tamperedIntermediate, root],
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -623,6 +632,7 @@ test.serial("Reject a V4 TDX quote, invalid leaf cert signature", async (t) => {
         extraCertdata: [tamperedLeaf, intermediate, root],
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -656,6 +666,7 @@ test.serial("Reject a V4 TDX quote, incorrect QE signature", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -689,6 +700,7 @@ test.serial("Reject a V4 TDX quote, incorrect QE binding", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -722,6 +734,7 @@ test.serial("Reject a V4 TDX quote, incorrect TD signature", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -740,6 +753,7 @@ test.serial(
           date: BASE_TIME,
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -757,6 +771,7 @@ test.serial(
           date: 0,
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -776,6 +791,7 @@ test.serial("Reject a V4 TDX quote, unsupported TEE type", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -796,6 +812,7 @@ test.serial(
           date: BASE_TIME,
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -836,6 +853,7 @@ test.serial("Reject a V4 TDX quote, unsupported cert_data_type", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
@@ -853,6 +871,7 @@ test.serial(
           date: early,
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -871,6 +890,7 @@ test.serial(
           date: late,
           crls: [],
           verifyTcb: () => true,
+          verifyMeasurements: () => true,
         }),
     )
     t.truthy(err)
@@ -890,6 +910,7 @@ test.serial("Reject a TDX quote with unsupported version", async (t) => {
         date: BASE_TIME,
         crls: [],
         verifyTcb: () => true,
+        verifyMeasurements: () => true,
       }),
   )
   t.truthy(err)
