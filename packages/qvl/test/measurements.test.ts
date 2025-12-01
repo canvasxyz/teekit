@@ -125,18 +125,6 @@ test.serial("verifyTdxMeasurements: all RTMRs - match", async (t) => {
   t.true(result)
 })
 
-test.serial("verifyTdxMeasurements: 'any' skips verification", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
-
-  // MRTD is 'any' so it should be skipped, only RTMR1 is checked
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: "any",
-    rtmr1: measurements.rtmr1,
-  })
-  t.true(result)
-})
-
 test.serial("verifyTdxMeasurements: empty config passes (no constraints)", async (t) => {
   const { quote } = getTestQuote()
   const parsedQuote = parseTdxQuote(quote)
@@ -403,20 +391,6 @@ test.serial("verifyTdxBase64 with verifyMeasurements", async (t) => {
 // Edge cases
 // ============================================================================
 
-test.serial("verifyTdxMeasurements: handles all 'any' values", async (t) => {
-  const { quote } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
-
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: "any",
-    rtmr0: "any",
-    rtmr1: "any",
-    rtmr2: "any",
-    rtmr3: "any",
-  })
-  t.true(result)
-})
-
 test.serial("verifyTdxMeasurements: empty array fails", async (t) => {
   const { quote } = getTestQuote()
   const parsedQuote = parseTdxQuote(quote)
@@ -470,17 +444,6 @@ test.serial("verifyTdxMeasurements: MRTD + reportData - reportData fails", async
     reportData: "f".repeat(128), // wrong reportData
   })
   t.false(result)
-})
-
-test.serial("verifyTdxMeasurements: reportData 'any' skips verification", async (t) => {
-  const { quote, measurements } = getTestQuote()
-  const parsedQuote = parseTdxQuote(quote)
-
-  const result = await verifyTdxMeasurements(parsedQuote, {
-    mrtd: measurements.mrtd,
-    reportData: "any",
-  })
-  t.true(result)
 })
 
 test.serial("verifyTdx with verifyMeasurements: MRTD + reportData", async (t) => {

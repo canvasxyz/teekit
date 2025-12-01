@@ -20,7 +20,7 @@ export type MeasurementHex = string
 
 /**
  * Configuration for verifying TDX measurements. All specified fields must match (AND).
- * Fields set to 'any' or undefined are not verified.
+ * Fields set to undefined are not verified.
  */
 export interface TdxMeasurements {
   mrtd?: MeasurementHex // 48 bytes hex
@@ -76,7 +76,7 @@ function isMeasurementVerifier(
 
 /**
  * Verify that a single TdxMeasurements config matches the quote.
- * Returns true if all specified (non-undefined, non-'any') fields match.
+ * Returns true if all specified (non-undefined) fields match.
  */
 function matchesMeasurements(
   quote: TdxQuote,
@@ -84,22 +84,22 @@ function matchesMeasurements(
 ): boolean {
   const body = quote.body
 
-  if (config.mrtd !== undefined && config.mrtd !== "any") {
+  if (config.mrtd !== undefined) {
     if (hex(body.mr_td) !== config.mrtd.toLowerCase()) return false
   }
-  if (config.rtmr0 !== undefined && config.rtmr0 !== "any") {
+  if (config.rtmr0 !== undefined) {
     if (hex(body.rtmr0) !== config.rtmr0.toLowerCase()) return false
   }
-  if (config.rtmr1 !== undefined && config.rtmr1 !== "any") {
+  if (config.rtmr1 !== undefined) {
     if (hex(body.rtmr1) !== config.rtmr1.toLowerCase()) return false
   }
-  if (config.rtmr2 !== undefined && config.rtmr2 !== "any") {
+  if (config.rtmr2 !== undefined) {
     if (hex(body.rtmr2) !== config.rtmr2.toLowerCase()) return false
   }
-  if (config.rtmr3 !== undefined && config.rtmr3 !== "any") {
+  if (config.rtmr3 !== undefined) {
     if (hex(body.rtmr3) !== config.rtmr3.toLowerCase()) return false
   }
-  if (config.reportData !== undefined && config.reportData !== "any") {
+  if (config.reportData !== undefined) {
     if (hex(body.report_data) !== config.reportData.toLowerCase()) return false
   }
 
