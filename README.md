@@ -60,7 +60,7 @@ like Let's Encrypt, without custom configuration.
     (e.g. Dstack, GCP, Azure).
 - @teekit/images:
   - A reproducible VM image for running @teekit/kettle applications.
-  - Based on Debian 16 with a custom yocto-tiny kernel, which boots a ~200MB
+  - Based on Debian 13 with a custom yocto-tiny kernel, which boots a ~200MB
     read-only ramdisk containing our JS runtime.
   - Builds are run using mkosi, and configured to automatically run nightly
     while generating RTMR and PCR measurements (MRTD measurements unavailable
