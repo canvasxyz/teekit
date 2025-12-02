@@ -1,8 +1,12 @@
 ## CI Self-Hosted Runner Instructions
 
-Building VM images requires KVM virtualization support, which is not
+This document covers how to set up a self-hosted Github Actions
+runner, which you can use to create reproducible mkosi builds and
+measurements of the @teekit VM.
+
+(Building VM images requires KVM virtualization support, which is not
 available in GitHub's standard runners, so a self-hosted runner is
-necessary.
+required.)
 
 ### Requirements
 

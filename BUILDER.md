@@ -1,7 +1,17 @@
 ## TDX Image Build Instructions
 
-Set up a build machine with --enable-nested-virtualization so we have
-KVM acceleration enabled in the machine.
+This document covers how to build the @teekit VM image, and set up a
+builder machine that you can use for development or customizing the
+VM image for your own purposes.
+
+### Requirements
+
+- A GCP or Azure account
+
+### Setup
+
+First, set up a build machine with --enable-nested-virtualization so
+we have KVM acceleration enabled in the machine.
 
 ```
 # For GCP:
@@ -54,7 +64,7 @@ build tools, qemu, nvm, node, homebrew, lima, and sqld.
 ./scripts/setup.sh
 ```
 
-Now build in the container:
+### Building
 
 ```
 cd packages/images
@@ -79,6 +89,8 @@ scripts/test_local.sh
 This will start qemu with the tdx-debian image, and bind a serial
 console which you can use to watch the machine boot. If you have used
 a `devtools` profile, it will also start an ssh server on port 2222.
+
+### Accessing the machine (when using `devtools`)
 
 ```
 # In a separate terminal:

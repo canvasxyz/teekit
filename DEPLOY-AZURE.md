@@ -1,8 +1,10 @@
-## TDX Image Deployment - Azure
+## Deploying to Azure
 
-We assume you have logged into the Azure CLI and/or Google Cloud CLI,
-and already have a builder machine set up. If not, see the other
-instruction pages on how to run `az login` and set up a builder.
+This document covers how to deploy a @teekit VM image to Azure, and
+with configuration for Intel TDX Confidential Computing.
+
+We assume you have logged into the Azure CLI with `az login`, and
+already have a builder machine set up. If not, see BUILDER.md.
 
 ### Prerequisites
 
@@ -10,13 +12,13 @@ Make sure the Azure build completed successfully. The build creates:
 - `build/tdx-debian-azure.efi` - The UEFI kernel image
 - `build/tdx-debian-azure.vhd` - The Azure VHD disk image (30GB)
 
-The build script verifies the VHD meets Azure's requirements:
+The build script verifies the VHD meets specific Azure requirements:
 - Fixed-size VHD format with proper footer
 - Virtual size aligned to 1 MiB boundaries
 - EFI System Partition with correct type GUID
 - Gen2 UEFI boot compatible
 
-Get the builder machine's IP address:
+First, get the builder machine's IP address:
 
 ```
 export EXTERNAL_IP=$(gcloud compute instances list --filter="name=gcp-builder" --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
@@ -31,7 +33,7 @@ scp -i ~/.ssh/google_compute_engine $USER@$EXTERNAL_IP:~/teekit/packages/images/
 ```
 
 If you have have specified user/pass authentication, use your password
-instead. Or, you may be able to use the gcloud scp:
+instead. Or, you may be able to use the included gcloud `scp` command:
 
 ```
 gcloud compute scp \
@@ -45,6 +47,7 @@ Create a storage account. This must have a globally unique name:
 
 ```
 export STORAGE_ACCT=tdx$(openssl rand -hex 6)
+echo $STORAGE_ACCT > .storageaccount
 
 az storage account create \
   --name $STORAGE_ACCT \
@@ -92,7 +95,8 @@ az storage blob upload \
 
 Create an Azure Compute Gallery (required for Confidential VMs):
 
-**Note:** Managed Images (`az image create`) are not supported for Confidential VMs. You must use Azure Compute Gallery instead.
+_Note: Managed Images, created via `az image create`, are not supported
+for Confidential VMs. You must use Azure Compute Gallery instead._
 
 ```
 az sig create \
@@ -148,7 +152,10 @@ az vm create \
   --enable-secure-boot false
 ```
 
-**Note:** Using `VMGuestStateOnly` (instead of `DiskWithVMGuestState`) and `--enable-secure-boot false` is required because custom VHD images typically lack the UEFI Secure Boot signatures that Azure requires when using full disk encryption with guest state.
+_Note: Using `VMGuestStateOnly` (instead of `DiskWithVMGuestState`)
+and `--enable-secure-boot false` is required because custom VHD images
+typically lack the UEFI Secure Boot signatures that Azure requires
+when using full disk encryption with guest state._
 
 Configure Network Security Group (NSG) rules to allow inbound traffic on required ports:
 
@@ -212,9 +219,13 @@ curl http://${KETTLE_IP}:3001/uptime
 
 ### Configuring HTTPS with Custom Hostname
 
-To enable HTTPS with Let's Encrypt certificates and nginx reverse proxy, configure the VM with a `hostname` tag **before** the initial boot or **before** restarting the VM:
+To enable HTTPS with Let's Encrypt certificates and nginx reverse
+proxy, configure the VM with a `hostname` tag.
 
-```bash
+This can be done before the initial boot, or just restart the VM
+afterwards:
+
+```
 # Configure hostname for the VM
 az vm update \
   --name tdx-kettle \
@@ -225,15 +236,21 @@ az vm update \
 az vm restart --name tdx-kettle --resource-group tdx-group
 ```
 
-**Important Prerequisites:**
-- The hostname DNS must be configured to point to the VM's public IP address **before** the VM boots
-- Ensure DNS propagation is complete (test with `dig +short your-domain.example.com`)
-- The VM will automatically obtain Let's Encrypt certificates during boot using the ACME HTTP-01 challenge
-- If DNS is not ready when the VM boots, certbot will fail and the VM will fall back to HTTP-only mode on port 3001
+Important prerequisites:
 
-**Multiple Hostnames:**
-You can specify multiple comma-separated hostnames:
-```bash
+- The hostname DNS must be configured to point to the VM's public IP
+  address **before** the VM boots
+- Ensure DNS propagation is complete before starting the VM (test with
+  `dig +short your-domain.example.com`). This will avoid consuming
+  your certbot rate limits
+- The VM will automatically obtain Let's Encrypt certificates during
+  boot using the ACME HTTP-01 challenge
+- If DNS is not ready when the VM boots, certbot will fail and the VM
+  will fall back to HTTP-only mode on port 3001
+
+Multiple hostnames:
+
+```
 az vm update \
   --name tdx-kettle \
   --resource-group tdx-group \
@@ -241,17 +258,18 @@ az vm update \
 ```
 
 After the VM restarts and certificates are obtained (typically 1-3 minutes after boot):
+
 - HTTP requests on port 80 will redirect to HTTPS
 - HTTPS will be available on port 443
 - The kettle service will be proxied through nginx with TLS termination
 
 Test the HTTPS endpoint:
-```bash
+```
 curl https://your-domain.example.com/uptime
 ```
 
-**Troubleshooting HTTPS Setup:**
-If HTTPS is not working after 5 minutes:
+To troubleshoot HTTPS setup, if HTTPS is not working after 5 minutes:
+
 1. Verify DNS is resolving correctly: `dig +short your-domain.example.com`
 2. The kettle service should still be accessible via HTTP: `curl http://${KETTLE_IP}:3001/uptime`
 3. Check if ports 80 and 443 are open: `nc -zv ${KETTLE_IP} 443`

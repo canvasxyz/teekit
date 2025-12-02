@@ -1,4 +1,12 @@
-## TDX Image Deployment - GCP
+## Deploying to GCP
+
+This document covers how to deploy a @teekit VM image to Google Cloud,
+with configuration for Intel TDX Confidential Computing.
+
+_Note: GCP is not supported as a primary deployment platform right now.
+These instructions may be incomplete or out of date._
+
+## Setup
 
 To build an image for GCP:
 
