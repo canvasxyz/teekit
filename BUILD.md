@@ -4,26 +4,38 @@ Set up a build machine with --enable-nested-virtualization so we have
 KVM acceleration enabled in the machine.
 
 ```
+# For GCP:
 gcloud compute instances create gcp-builder \
       --enable-nested-virtualization \
       --machine-type=c3-standard-4 \
       --zone=us-central1-a \
       --image-family=ubuntu-2404-lts-amd64 \
       --image-project=ubuntu-os-cloud \
-      --boot-disk-size=200GB
+      --boot-disk-size=300GB \
+      --metadata=startup-script='#!/bin/bash
+        # Add default user to kvm group
+        usermod -aG kvm $(logname)
+      '
+
+# For Azure:
+az vm create \
+      --resource-group tdx-group \
+      --name azure-builder \
+      --image Canonical:ubuntu-24_04-lts:server:latest \
+      --size Standard_D4s_v3 \
+      --admin-username azureuser \
+      --generate-ssh-keys \
+      --os-disk-size-gb 300
 ```
 
 SSH into the VM:
 
 ```
+# For GCP:
 gcloud compute ssh gcp-builder
-```
 
-Enable KVM virtualization for the build VM, and then log out, and log
-in again.
-
-```
-sudo usermod -aG kvm $USER
+# For Azure:
+az ssh vm --resource-group tdx-group --name azure-builder
 ```
 
 Clone the repo:
