@@ -339,6 +339,7 @@ echo "  az vm boot-diagnostics get-boot-log --name <VM_NAME> --resource-group $R
 echo "  az vm start --name <VM_NAME> --resource-group $RESOURCE_GROUP"
 echo "  az vm stop --name <VM_NAME> --resource-group $RESOURCE_GROUP"
 echo "  az vm delete --name <VM_NAME> --resource-group $RESOURCE_GROUP --yes"
+echo "  ssh root@<PUBLIC_IP>"
 echo ""
 echo "Cleanup all resources:"
 echo "  ./cleanup_azure.sh --dry-run  # Preview what will be deleted"
