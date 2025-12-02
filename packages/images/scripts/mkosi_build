@@ -4,6 +4,7 @@
 #
 # By default, preserves existing outputs (skips images that are already built).
 #
+# Use --cached to rebuild the current stage while reusing earlier cached stages.
 # Use --clean to also clear the incremental cache (equivalent to --force --force).
 # Supports any list of profiles passed afterwards.
 #
@@ -23,12 +24,19 @@ cd "$IMAGES_DIR"
 echo "Running 'npm run build'..."
 npm run build
 
-# Default: no --force, preserves existing outputs
+# Default: single --force to rebuild all stages, while keeping artifact caches
 force_args=(--force)
 profiles=()
+clear_current_stage=false
 
 while (( "$#" )); do
   case "$1" in
+    --cached)
+      # Reuse earlier cached stages, but clear current stage output
+      force_args=()
+      clear_current_stage=true
+      shift
+      ;;
     --clean)
       # Double --force clears the incremental cache
       force_args=(--force --force)
@@ -40,6 +48,12 @@ while (( "$#" )); do
       ;;
   esac
 done
+
+# Clear current stage output if --cached was specified
+if [ "$clear_current_stage" = true ]; then
+  echo "Clearing current stage output (keeping earlier cached stages)..."
+  rm -f "$IMAGES_DIR/build/tdx-debian"*
+fi
 
 if [ ${#profiles[@]} -eq 0 ]; then
   echo "Building default mkosi image (no profile)..."
