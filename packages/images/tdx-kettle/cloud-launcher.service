@@ -8,10 +8,9 @@ Before=kettle-launcher.service
 Type=oneshot
 User=root
 Group=root
-ExecStart=/usr/bin/cloud-config
+ExecStart=/usr/bin/cloud-launcher
 RemainAfterExit=yes
-StandardOutput=append:/var/log/cloud-config.log
-StandardError=append:/var/log/cloud-config-error.log
+StandardOutput=append:/var/log/cloud-launcher.log
 
 [Install]
 WantedBy=minimal.target

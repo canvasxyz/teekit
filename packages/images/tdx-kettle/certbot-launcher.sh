@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-# cert-nginx-setup.sh
+# certbot-launcher.sh
 # Handles Let's Encrypt certificate acquisition and nginx configuration
 # for routing hostnames to kettle instances
 
-LOGFILE="/var/log/cert-nginx-setup.log"
+LOGFILE="/var/log/certbot-launcher.log"
 NGINX_CONF_DIR="/etc/nginx"
 NGINX_SITES_AVAILABLE="${NGINX_CONF_DIR}/sites-available"
 NGINX_SITES_ENABLED="${NGINX_CONF_DIR}/sites-enabled"
@@ -365,7 +365,8 @@ reload_nginx() {
 
 # Main function
 main() {
-    log "=== Starting cert-nginx-setup ==="
+    log "=== Starting certbot-launcher ==="
+    log "=== Reading hostnames, configuring nginx, and running certbot ==="
 
     # Read hostname from environment
     local hostname_input="${HOSTNAME_CONFIG:-}"
@@ -431,7 +432,7 @@ main() {
         exit 0
     fi
 
-    log "=== cert-nginx-setup completed successfully ==="
+    log "=== certbot-launcher completed successfully ==="
     exit 0
 }
 

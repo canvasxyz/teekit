@@ -60,28 +60,28 @@ fi
 
 # Note: sqld (libsql server) is built in sqld stage and included via BaseTrees
 
-# Install kettle launcher wrapper script
-install -m 755 "tdx-kettle/kettle-init.sh" "$BUILDROOT/usr/bin/kettle-init"
+# Install kettle launcher
+install -m 755 "tdx-kettle/kettle-launcher.sh" "$BUILDROOT/usr/bin/kettle-launcher"
 
-# Install cloud config scripts
+# Install cloud-launcher scripts, for different cloud config services
 KETTLE_LIB_DIR="$BUILDROOT/usr/lib/kettle"
 mkdir -p "$KETTLE_LIB_DIR"
 install -m 755 "scripts/config_gcp" "$KETTLE_LIB_DIR/"
 install -m 755 "scripts/config_azure" "$KETTLE_LIB_DIR/"
 install -m 755 "scripts/config_local" "$KETTLE_LIB_DIR/"
 
-# Install cloud config service wrapper
-install -m 755 "tdx-kettle/cloud-config.sh" "$BUILDROOT/usr/bin/cloud-config"
+# Install cloud-launcher
+install -m 755 "tdx-kettle/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
 
-# Install cert-nginx-setup script
-install -m 755 "tdx-kettle/cert-nginx-setup.sh" "$BUILDROOT/usr/bin/cert-nginx-setup"
+# Install certbot-launcher
+install -m 755 "tdx-kettle/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
 
 # Install systemd services
-install -m 644 "tdx-kettle/cloud-config.service" "$SERVICE_DIR/"
-install -m 644 "tdx-kettle/cert-nginx-setup.service" "$SERVICE_DIR/"
+install -m 644 "tdx-kettle/cloud-launcher.service" "$SERVICE_DIR/"
+install -m 644 "tdx-kettle/certbot-launcher.service" "$SERVICE_DIR/"
 install -m 644 "tdx-kettle/kettle-launcher.service" "$SERVICE_DIR/"
 
 # Enable services
-systemctl --root="$BUILDROOT" enable cloud-config.service
-systemctl --root="$BUILDROOT" enable cert-nginx-setup.service
+systemctl --root="$BUILDROOT" enable cloud-launcher.service
+systemctl --root="$BUILDROOT" enable certbot-launcher.service
 systemctl --root="$BUILDROOT" enable kettle-launcher.service

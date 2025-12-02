@@ -6,7 +6,7 @@ set -euo pipefail
 
 LOG_PREFIX="[config_azure]"
 CONFIG_DIR="/etc/kettle"
-ENV_FILE="$CONFIG_DIR/cloud-config.env"
+ENV_FILE="$CONFIG_DIR/cloud-launcher.env"
 
 echo "$LOG_PREFIX Fetching manifest from Azure metadata service..."
 
@@ -33,7 +33,7 @@ if [ -z "$MANIFEST" ]; then
   echo "$LOG_PREFIX No manifest tag found in Azure metadata"
   echo "$LOG_PREFIX Kettle will use default manifest if available"
   echo "$LOG_PREFIX To provide a manifest, create VM with: --tags manifest=\$(base64 -w0 manifest.json)"
-  # Create empty env file so kettle-init can fall back to default manifest
+  # Create empty env file so kettle-launcher can fall back to default manifest
   touch "$ENV_FILE"
   exit 0
 fi
@@ -79,7 +79,7 @@ else
   fi
 fi
 
-# Write environment file for kettle-launcher and cert-nginx-setup services
+# Write environment file for kettle-launcher and certbot-launcher services
 echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
 if [ -n "$HOSTNAME_CONFIG" ]; then
   echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"

@@ -1,7 +1,7 @@
 # @teekit/images
 
 This subpackage includes build tools for reproducible hardened Linux images,
-based on Debian 16 and [flashbots-images](https://github.com/flashbots/flashbots-images).
+based on Debian 13 and [flashbots-images](https://github.com/flashbots/flashbots-images).
 
 Requirements: A Linux VM with systemd v250 or greater, e.g. Ubuntu 24.04, with
 support for nested virtualization (/dev/kvm).
@@ -151,12 +151,12 @@ make help
 
 ## Metadata Configuration
 
-When the VM boots, `cloud-config.service` runs to obtain a manifest
+When the VM boots, `cloud-launcher.service` runs to obtain a manifest
 before launching `kettle-launcher.service`.
 
 The config script checks for GCP, Azure, and QEMU metadata services,
 looking for a base64-encoded manifest. If it finds one, the manifest
-is written to `/etc/kettle/cloud-config.env` and configured as as the
+is written to `/etc/kettle/cloud-launcher.env` and configured as as the
 `MANIFEST` environment variable to initialize the kettle launcher.
 
 For Google Cloud, set the manifest as a metadata attribute:
@@ -273,7 +273,7 @@ The mapping between hostnames and manifests works as follows:
 ### Error Handling
 
 If certificate acquisition fails (e.g., DNS not configured, rate limits hit), the
-cert-nginx-setup service will exit gracefully and kettles will run without HTTPS
+certbot-launcher service will exit gracefully and kettles will run without HTTPS
 support. Kettles remain accessible via HTTP on ports 3001, 3002, etc.
 
 **Note**: Let's Encrypt limits a domain to 50 certificates/week by default.
@@ -282,15 +282,15 @@ production.
 
 ## Troubleshooting
 
-- Check cloud-config logs:
-  - journalctl -u cloud-config.service
-  - cat /var/log/cloud-config.log
+- Check cloud-launcher logs:
+  - journalctl -u cloud-launcher.service
+  - cat /var/log/cloud-launcher.log
+- Check if the manifest was loaded:
+  - cat /etc/kettle/cloud-launcher.env
 - Check kettle-launcher logs:
   - journalctl -u kettle-launcher.service
   - cat /var/log/kettle.log
   - cat /var/log/kettle-error.log
-- Check if the manifest was loaded:
-  - cat /etc/kettle/cloud-config.env
 - Test the metadata service (local/QEMU):
   - curl http://localhost:8090/manifest/decoded
   - curl http://localhost:8090/health

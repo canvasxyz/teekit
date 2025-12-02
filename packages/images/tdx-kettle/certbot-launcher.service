@@ -1,7 +1,7 @@
 [Unit]
-Description=Let's Encrypt Certificate and Nginx Setup Service
-After=network-setup.service cloud-config.service
-Wants=network-setup.service cloud-config.service
+Description=Certbot Service
+After=network-setup.service cloud-launcher.service
+Wants=network-setup.service cloud-launcher.service
 # Optional service - don't block boot if it fails
 DefaultDependencies=no
 
@@ -10,14 +10,13 @@ Type=oneshot
 User=root
 Group=root
 # Load cloud-specific environment variables (HOSTNAME) if available
-EnvironmentFile=-/etc/kettle/cloud-config.env
-ExecStart=/usr/bin/cert-nginx-setup
+EnvironmentFile=-/etc/kettle/cloud-launcher.env
+ExecStart=/usr/bin/certbot-launcher
 # Don't block other services if this fails
 RemainAfterExit=yes
 # Don't restart on failure - we don't want to hit Let's Encrypt rate limits
 Restart=no
-StandardOutput=append:/var/log/cert-nginx-setup.log
-StandardError=append:/var/log/cert-nginx-setup-error.log
+StandardOutput=append:/var/log/certbot-launcher.log
 
 [Install]
 WantedBy=minimal.target

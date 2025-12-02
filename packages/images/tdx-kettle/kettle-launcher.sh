@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # Kettle launcher init script that supports single or multiple manifests
-# This script is installed to /usr/bin/kettle-init in the VM
+# This script is installed to /usr/bin/kettle-launcher in the VM
 # MANIFEST can be either:
 # - A single base64-encoded manifest string
 # - A comma-separated list of base64-encoded manifest strings
 
-LOG_PREFIX="[kettle-init]"
+LOG_PREFIX="[kettle-launcher]"
 
 echo "$LOG_PREFIX Starting kettle launcher init script..."
 

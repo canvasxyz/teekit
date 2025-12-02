@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Cloud configuration script that detects the cloud provider and fetches manifest
-# This script is installed to /usr/bin/cloud-config in the VM
+# This script is installed to /usr/bin/cloud-launcher in the VM
 
-LOG_PREFIX="[cloud-config]"
+LOG_PREFIX="[cloud-launcher]"
 CONFIG_DIR="/etc/kettle"
-ENV_FILE="$CONFIG_DIR/cloud-config.env"
+ENV_FILE="$CONFIG_DIR/cloud-launcher.env"
 
 echo "$LOG_PREFIX Starting cloud configuration..."
 
