@@ -50,7 +50,7 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
    scripts/setup_deps.sh
 
    # If building tdx-kettle with kettle integration, bundle kettle first
-   scripts/bundle_kettle.sh
+   scripts/prep_kettle.sh
 
    scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-kettle.conf
    ```
