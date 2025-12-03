@@ -38,3 +38,8 @@ tdx-debian-devtools.*
 tdx-debian-azure.*
 tdx-debian-azure-devtools.*
 *.vhd
+
+.storageaccount
+.dynv6_api_key
+.dynv6_azure_name
+.dynv6_gcp_name

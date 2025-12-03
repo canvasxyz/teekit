@@ -22,7 +22,8 @@
 		"clean:lima": "ssh -F \"$HOME/.lima/tee-builder/ssh.config\" \"lima-tee-builder\" -t -o LogLevel=QUIET -- \"/home/debian/.nix-profile/bin/nix-collect-garbage -d && /home/debian/.nix-profile/bin/nix store optimise && echo 'Nix cache cleaned successfully'\"",
 		"deploy:az": "bash scripts/deploy_azure.sh build/tdx-debian-azure.vhd",
 		"deploy:az:devtools": "bash scripts/deploy_azure.sh build/tdx-debian-devtools.vhd",
-		"list:az": "bash scripts/ls_azure.sh",
+		"ls:az": "bash scripts/ls_azure.sh",
+		"config:az": "bash scripts/config_azure.sh",
 		"reset:lima": "limactl stop tee-builder && limactl delete tee-builder"
 	}
 }
