@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euxo pipefail
 
-# Create /var/lib/dpkg directory
-mkdir -p /var/lib/dpkg
+# Create apt/dpkg directories for package management
+mkdir -p "$BUILDROOT/var/lib/dpkg"
+mkdir -p "$BUILDROOT/var/lib/apt/lists/partial"
+mkdir -p "$BUILDROOT/var/cache/apt/archives/partial"
 
 # Configure APT sources
 cat > "$BUILDROOT/etc/apt/sources.list" << 'EOF'
