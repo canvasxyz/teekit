@@ -28,9 +28,6 @@ IMAGE_DEFINITION="tdx-debian-azure"
 CONTAINER_NAME="vhds"
 VM_SIZE="Standard_DC2es_v5"
 
-# Generate a short random hash for unique naming
-DEPLOY_HASH=$(openssl rand -hex 4)
-
 # Generate a random integer for image version patch number (1 to 2,000,000,000)
 IMAGE_PATCH_VERSION=$((1 + RANDOM * RANDOM % 2000000000))
 
@@ -76,15 +73,27 @@ cleanup_on_failure() {
 
 # Validate arguments
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <vhd-file>"
+    echo "Usage: $0 <vhd-file> [name]"
+    echo ""
+    echo "Arguments:"
+    echo "  vhd-file  Path to the VHD file to deploy"
+    echo "  name      Optional name for the VM (default: random hash)"
     echo ""
     echo "Example:"
     echo "  $0 build/tdx-debian-azure.vhd"
-    echo "  $0 build/tdx-debian-devtools.vhd"
+    echo "  $0 build/tdx-debian-azure.vhd demo"
+    echo "  $0 build/tdx-debian-devtools.vhd devtools"
     exit 1
 fi
 
 VHD_FILE="$1"
+
+# Use provided name or generate random hash
+if [ $# -ge 2 ]; then
+    DEPLOY_HASH="$2"
+else
+    DEPLOY_HASH=$(openssl rand -hex 4)
+fi
 
 # Validate VHD file exists
 if [ ! -f "$VHD_FILE" ]; then
