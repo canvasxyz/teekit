@@ -5,7 +5,7 @@ set -euo pipefail
 # Handles Let's Encrypt certificate acquisition and nginx configuration
 # for routing hostnames to kettle instances
 
-LOGFILE="/var/log/certbot-launcher.log"
+# Log file path is configured in the systemd service file (StandardOutput/StandardError)
 NGINX_CONF_DIR="/etc/nginx"
 NGINX_SITES_AVAILABLE="${NGINX_CONF_DIR}/sites-available"
 NGINX_SITES_ENABLED="${NGINX_CONF_DIR}/sites-enabled"
@@ -14,14 +14,14 @@ ACME_WEBROOT="/var/www/letsencrypt"
 MAX_RETRIES_EXTERNAL=5
 MAX_RETRIES_ACME=1
 
-# Logging function
+# Logging function - output goes to stdout, systemd handles file redirection
 log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGFILE"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
 }
 
-# Error logging function
+# Error logging function - output goes to stderr, systemd handles file redirection
 error() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" | tee -a "$LOGFILE" >&2
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
 }
 
 # Parse and validate hostnames
@@ -101,7 +101,7 @@ EOF
     ln -sf "${NGINX_SITES_AVAILABLE}/acme-challenge" "${NGINX_SITES_ENABLED}/acme-challenge"
 
     # Test nginx configuration
-    if ! nginx -t 2>&1 | tee -a "$LOGFILE"; then
+    if ! nginx -t 2>&1; then
         error "Invalid nginx configuration for ACME challenge"
         return 1
     fi
@@ -116,12 +116,12 @@ start_nginx() {
     # Check if nginx is already running
     if systemctl is-active --quiet nginx; then
         log "Nginx is already running, reloading"
-        if ! systemctl reload nginx 2>&1 | tee -a "$LOGFILE"; then
+        if ! systemctl reload nginx 2>&1; then
             error "Failed to reload nginx"
             return 1
         fi
     else
-        if ! systemctl start nginx 2>&1 | tee -a "$LOGFILE"; then
+        if ! systemctl start nginx 2>&1; then
             error "Failed to start nginx"
             return 1
         fi
@@ -140,7 +140,7 @@ retry_external() {
     while [ $attempt -le $max_retries ]; do
         log "Attempt $attempt/$max_retries: ${cmd[*]}"
 
-        if "${cmd[@]}" 2>&1 | tee -a "$LOGFILE"; then
+        if "${cmd[@]}" 2>&1; then
             log "Command succeeded on attempt $attempt"
             return 0
         fi
@@ -307,7 +307,7 @@ EOF
     ln -sf "${NGINX_SITES_AVAILABLE}/kettles" "${NGINX_SITES_ENABLED}/kettles"
 
     # Test nginx configuration
-    if ! nginx -t 2>&1 | tee -a "$LOGFILE"; then
+    if ! nginx -t 2>&1; then
         error "Invalid production nginx configuration"
         return 1
     fi
@@ -343,11 +343,11 @@ EOF
 reload_nginx() {
     log "Reloading nginx with production configuration"
 
-    if ! systemctl reload nginx 2>&1 | tee -a "$LOGFILE"; then
+    if ! systemctl reload nginx 2>&1; then
         error "Failed to reload nginx with production configuration"
         # Try to restart if reload fails
         log "Attempting to restart nginx"
-        if ! systemctl restart nginx 2>&1 | tee -a "$LOGFILE"; then
+        if ! systemctl restart nginx 2>&1; then
             error "Failed to restart nginx"
             return 1
         fi

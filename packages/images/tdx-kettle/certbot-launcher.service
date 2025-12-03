@@ -17,6 +17,7 @@ RemainAfterExit=yes
 # Don't restart on failure - we don't want to hit Let's Encrypt rate limits
 Restart=no
 StandardOutput=append:/var/log/certbot-launcher.log
+StandardError=append:/var/log/certbot-launcher.log
 
 [Install]
 WantedBy=minimal.target
