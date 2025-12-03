@@ -28,7 +28,7 @@ export const baseUrl =
   document.location.hostname === "localhost"
     ? "http://localhost:3001"
     : document.location.hostname.endsWith(".vercel.app")
-      ? "https://172-177-100-174.dynv6.net"
+      ? "https://20-110-154-110.dynv6.net/"
       : `${document.location.protocol}//${document.location.hostname}`
 
 const UPTIME_REFRESH_MS = 10000
