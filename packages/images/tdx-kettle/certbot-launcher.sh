@@ -12,7 +12,6 @@ NGINX_SITES_ENABLED="${NGINX_CONF_DIR}/sites-enabled"
 CERT_DIR="/etc/letsencrypt/live"
 ACME_WEBROOT="/var/www/letsencrypt"
 MAX_RETRIES_EXTERNAL=5
-MAX_RETRIES_ACME=1
 
 # Logging function - output goes to stdout, systemd handles file redirection
 log() {
@@ -183,14 +182,30 @@ obtain_certificate() {
         certbot_cmd+=(-d "$hostname")
     done
 
-    # Try to obtain certificate with retry (up to 1 retry for ACME challenge)
-    if ! retry_external $((MAX_RETRIES_ACME + 1)) "${certbot_cmd[@]}"; then
-        error "Failed to obtain Let's Encrypt certificate"
-        return 1
-    fi
+    # Try to obtain certificate with retry (up to 5 attempts with exponential backoff)
+    local max_attempts=5
+    local attempt=1
+    local wait_time=30
 
-    log "Certificate obtained successfully"
-    return 0
+    while [ $attempt -le $max_attempts ]; do
+        log "Certificate attempt $attempt/$max_attempts: ${certbot_cmd[*]}"
+
+        if "${certbot_cmd[@]}" 2>&1; then
+            log "Certificate obtained successfully on attempt $attempt"
+            return 0
+        fi
+
+        if [ $attempt -lt $max_attempts ]; then
+            log "Certificate request failed, waiting ${wait_time}s before retry..."
+            sleep "$wait_time"
+            wait_time=$((wait_time * 2))
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    error "Failed to obtain Let's Encrypt certificate after $max_attempts attempts"
+    return 1
 }
 
 # Create production nginx configuration with HTTPS
