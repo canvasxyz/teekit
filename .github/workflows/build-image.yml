@@ -10,9 +10,9 @@ on:
       - 'packages/kettle/**'
       - '.github/workflows/build-gcp-image.yml'
 
-  # Run daily at 4am
+  # Run nightly at 3am ET (8am UTC)
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 8 * * *'
 
   # Allow manual triggering
   workflow_dispatch:
@@ -46,8 +46,8 @@ jobs:
     name: Build GCP and Azure TDX Images
     # Run on self-hosted runner with KVM support
     runs-on: [self-hosted, Linux, X64]
-    # Only run on push events when commit message contains [build], or on manual workflow_dispatch
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build]')
+    # Only run on push events when commit message contains [build], on manual workflow_dispatch, or scheduled runs
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[build]')
 
     # Timeout after 90 minutes (builds typically take 30 minutes)
     timeout-minutes: 90
