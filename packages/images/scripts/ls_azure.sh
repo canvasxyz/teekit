@@ -81,15 +81,20 @@ if [ "$VM_COUNT" -eq 0 ]; then
 else
     log_success "Found $VM_COUNT VM(s)"
     echo ""
-    printf "${GREEN}%-30s %-18s %-16s %-20s %-15s${NC}\n" "NAME" "STATUS" "PUBLIC IP" "SIZE" "LOCATION"
-    printf "%s\n" "$(printf '%.0s-' {1..100})"
+    printf "${GREEN}%-20s %-12s %-20s %-20s %-15s${NC}\n" "NAME" "STATUS" "PUBLIC IP" "SIZE" "LOCATION"
+    printf "%s\n" "$(printf '%.0s-' {1..90})"
 
     az vm list --resource-group "$RESOURCE_GROUP" --show-details \
-        --query "[].{Name:name, Status:powerState, PublicIP:publicIps, Size:hardwareProfile.vmSize, Location:location}" -o tsv 2>/dev/null | \
-    while IFS=$'\t' read -r name status public_ip size location; do
+        --query "[].{Name:name, Status:powerState, PublicIP:publicIps, Size:hardwareProfile.vmSize, Location:location, Hostname:tags.hostname}" -o tsv 2>/dev/null | \
+    while IFS=$'\t' read -r name status public_ip size location hostname; do
         # Handle empty public IP
         if [ -z "$public_ip" ] || [ "$public_ip" = "None" ]; then
             public_ip="-"
+        fi
+
+        # Handle empty hostname
+        if [ -z "$hostname" ] || [ "$hostname" = "None" ]; then
+            hostname=""
         fi
 
         # Color status
@@ -101,7 +106,24 @@ else
             status_display="${RED}${status}${NC}"
         fi
 
-        printf "%-30s %-18b %-16s %-20s %-15s\n" "$name" "$status_display" "$public_ip" "$size" "$location"
+        # Build public IP display with hostname underneath if available
+        if [ -n "$hostname" ]; then
+            ip_display=$(printf "%s\n%s" "$public_ip" "$hostname")
+        else
+            ip_display="$public_ip"
+        fi
+
+        printf "%-20s %-23b %-20s %-20s %-15s\n" "$name" "$status_display" "$public_ip" "$size" "$location"
+        if [ -n "$hostname" ]; then
+            port=3001
+            IFS=',' read -ra hostnames <<< "$hostname"
+            for h in "${hostnames[@]}"; do
+                h=$(echo "$h" | xargs)  # trim whitespace
+                printf "%-20s %-12s ${CYAN}%-40s${NC}\n" "" "" "http://$h:$port"
+                printf "%-20s %-12s ${CYAN}%-40s${NC}\n" "" "" "https://$h"
+                port=$((port + 1))
+            done
+        fi
     done
 fi
 
@@ -117,8 +139,8 @@ if [ "$DISK_COUNT" -eq 0 ]; then
 else
     log_success "Found $DISK_COUNT disk(s)"
     echo ""
-    printf "${GREEN}%-40s %-15s %-12s %-20s${NC}\n" "NAME" "SIZE (GB)" "STATE" "ATTACHED TO"
-    printf "%s\n" "$(printf '%.0s-' {1..90})"
+    printf "${GREEN}%-70s %-15s %-12s %-20s${NC}\n" "NAME" "SIZE (GB)" "STATE" "ATTACHED TO"
+    printf "%s\n" "$(printf '%.0s-' {1..120})"
 
     az disk list --resource-group "$RESOURCE_GROUP" \
         --query "[].{Name:name, Size:diskSizeGb, State:diskState, ManagedBy:managedBy}" -o tsv 2>/dev/null | \
@@ -130,7 +152,7 @@ else
             attached_to=$(basename "$managed_by")
         fi
 
-        printf "%-40s %-15s %-12s %-20s\n" "$name" "$size" "$state" "$attached_to"
+        printf "%-70s %-15s %-12s %-20s\n" "$name" "$size" "$state" "$attached_to"
     done
 fi
 
