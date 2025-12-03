@@ -55,6 +55,7 @@ fi
 
 # Write environment file for kettle-launcher and certbot-launcher services
 echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
+echo "CLOUD_PROVIDER=gcp" >> "$ENV_FILE"
 if [ -n "$HOSTNAME_CONFIG" ]; then
   echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
 fi

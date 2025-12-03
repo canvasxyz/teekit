@@ -52,8 +52,8 @@ if [ -z "$MANIFEST" ]; then
   echo "$LOG_PREFIX No manifest tag found in Azure metadata"
   echo "$LOG_PREFIX Kettle will use default manifest if available"
   echo "$LOG_PREFIX To provide a manifest, create VM with: --tags manifest=\$(base64 -w0 manifest.json)"
-  # Write env file with hostname (if present) so certbot-launcher can still use it
-  touch "$ENV_FILE"
+  # Write env file with cloud provider and hostname (if present) so services can still use them
+  echo "CLOUD_PROVIDER=azure" > "$ENV_FILE"
   if [ -n "$HOSTNAME_CONFIG" ]; then
     echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
   fi
@@ -84,6 +84,7 @@ fi
 
 # Write environment file for kettle-launcher and certbot-launcher services
 echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
+echo "CLOUD_PROVIDER=azure" >> "$ENV_FILE"
 if [ -n "$HOSTNAME_CONFIG" ]; then
   echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
 fi
