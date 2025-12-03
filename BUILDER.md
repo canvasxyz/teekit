@@ -45,7 +45,13 @@ SSH into the VM:
 gcloud compute ssh gcp-builder
 
 # For Azure:
-az ssh vm --resource-group tdx-group --name azure-builder
+az ssh vm --resource-group tdx-group --name azure-builder --local-user azureuser
+```
+
+For Azure, grant /dev/kvm permissions to the current user:
+
+```
+sudo usermod -aG kvm $USER
 ```
 
 Clone the repo:
