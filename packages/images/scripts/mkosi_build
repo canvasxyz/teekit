@@ -53,6 +53,18 @@ done
 if [ "$clear_current_stage" = true ]; then
   echo "Clearing current stage output (keeping earlier cached stages)..."
   rm -f "$IMAGES_DIR/build/tdx-debian"*
+
+  # Also clear mkosi output in Lima VM if it exists
+  LIMA_VM="${LIMA_VM:-tee-builder}"
+  if command -v limactl &>/dev/null && limactl list "$LIMA_VM" &>/dev/null; then
+    status=$(limactl list "$LIMA_VM" --format "{{.Status}}" 2>/dev/null || echo "")
+    if [ "$status" = "Running" ]; then
+      echo "Clearing mkosi output in Lima VM..."
+      ssh -F "$HOME/.lima/$LIMA_VM/ssh.config" "lima-$LIMA_VM" \
+        -o LogLevel=QUIET \
+        -- "rm -rf /home/debian/mkosi-output/*" 2>/dev/null || true
+    fi
+  fi
 fi
 
 if [ ${#profiles[@]} -eq 0 ]; then
