@@ -88,11 +88,13 @@ fi
 
 VHD_FILE="$1"
 
-# Use provided name or generate random hash
+# Use provided name or generate random hash with prefix
 if [ $# -ge 2 ]; then
+    VM_NAME="$2"
     DEPLOY_HASH="$2"
 else
     DEPLOY_HASH=$(openssl rand -hex 4)
+    VM_NAME="tdx-kettle-${DEPLOY_HASH}"
 fi
 
 # Validate VHD file exists
@@ -108,7 +110,6 @@ fi
 VHD_BASENAME=$(basename "$VHD_FILE")
 BLOB_NAME="${VHD_BASENAME%.vhd}-${DEPLOY_HASH}.vhd"
 IMAGE_VERSION="1.0.${IMAGE_PATCH_VERSION}"
-VM_NAME="tdx-kettle-${DEPLOY_HASH}"
 
 echo ""
 log_info "Azure TDX Image Deployment"
