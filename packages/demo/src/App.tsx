@@ -24,12 +24,13 @@ import {
   occlumSgxBase64,
 } from "@teekit/tunnel/samples"
 
-export const baseUrl =
-  document.location.hostname === "localhost"
-    ? "http://localhost:3001"
-    : document.location.hostname.endsWith(".vercel.app")
-      ? "https://20-110-154-110.dynv6.net/"
-      : `${document.location.protocol}//${document.location.hostname}`
+export const baseUrl = document.location.search.includes("remote=1")
+  ? "https://20-110-154-110.dynv6.net/"
+  : document.location.hostname === "localhost"
+  ? "http://localhost:3001"
+  : document.location.hostname.endsWith(".vercel.app")
+  ? "https://20-110-154-110.dynv6.net/"
+  : `${document.location.protocol}//${document.location.hostname}`
 
 const UPTIME_REFRESH_MS = 10000
 
@@ -61,6 +62,8 @@ function App() {
   const [verifyResult, setVerifyResult] = useState<string>("")
   const [swCounter, setSwCounter] = useState<number>(0)
   const [attestedMrtd, setAttestedMrtd] = useState<string>("")
+  const [attestedRtmr0, setAttestedRtmr0] = useState<string>("")
+  const [attestedRtmr1, setAttestedRtmr1] = useState<string>("")
   const [expectedReportData, setExpectedReportData] = useState<string>("")
   const [attestedReportData, setAttestedReportData] = useState<string>("")
   const [verifierNonce, setVerifierNonce] = useState<string>("")
@@ -144,6 +147,8 @@ function App() {
       if (!isTdxQuote(enc.quote))
         throw new Error("unexpected: should be a tdx quote")
       setAttestedMrtd(hex(enc.quote.body.mr_td))
+      setAttestedRtmr0(hex(enc.quote.body.rtmr0))
+      setAttestedRtmr1(hex(enc.quote.body.rtmr1))
       setAttestedReportData(hex(enc.quote.body.report_data))
       enc
         .getX25519ExpectedReportData()
@@ -311,7 +316,11 @@ function App() {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`message ${message.username === username ? "own-message" : "other-message"}`}
+                className={`message ${
+                  message.username === username
+                    ? "own-message"
+                    : "other-message"
+                }`}
               >
                 <div className="message-header">
                   <span className="message-username">{message.username}</span>
@@ -490,6 +499,12 @@ function App() {
             )}
             <div style={{ marginBottom: 6 }}>Server: {baseUrl}</div>
             <div style={{ marginBottom: 6 }}>Attested MRTD: {attestedMrtd}</div>
+            <div style={{ marginBottom: 6 }}>
+              Attested RTMR0: {attestedRtmr0}
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              Attested RTMR1: {attestedRtmr1}
+            </div>
             <div style={{ marginBottom: 6 }}>
               Attested report_data: {attestedReportData}
             </div>
