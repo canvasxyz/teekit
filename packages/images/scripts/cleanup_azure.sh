@@ -83,6 +83,16 @@ log_info "Gallery Name: $GALLERY_NAME"
 log_info "VM Pattern: ${VM_PATTERN}*"
 if [ "$DRY_RUN" = true ]; then
     log_warning "DRY-RUN MODE: No resources will be deleted"
+else
+    echo ""
+    log_warning "This will delete all deployment-specific Azure resources including VMs,"
+    log_warning "disks, images, NICs, and blobs. Use --dry-run to see what would be deleted."
+    echo ""
+    read -p "Are you sure you want to proceed? [y/N]: " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+        log_info "Aborted by user."
+        exit 0
+    fi
 fi
 echo ""
 
