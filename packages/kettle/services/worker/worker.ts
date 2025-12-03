@@ -48,7 +48,6 @@ export interface Env {
   DB_URL?: string
   DB_TOKEN?: string
   DB_HTTP?: FetcherLike
-  QUOTE_SERVICE_URL: string
   QUOTE_SERVICE: FetcherLike
   STATIC_FILES?: FetcherLike
 }

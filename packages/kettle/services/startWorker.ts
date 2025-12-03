@@ -333,10 +333,6 @@ const config :Workerd.Config = (
             durableObjectNamespace = "HonoDurableObject"
           ),
           (
-            name = "QUOTE_URL",
-            text = "${quoteServiceUrl}"
-          ),
-          (
             name = "QUOTE_SERVICE",
             service = "quote"
           ),

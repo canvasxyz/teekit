@@ -1,5 +1,5 @@
 {
-	"exclude": ["lib"],
+	"exclude": ["lib", "../externals.ts"],
 	"extends": "../../../tsconfig.base.json",
 	"compilerOptions": {
 		"rootDir": "..",

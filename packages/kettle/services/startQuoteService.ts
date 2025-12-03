@@ -25,42 +25,74 @@ export interface QuoteData {
   runtime_data?: Uint8Array
 }
 
+class QuoteError extends Error {
+  constructor(
+    message: string,
+    public readonly code: "CONFIG_MISSING" | "CLI_MISSING" | "QUOTE_FAILED",
+  ) {
+    super(message)
+    this.name = "QuoteError"
+  }
+}
+
 export class QuoteBinding {
   async getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
     return await new Promise<QuoteData>(async (resolve, reject) => {
-      // If config.json isn't set up, return a sample quote
+      // Check if config.json exists
       if (!fs.existsSync("config.json")) {
-        console.log("[kettle] TDX config.json not found, serving sample quote")
-        const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
-        resolve({
-          quote: base64.decode(tappdV4Base64),
-        })
-        return
+        return reject(
+          new QuoteError(
+            "TDX config.json not found",
+            "CONFIG_MISSING",
+          ),
+        )
       }
 
-      // Otherwise, get a quote from the SEAM (requires root)
-      console.log("[kettle] Getting a quote for " + toHex(x25519PublicKey))
-      const userDataB64 = base64.encode(x25519PublicKey)
-      const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
-      exec(cmd, (err, stdout) => {
-        if (err) {
-          return reject(err)
+      // Check if trustauthority-cli exists
+      exec("which trustauthority-cli", (whichErr) => {
+        if (whichErr) {
+          return reject(
+            new QuoteError(
+              "trustauthority-cli not found",
+              "CLI_MISSING",
+            ),
+          )
         }
 
-        try {
-          const response = JSON.parse(stdout)
-          resolve({
-            quote: base64.decode(response.tdx.quote),
-            verifier_data: {
-              iat: base64.decode(response.tdx.verifier_nonce.iat),
-              val: base64.decode(response.tdx.verifier_nonce.val),
-              signature: base64.decode(response.tdx.verifier_nonce.signature),
-            },
-            runtime_data: base64.decode(response.tdx.runtime_data),
-          })
-        } catch (err) {
-          reject(err)
-        }
+        // Get a quote from the SEAM (requires root)
+        console.log("[kettle] Getting a quote for " + toHex(x25519PublicKey))
+        const userDataB64 = base64.encode(x25519PublicKey)
+        const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
+        exec(cmd, (err, stdout) => {
+          if (err) {
+            return reject(
+              new QuoteError(
+                `Failed to get quote: ${err.message}`,
+                "QUOTE_FAILED",
+              ),
+            )
+          }
+
+          try {
+            const response = JSON.parse(stdout)
+            resolve({
+              quote: base64.decode(response.tdx.quote),
+              verifier_data: {
+                iat: base64.decode(response.tdx.verifier_nonce.iat),
+                val: base64.decode(response.tdx.verifier_nonce.val),
+                signature: base64.decode(response.tdx.verifier_nonce.signature),
+              },
+              runtime_data: base64.decode(response.tdx.runtime_data),
+            })
+          } catch (err) {
+            reject(
+              new QuoteError(
+                `Failed to parse quote response: ${err instanceof Error ? err.message : String(err)}`,
+                "QUOTE_FAILED",
+              ),
+            )
+          }
+        })
       })
     })
   }
@@ -142,8 +174,22 @@ export function startQuoteService(port: number = DEFAULT_PORT) {
         res.end(JSON.stringify(response))
       } catch (error) {
         console.error("[quote-service] Error:", error)
-        res.writeHead(500, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: "internal server error" }))
+        
+        let statusCode = 500
+        let errorMessage = "internal server error"
+        
+        if (error instanceof QuoteError) {
+          if (error.code === "CONFIG_MISSING" || error.code === "CLI_MISSING") {
+            statusCode = 501 // Not Implemented
+            errorMessage = error.message
+          } else {
+            statusCode = 500 // Internal Server Error
+            errorMessage = error.message
+          }
+        }
+        
+        res.writeHead(statusCode, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: errorMessage }))
       }
       return
     }

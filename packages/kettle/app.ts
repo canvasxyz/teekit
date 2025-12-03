@@ -5,7 +5,12 @@ import { upgradeWebSocket } from "hono/cloudflare-workers"
 import { ContentfulStatusCode } from "hono/utils/http-status"
 import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
 
-import { serveStatic, getDb, type Env } from "@teekit/kettle/worker"
+import {
+  serveStatic,
+  getDb,
+  getQuoteFromService,
+  type Env,
+} from "@teekit/kettle/worker"
 import type {
   Message,
   IncomingChatMessage,
@@ -23,15 +28,9 @@ const MAX_MESSAGES = 30
 const startTime = Date.now()
 let counter = 0
 
-const { wss } = await TunnelServer.initialize(
-  app,
-  async () => {
-    const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
-    const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
-    return { quote: buf }
-  },
-  { upgradeWebSocket },
-)
+const { wss } = await TunnelServer.initialize(app, getQuoteFromService, {
+  upgradeWebSocket,
+})
 
 wss.on("connection", (ws) => {
   // Send backlog on connect
