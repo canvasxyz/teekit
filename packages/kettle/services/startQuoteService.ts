@@ -62,7 +62,13 @@ export class QuoteBinding {
         // Get a quote from the SEAM (requires root)
         console.log("[kettle] Getting a quote for " + toHex(x25519PublicKey))
         const userDataB64 = base64.encode(x25519PublicKey)
-        const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
+        // GCP (v1.10.x): trustauthority-cli evidence --tdx --user-data '<base64>' -c config.json
+        // Azure (v1.6.1): trustauthority-cli quote --aztdx --user-data '<base64>'
+        // CLOUD_PROVIDER is set by cloud-launcher from /etc/kettle/cloud-launcher.env
+        const cloudProvider = process.env.CLOUD_PROVIDER || "gcp"
+        const cmd = cloudProvider === "azure"
+          ? `trustauthority-cli quote --aztdx --user-data '${userDataB64}'`
+          : `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
         exec(cmd, (err, stdout) => {
           if (err) {
             return reject(

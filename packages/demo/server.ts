@@ -38,7 +38,12 @@ async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
     // Otherwise, get a quote from the SEAM (requires root)
     console.log("[teekit-demo] Getting a quote for " + hex(x25519PublicKey))
     const userDataB64 = base64.encode(x25519PublicKey)
-    const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
+    // GCP (v1.10.x): trustauthority-cli evidence --tdx --user-data '<base64>' -c config.json
+    // Azure (v1.6.1): trustauthority-cli quote --aztdx --user-data '<base64>'
+    const cloudProvider = process.env.CLOUD_PROVIDER || "gcp"
+    const cmd = cloudProvider === "azure"
+      ? `trustauthority-cli quote --aztdx --user-data '${userDataB64}'`
+      : `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
     exec(cmd, (err, stdout) => {
       if (err) {
         return reject(err)
