@@ -75,6 +75,9 @@ create_acme_nginx_config() {
 
     log "Creating ACME challenge nginx configuration"
 
+    # Remove default nginx site to avoid conflicts
+    rm -f "${NGINX_SITES_ENABLED}/default"
+
     # Create webroot directory
     mkdir -p "$ACME_WEBROOT"
 

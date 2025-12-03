@@ -29,18 +29,7 @@ except:
     pass
 " || echo "")
 
-if [ -z "$MANIFEST" ]; then
-  echo "$LOG_PREFIX No manifest tag found in Azure metadata"
-  echo "$LOG_PREFIX Kettle will use default manifest if available"
-  echo "$LOG_PREFIX To provide a manifest, create VM with: --tags manifest=\$(base64 -w0 manifest.json)"
-  # Create empty env file so kettle-launcher can fall back to default manifest
-  touch "$ENV_FILE"
-  exit 0
-fi
-
-echo "$LOG_PREFIX Successfully fetched manifest from Azure metadata"
-
-# Fetch hostname configuration (optional)
+# Fetch hostname configuration (optional, but fetch before early exit)
 HOSTNAME_CONFIG=$(python3 -c "
 import json, sys
 try:
@@ -58,6 +47,20 @@ if [ -n "$HOSTNAME_CONFIG" ]; then
 else
   echo "$LOG_PREFIX No hostname configuration found (this is optional)"
 fi
+
+if [ -z "$MANIFEST" ]; then
+  echo "$LOG_PREFIX No manifest tag found in Azure metadata"
+  echo "$LOG_PREFIX Kettle will use default manifest if available"
+  echo "$LOG_PREFIX To provide a manifest, create VM with: --tags manifest=\$(base64 -w0 manifest.json)"
+  # Write env file with hostname (if present) so certbot-launcher can still use it
+  touch "$ENV_FILE"
+  if [ -n "$HOSTNAME_CONFIG" ]; then
+    echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
+  fi
+  exit 0
+fi
+
+echo "$LOG_PREFIX Successfully fetched manifest from Azure metadata"
 
 # Print the manifest(s) to the log
 if [[ "$MANIFEST" == *","* ]]; then
