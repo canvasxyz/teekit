@@ -371,6 +371,39 @@ if [ "$HOSTNAME_TAG_SET" = true ]; then
             --output none 2>/dev/null; then
             log_success "VM reboot initiated"
             log_info "The VM will acquire a TLS certificate for $HOSTNAME after reboot."
+
+            # Wait for HTTPS to come up
+            echo ""
+            log_info "Waiting for HTTPS to become available at https://$HOSTNAME ..."
+            log_info "You can press Ctrl+C to exit at any time."
+            echo ""
+
+            HTTPS_URL="https://$HOSTNAME"
+            HTTPS_MAX_ATTEMPTS=120  # 30 minutes max (120 * 15s)
+            HTTPS_ATTEMPT=0
+            HTTPS_SLEEP=15
+
+            while [ $HTTPS_ATTEMPT -lt $HTTPS_MAX_ATTEMPTS ]; do
+                HTTPS_ATTEMPT=$((HTTPS_ATTEMPT + 1))
+
+                # Try to connect via HTTPS (allow self-signed certs during initial setup)
+                if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$HTTPS_URL" 2>/dev/null | grep -qE "^[23]"; then
+                    echo ""
+                    log_success "HTTPS is up!"
+                    log_success "$HTTPS_URL is now accessible"
+                    break
+                fi
+
+                echo -ne "\r${YELLOW}[WAITING]${NC} Attempt $HTTPS_ATTEMPT: Waiting for HTTPS... (${HTTPS_SLEEP}s intervals)    "
+                sleep $HTTPS_SLEEP
+            done
+
+            if [ $HTTPS_ATTEMPT -ge $HTTPS_MAX_ATTEMPTS ]; then
+                echo ""
+                log_warning "HTTPS check timed out after $((HTTPS_MAX_ATTEMPTS * HTTPS_SLEEP / 60)) minutes"
+                log_info "The VM may still be starting up. Check manually:"
+                log_info "  curl -v $HTTPS_URL"
+            fi
         else
             log_warning "Failed to reboot VM"
             echo ""
