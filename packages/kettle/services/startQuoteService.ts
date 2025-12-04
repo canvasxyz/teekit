@@ -6,6 +6,7 @@ import fs from "node:fs"
 import { exec } from "node:child_process"
 
 const DEFAULT_PORT = 3002
+const CONFIG_PATH = "/etc/kettle/config.json"
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -38,11 +39,11 @@ class QuoteError extends Error {
 export class QuoteBinding {
   async getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
     return await new Promise<QuoteData>(async (resolve, reject) => {
-      // Check if config.json exists
-      if (!fs.existsSync("config.json")) {
+      // Check if config.json exists (created by cloud-launcher from metadata)
+      if (!fs.existsSync(CONFIG_PATH)) {
         return reject(
           new QuoteError(
-            "TDX config.json not found",
+            `TDX config.json not found at ${CONFIG_PATH}`,
             "CONFIG_MISSING",
           ),
         )
@@ -62,13 +63,13 @@ export class QuoteBinding {
         // Get a quote from the SEAM (requires root)
         console.log("[kettle] Getting a quote for " + toHex(x25519PublicKey))
         const userDataB64 = base64.encode(x25519PublicKey)
-        // GCP (v1.10.x): trustauthority-cli evidence --tdx --user-data '<base64>' -c config.json
+        // GCP (v1.10.x): trustauthority-cli evidence --tdx --user-data '<base64>' -c /etc/kettle/config.json
         // Azure (v1.6.1): trustauthority-cli quote --aztdx --user-data '<base64>'
         // CLOUD_PROVIDER is set by cloud-launcher from /etc/kettle/cloud-launcher.env
         const cloudProvider = process.env.CLOUD_PROVIDER || "gcp"
         const cmd = cloudProvider === "azure"
           ? `trustauthority-cli quote --aztdx --user-data '${userDataB64}'`
-          : `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
+          : `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c ${CONFIG_PATH}`
         exec(cmd, (err, stdout) => {
           if (err) {
             return reject(

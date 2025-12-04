@@ -7,6 +7,7 @@ set -euo pipefail
 LOG_PREFIX="[config_gcp]"
 CONFIG_DIR="/etc/kettle"
 ENV_FILE="$CONFIG_DIR/cloud-launcher.env"
+DEFAULT_TRUSTAUTHORITY_API_URL="https://api.trustauthority.intel.com"
 
 echo "$LOG_PREFIX Fetching manifest from GCP metadata service..."
 
@@ -31,6 +32,25 @@ if [ -n "$HOSTNAME_CONFIG" ]; then
   echo "$LOG_PREFIX Successfully fetched hostname configuration: $HOSTNAME_CONFIG"
 else
   echo "$LOG_PREFIX No hostname configuration found (this is optional)"
+fi
+
+# Fetch Trust Authority configuration (optional)
+TRUSTAUTHORITY_API_URL=$(curl -s -f -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/trustauthority_api_url" 2>/dev/null || echo "")
+TRUSTAUTHORITY_API_KEY=$(curl -s -f -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/trustauthority_api_key" 2>/dev/null || echo "")
+
+# API key is required; API URL defaults to $DEFAULT_TRUSTAUTHORITY_API_URL if not provided
+if [ -n "$TRUSTAUTHORITY_API_KEY" ]; then
+  if [ -z "$TRUSTAUTHORITY_API_URL" ]; then
+    TRUSTAUTHORITY_API_URL="$DEFAULT_TRUSTAUTHORITY_API_URL"
+    echo "$LOG_PREFIX Using default Trust Authority API URL: $TRUSTAUTHORITY_API_URL"
+  fi
+  echo "$LOG_PREFIX Successfully fetched Trust Authority configuration"
+  echo "$LOG_PREFIX   API URL: $TRUSTAUTHORITY_API_URL"
+  echo "$LOG_PREFIX   API Key: [redacted, length=${#TRUSTAUTHORITY_API_KEY}]"
+else
+  echo "$LOG_PREFIX No Trust Authority API key found (this is optional)"
 fi
 
 # Print the manifest(s) to the log
@@ -58,6 +78,18 @@ echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
 echo "CLOUD_PROVIDER=gcp" >> "$ENV_FILE"
 if [ -n "$HOSTNAME_CONFIG" ]; then
   echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
+fi
+
+# Create Trust Authority config.json if API key is provided (URL defaults if not set)
+if [ -n "$TRUSTAUTHORITY_API_KEY" ]; then
+  echo "$LOG_PREFIX Creating Trust Authority config.json..."
+  cat > "$CONFIG_DIR/config.json" << EOF
+{
+  "trustauthority_api_url": "$TRUSTAUTHORITY_API_URL",
+  "trustauthority_api_key": "$TRUSTAUTHORITY_API_KEY"
+}
+EOF
+  echo "$LOG_PREFIX Trust Authority config.json created at $CONFIG_DIR/config.json"
 fi
 
 echo "$LOG_PREFIX Configuration complete"
