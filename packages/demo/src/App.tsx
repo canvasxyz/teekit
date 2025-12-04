@@ -68,6 +68,7 @@ function App() {
   const [attestedReportData, setAttestedReportData] = useState<string>("")
   const [verifierNonce, setVerifierNonce] = useState<string>("")
   const [verifierNonceIat, setVerifierNonceIat] = useState<string>("")
+  const [connectionError, setConnectionError] = useState<string>("")
   const initializedRef = useRef<boolean>(false)
   const wsRef = useRef<IWebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -139,6 +140,7 @@ function App() {
 
     ws.onopen = () => {
       setConnected(true)
+      setConnectionError("") // Clear any previous connection errors
       console.log("Connected to chat server")
 
       // Set up control panel UI with attested measurements, expected measurements, etc.
@@ -182,9 +184,15 @@ function App() {
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event: { code?: number; reason?: string }) => {
       setConnected(false)
-      console.log("Disconnected from chat server")
+      console.log("Disconnected from chat server", event.code, event.reason)
+
+      // Handle tunnel initialization failures (code 1011)
+      if (event.code === 1011) {
+        const reason = event.reason || "Initialization failed"
+        setConnectionError(`Server error (${event.code}): ${reason}`)
+      }
     }
 
     ws.onerror = (error: ErrorEvent) => {
@@ -278,7 +286,11 @@ function App() {
             <span
               className={`status ${connected ? "connected" : "disconnected"}`}
             >
-              {connected ? "🟢 WS Connected" : "🔴 WS Disconnected"}
+              {connected
+                ? "🟢 WS Connected"
+                : connectionError
+                  ? "🔴 Connection Error"
+                  : "🔴 WS Disconnected"}
             </span>{" "}
             <a
               href="#"
@@ -356,6 +368,24 @@ function App() {
         </div>
 
         <div className="chat-control">
+          {connectionError && (
+            <div
+              style={{
+                marginBottom: 10,
+                padding: 10,
+                backgroundColor: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: 6,
+                color: "#991b1b",
+                fontSize: "0.85em",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                ⚠️ Connection Error
+              </div>
+              <div>{connectionError}</div>
+            </div>
+          )}
           <div
             style={{
               display: "grid",
