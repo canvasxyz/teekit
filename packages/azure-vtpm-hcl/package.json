@@ -1,0 +1,43 @@
+{
+	"name": "@teekit/azure-vtpm-hcl",
+	"version": "0.0.4",
+	"type": "module",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"exports": {
+		".": {
+			"types": "./lib/index.d.ts",
+			"import": "./lib/index.js",
+			"default": "./lib/index.js"
+		}
+	},
+	"scripts": {
+		"dev": "tsc --watch -p tsconfig.json",
+		"build": "tsc -p tsconfig.json",
+		"pretest": "npm run build",
+		"test": "ava --serial"
+	},
+	"dependencies": {
+		"@scure/base": "^2.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.3.1",
+		"ava": "^6.4.1",
+		"tsx": "^4.20.5",
+		"typescript": "^5.9.2"
+	},
+	"ava": {
+		"extensions": [
+			"ts"
+		],
+		"nodeArguments": [
+			"--import=tsx"
+		],
+		"files": [
+			"test/**/*.test.ts"
+		]
+	}
+}

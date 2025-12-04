@@ -9,6 +9,8 @@
 		{ "path": "./packages/kettle/test" },
 		{ "path": "./packages/qvl" },
 		{ "path": "./packages/qvl/test" },
+		{ "path": "./packages/azure-vtpm-hcl" },
+		{ "path": "./packages/azure-vtpm-hcl/test" },
 		{ "path": "./packages/tunnel" },
 		{ "path": "./packages/tunnel/test" }
   ]
