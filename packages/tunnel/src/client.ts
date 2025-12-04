@@ -276,119 +276,128 @@ export class TunnelClient {
         }
 
         if (isControlChannelKXAnnounce(message)) {
-          let valid, validQuote
-
-          // Decode and store quote provided by the control channel
-          if (!message.quote || message.quote.length === 0) {
-            throw new Error("Error opening channel: empty quote")
-          }
-          const quote = message.quote as Uint8Array
-          if (this.config.sgx) {
-            valid = await verifySgx(quote)
-            validQuote = parseSgxQuote(quote)
-          } else {
-            valid = await verifyTdx(quote)
-            validQuote = parseTdxQuote(quote)
-          }
-
-          if (!valid) {
-            throw new Error("Error opening channel: invalid quote")
-          }
-
-          // Decode and store report binding data from server
           try {
-            const runtimeData = message.runtime_data
-              ? (message.runtime_data as Uint8Array)
-              : null
-            const verifierData = message.verifier_data
-              ? (message.verifier_data as VerifierData)
-              : null
-            if (runtimeData || verifierData) {
-              this.reportBindingData = { runtimeData, verifierData }
+            let valid, validQuote
+
+            // Decode and store quote provided by the control channel
+            if (!message.quote || message.quote.length === 0) {
+              throw new Error("Error opening channel: empty quote")
             }
-          } catch {
-            console.error("teekit: Malformed report binding data")
-          }
+            const quote = message.quote as Uint8Array
+            if (this.config.sgx) {
+              valid = await verifySgx(quote)
+              validQuote = parseSgxQuote(quote)
+            } else {
+              valid = await verifyTdx(quote)
+              validQuote = parseTdxQuote(quote)
+            }
 
-          // Decode and store X25519 key from server
-          const serverPub = message.x25519PublicKey as Uint8Array
-          const symmetricKey = new Uint8Array(32)
-          crypto.getRandomValues(symmetricKey)
-          const sealed = sodium.crypto_box_seal(symmetricKey, serverPub)
-          this.serverX25519PublicKey = serverPub
-          this.symmetricKey = symmetricKey
+            if (!valid) {
+              throw new Error("Error opening channel: invalid quote")
+            }
 
-          if (!this.config.measurements && !this.config.customVerifyQuote) {
-            throw new Error(
-              "Error opening channel: no validation strategy provided",
-            )
-          }
+            // Decode and store report binding data from server
+            try {
+              const runtimeData = message.runtime_data
+                ? (message.runtime_data as Uint8Array)
+                : null
+              const verifierData = message.verifier_data
+                ? (message.verifier_data as VerifierData)
+                : null
+              if (runtimeData || verifierData) {
+                this.reportBindingData = { runtimeData, verifierData }
+              }
+            } catch {
+              console.error("teekit: Malformed report binding data")
+            }
 
-          // Validate quote binding, using default and custom validators
-          if (
-            this.config.customVerifyQuote !== undefined &&
-            (await this.config.customVerifyQuote(validQuote)) !== true
-          ) {
-            throw new Error(
-              "Error opening channel: custom quote body validation failed",
-            )
-          }
+            // Decode and store X25519 key from server
+            const serverPub = message.x25519PublicKey as Uint8Array
+            const symmetricKey = new Uint8Array(32)
+            crypto.getRandomValues(symmetricKey)
+            const sealed = sodium.crypto_box_seal(symmetricKey, serverPub)
+            this.serverX25519PublicKey = serverPub
+            this.symmetricKey = symmetricKey
 
-          // Verify measurements using verifyMeasurements config (TDX only)
-          if (!this.config.sgx && this.config.measurements !== undefined) {
+            if (!this.config.measurements && !this.config.customVerifyQuote) {
+              throw new Error(
+                "Error opening channel: no validation strategy provided",
+              )
+            }
+
+            // Validate quote binding, using default and custom validators
             if (
-              !(await verifyTdxMeasurements(
-                validQuote as TdxQuote,
-                this.config.measurements,
-              ))
+              this.config.customVerifyQuote !== undefined &&
+              (await this.config.customVerifyQuote(validQuote)) !== true
             ) {
               throw new Error(
-                "Error opening channel: measurement verification failed",
+                "Error opening channel: custom quote body validation failed",
               )
             }
-          }
-          if (this.config.sgx && !this.config.customVerifyQuote) {
-            throw new Error(
-              "Error opening channel: SGX channel must use customVerifyQuote",
-            )
-          }
 
-          // Validate report_data to X25519 key binding, using default and custom validators
-          if (this.config.x25519Binding === undefined) {
-            const val = this.reportBindingData?.verifierData?.val
-            const iat = this.reportBindingData?.verifierData?.iat
-            if (val === undefined) {
-              throw new Error("missing nonce, could not validate report_data")
-            } else if (iat === undefined) {
-              throw new Error("missing iat, could not validate report_data")
+            // Verify measurements using verifyMeasurements config (TDX only)
+            if (!this.config.sgx && this.config.measurements !== undefined) {
+              if (
+                !(await verifyTdxMeasurements(
+                  validQuote as TdxQuote,
+                  this.config.measurements,
+                ))
+              ) {
+                throw new Error(
+                  "Error opening channel: measurement verification failed",
+                )
+              }
             }
-            if (!(await this.isX25519Bound(validQuote))) {
+            if (this.config.sgx && !this.config.customVerifyQuote) {
               throw new Error(
-                "Error opening channel: report_data did not equal sha512(nonce || iat || x25519key)",
+                "Error opening channel: SGX channel must use customVerifyQuote",
               )
             }
-          } else {
-            if ((await this.config.x25519Binding(this)) !== true) {
-              throw new Error(
-                "Error opening channel: custom report_data validation failed",
+
+            // Validate report_data to X25519 key binding, using default and custom validators
+            if (this.config.x25519Binding === undefined) {
+              const val = this.reportBindingData?.verifierData?.val
+              const iat = this.reportBindingData?.verifierData?.iat
+              if (val === undefined) {
+                throw new Error("missing nonce, could not validate report_data")
+              } else if (iat === undefined) {
+                throw new Error("missing iat, could not validate report_data")
+              }
+              if (!(await this.isX25519Bound(validQuote))) {
+                throw new Error(
+                  "Error opening channel: report_data did not equal sha512(nonce || iat || x25519key)",
+                )
+              }
+            } else {
+              if ((await this.config.x25519Binding(this)) !== true) {
+                throw new Error(
+                  "Error opening channel: custom report_data validation failed",
+                )
+              }
+            }
+
+            // If we get here, quote and report_data validation passed
+            this.quote = validQuote
+
+            // Open a channel by generating and sending a symmetric encryption key
+            try {
+              const reply: ControlChannelKXConfirm = {
+                type: "client_kx",
+                sealedSymmetricKey: sealed,
+              }
+              this.send(reply)
+
+              this.connectionPromise = null
+              debug("Opened encrypted channel to", this.origin)
+              resolve()
+            } catch (e) {
+              this.connectionPromise = null
+              reject(
+                e instanceof Error
+                  ? e
+                  : new Error("Failed to process server_kx message"),
               )
             }
-          }
-
-          // If we get here, quote and report_data validation passed
-          this.quote = validQuote
-
-          // Open a channel by generating and sending a symmetric encryption key
-          try {
-            const reply: ControlChannelKXConfirm = {
-              type: "client_kx",
-              sealedSymmetricKey: sealed,
-            }
-            this.send(reply)
-
-            this.connectionPromise = null
-            debug("Opened encrypted channel to", this.origin)
-            resolve()
           } catch (e) {
             this.connectionPromise = null
             reject(
