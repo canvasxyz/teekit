@@ -6,16 +6,39 @@ export type { Env } from "./worker.js"
 import { base64 } from "@scure/base"
 import type { QuoteData } from "@teekit/tunnel"
 
-export async function getQuoteFromService(x25519PublicKey: Uint8Array): Promise<QuoteData> {
-  const QUOTE_SERVICE_URL = "http://127.0.0.1:3002"
-    
-  const response = await fetch(`${QUOTE_SERVICE_URL}/quote`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      publicKey: Array.from(x25519PublicKey),
-    }),
-  })
+interface FetcherLike {
+  fetch(request: Request | string, init?: RequestInit): Promise<Response>
+}
+
+export async function getQuoteFromService(
+  x25519PublicKey: Uint8Array,
+  env?: unknown,
+): Promise<QuoteData> {
+  let response: Response
+
+  const quoteService = (env as { QUOTE_SERVICE?: FetcherLike } | undefined)?.QUOTE_SERVICE
+  if (quoteService) {
+    // Use the QUOTE_SERVICE binding (required in workerd)
+    response = await quoteService.fetch(
+      new Request("http://quote-service/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicKey: Array.from(x25519PublicKey),
+        }),
+      }),
+    )
+  } else {
+    // Fallback to direct fetch (for Node.js environments)
+    const QUOTE_SERVICE_URL = "http://127.0.0.1:3002"
+    response = await fetch(`${QUOTE_SERVICE_URL}/quote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        publicKey: Array.from(x25519PublicKey),
+      }),
+    })
+  }
 
   if (!response.ok) {
     const errorText = await response.text()

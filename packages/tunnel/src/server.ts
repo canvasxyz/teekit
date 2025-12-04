@@ -97,6 +97,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     public readonly app: TApp,
     private getQuote: (
       x25519PublicKey: Uint8Array,
+      env?: unknown,
     ) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ) {
@@ -132,7 +133,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
 
   static async initialize<TApp extends TunnelApp>(
     app: TApp,
-    getQuote: (x25519PublicKey: Uint8Array) => Promise<QuoteData> | QuoteData,
+    getQuote: (x25519PublicKey: Uint8Array, env?: unknown) => Promise<QuoteData> | QuoteData,
     config?: TunnelServerConfig,
   ): Promise<TunnelServer<TApp>> {
     const server = new TunnelServer<TApp>(app, getQuote, config)
@@ -381,11 +382,11 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     ;(controlWs as any).ra = this
   }
 
-  async #getQuote() {
+  async #getQuote(env?: unknown) {
     const keypair = sodium.crypto_box_keypair()
     this.x25519PublicKey = keypair.publicKey
     this.x25519PrivateKey = keypair.privateKey
-    const quoteData = await this.getQuote(this.x25519PublicKey)
+    const quoteData = await this.getQuote(this.x25519PublicKey, env)
     this.quote = quoteData.quote
     this.verifierData = quoteData.verifier_data ?? null
     this.runtimeData = quoteData.runtime_data ?? null
@@ -396,7 +397,8 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   async #sendServerKx(controlWs: WebSocket | WSContext): Promise<void> {
     if (!this.keyReady) {
       try {
-        await this.#getQuote()
+        const env = this.envBySocket.get(controlWs)
+        await this.#getQuote(env)
       } catch (e) {
         console.error("Quote fetch failed:", e)
         try {
