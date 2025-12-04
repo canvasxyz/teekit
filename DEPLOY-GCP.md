@@ -106,3 +106,12 @@ export EXTERNAL_IP=$(gcloud compute instances describe gcp-tdx-vm \
 echo gcp-tdx-vm is at $EXTERNAL_IP
 curl http://$EXTERNAL_IP:8080/uptime
 ```
+
+### Configuring Intel Trust Authority
+
+```
+gcloud compute instances add-metadata gcp-tdx-vm --metadata=trustauthority_api_key="djE6N2U4..."
+```
+
+The `trustauthority_api_url` metadata field is optional,
+and defaults to https://api.trustauthority.intel.com.

@@ -217,13 +217,24 @@ Check for running services:
 curl http://${KETTLE_IP}:3001/uptime
 ```
 
+### Configuring Intel Trust Authority
+
+```
+az vm update \
+  --name tdx-kettle \
+  --resource-group tdx-group \
+  --set tags.trustauthority_api_key="djE6N2U4..."
+```
+
+The `trustauthority_api_url` metadata tag is optional, and defaults to
+https://api.trustauthority.intel.com.
+
 ### Configuring HTTPS with Custom Hostname
 
-To enable HTTPS with Let's Encrypt certificates and nginx reverse
-proxy, configure the VM with a `hostname` tag.
+To enable HTTPS with Let's Encrypt certificates and nginx, configure
+the VM with a `hostname` that resolves to the VM's public IP address.
 
-This can be done before the initial boot, or just restart the VM
-afterwards:
+If this is done after the initial boot, restart the VM afterwards:
 
 ```
 # Configure hostname for the VM
@@ -236,17 +247,15 @@ az vm update \
 az vm restart --name tdx-kettle --resource-group tdx-group
 ```
 
-Important prerequisites:
+The hostname DNS must be configured to point to the VM's public IP
+address **before** the VM boots. Ensure DNS propagation is complete
+before starting the VM (test with `dig your-domain.example.com`).
 
-- The hostname DNS must be configured to point to the VM's public IP
-  address **before** the VM boots
-- Ensure DNS propagation is complete before starting the VM (test with
-  `dig +short your-domain.example.com`). This will avoid consuming
-  your certbot rate limits
-- The VM will automatically obtain Let's Encrypt certificates during
-  boot using the ACME HTTP-01 challenge
-- If DNS is not ready when the VM boots, certbot will fail and the VM
-  will fall back to HTTP-only mode on port 3001
+The VM will automatically obtain Let's Encrypt certificates during
+boot using the ACME HTTP-01 challenge.
+
+If DNS is not ready when the VM boots, certbot will fail and the VM
+will fall back to HTTP-only mode on port 3001.
 
 Multiple hostnames:
 
@@ -268,14 +277,7 @@ Test the HTTPS endpoint:
 curl https://your-domain.example.com/uptime
 ```
 
-To troubleshoot HTTPS setup, if HTTPS is not working after 5 minutes:
-
-1. Verify DNS is resolving correctly: `dig +short your-domain.example.com`
-2. The kettle service should still be accessible via HTTP: `curl http://${KETTLE_IP}:3001/uptime`
-3. Check if ports 80 and 443 are open: `nc -zv ${KETTLE_IP} 443`
-4. If certbot failed during boot, restart the VM again after confirming DNS is working
-
-To get a serial console to monitor the machine, you can also use:
+To troubleshoot HTTPS setup, you can use a serial console:
 
 ```
 az extension add --name serial-console --upgrade
