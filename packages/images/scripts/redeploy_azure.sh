@@ -18,6 +18,7 @@
 #   ./redeploy_azure.sh tdx-kettle-demo build/tdx-debian-azure.vhd
 #   ./redeploy_azure.sh my-vm build/tdx-debian-azure.vhd.tar.gz
 #   ./redeploy_azure.sh tdx-kettle-demo build/tdx-debian-azure.vhd --dry-run
+#   ./redeploy_azure.sh tdx-kettle-demo build/tdx-debian-azure.vhd --yes
 #
 
 set -euo pipefail
@@ -94,11 +95,13 @@ if [ $# -lt 2 ]; then
     echo ""
     echo "Options:"
     echo "  --dry-run  Show what would be done without making changes"
+    echo "  --yes, -y  Skip confirmation prompt"
     echo ""
     echo "Examples:"
     echo "  $0 tdx-kettle-demo build/tdx-debian-azure.vhd"
     echo "  $0 my-vm build/tdx-debian-azure.vhd.tar.gz"
     echo "  $0 tdx-kettle-demo build/tdx-debian-azure.vhd --dry-run"
+    echo "  $0 tdx-kettle-demo build/tdx-debian-azure.vhd --yes"
     exit 1
 fi
 
@@ -107,9 +110,18 @@ VHD_INPUT="$2"
 
 # Parse optional arguments
 DRY_RUN=false
-if [ "${3:-}" = "--dry-run" ]; then
-    DRY_RUN=true
-fi
+SKIP_CONFIRM=false
+shift 2
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)
+            DRY_RUN=true
+            ;;
+        --yes|-y)
+            SKIP_CONFIRM=true
+            ;;
+    esac
+done
 
 # Handle .vhd.tar.gz files
 if [[ "$VHD_INPUT" == *.vhd.tar.gz ]]; then
@@ -291,10 +303,14 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
-read -p "Proceed with redeployment? [y/N]: " CONFIRM
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-    log_info "Aborted by user."
-    exit 0
+if [ "$SKIP_CONFIRM" = true ]; then
+    log_info "Skipping confirmation (--yes flag)"
+else
+    read -p "Proceed with redeployment? [y/N]: " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+        log_info "Aborted by user."
+        exit 0
+    fi
 fi
 
 # Set up error handler
