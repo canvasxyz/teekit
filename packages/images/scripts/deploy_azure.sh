@@ -28,9 +28,6 @@ IMAGE_DEFINITION="tdx-debian-azure"
 CONTAINER_NAME="vhds"
 VM_SIZE="Standard_DC2es_v5"
 
-# Generate a random integer for image version patch number (1 to 2,000,000,000)
-IMAGE_PATCH_VERSION=$((1 + RANDOM * RANDOM % 2000000000))
-
 # Colors for logging
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -90,12 +87,14 @@ VHD_FILE="$1"
 
 # Use provided name or generate random hash with prefix
 if [ $# -ge 2 ]; then
-    VM_NAME="$2"
     DEPLOY_HASH="$2"
 else
     DEPLOY_HASH=$(openssl rand -hex 4)
-    VM_NAME="tdx-kettle-${DEPLOY_HASH}"
 fi
+VM_NAME="tdx-kettle-${DEPLOY_HASH}"
+
+# Convert hex hash to decimal for patch version (modulo to keep it reasonable)
+IMAGE_PATCH_VERSION=$((1 + (0x${DEPLOY_HASH} % 10000000)))  # 1 to 10,000,000
 
 # Validate VHD file exists
 if [ ! -f "$VHD_FILE" ]; then
@@ -242,26 +241,36 @@ log_info "VHD file size: $VHD_SIZE bytes ($(numfmt --to=iec-i --suffix=B $VHD_SI
 log_info "Uploading as: $BLOB_NAME"
 log_info "This may take several minutes..."
 
-if ! az storage blob upload \
+# Check if the blob already exists
+if az storage blob exists \
     --account-name "$STORAGE_ACCT" \
     --container-name "$CONTAINER_NAME" \
     --name "$BLOB_NAME" \
-    --file "$VHD_FILE" \
-    --type page \
     --auth-mode login \
-    --overwrite; then
-    log_error "Failed to upload VHD blob"
-    echo ""
-    echo "If you see authentication errors, wait a few minutes for the role assignment to propagate,"
-    echo "then retry the upload manually:"
-    echo "  az storage blob upload \\"
-    echo "    --account-name $STORAGE_ACCT \\"
-    echo "    --container-name $CONTAINER_NAME \\"
-    echo "    --name $BLOB_NAME \\"
-    echo "    --file $VHD_FILE \\"
-    echo "    --type page \\"
-    echo "    --auth-mode login"
-    exit 1
+    --query exists -o tsv | grep -q "true"; then
+    log_success "Blob already exists: $BLOB_NAME (skipping upload)"
+else
+    if ! az storage blob upload \
+        --account-name "$STORAGE_ACCT" \
+        --container-name "$CONTAINER_NAME" \
+        --name "$BLOB_NAME" \
+        --file "$VHD_FILE" \
+        --type page \
+        --auth-mode login \
+        --overwrite; then
+        log_error "Failed to upload VHD blob"
+        echo ""
+        echo "If you see authentication errors, wait a few minutes for the role assignment to propagate,"
+        echo "then retry the upload manually:"
+        echo "  az storage blob upload \\"
+        echo "    --account-name $STORAGE_ACCT \\"
+        echo "    --container-name $CONTAINER_NAME \\"
+        echo "    --name $BLOB_NAME \\"
+        echo "    --file $VHD_FILE \\"
+        echo "    --type page \\"
+        echo "    --auth-mode login"
+        exit 1
+    fi
 fi
 
 BLOB_URL="https://${STORAGE_ACCT}.blob.core.windows.net/${CONTAINER_NAME}/${BLOB_NAME}"
@@ -377,36 +386,43 @@ log_info "Creating VM: $VM_NAME"
 log_info "Size: $VM_SIZE"
 log_info "This may take 5-10 minutes..."
 
-if ! az vm create \
-    --name "$VM_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --security-type ConfidentialVM \
-    --os-disk-security-encryption-type VMGuestStateOnly \
-    --image "$IMAGE_ID" \
-    --size "$VM_SIZE" \
-    --enable-vtpm true \
-    --enable-secure-boot false \
-    --boot-diagnostics-storage "$STORAGE_ACCT" \
-    --output none; then
-    log_error "Failed to create VM"
-    echo ""
-    echo "Common issues:"
-    echo "  - DiskServiceInternalError: VHD format issue or region availability"
-    echo "  - QuotaExceeded: Request quota increase for DCesv5 VMs"
-    echo ""
-    echo "You can retry manually:"
-    echo "  az vm create \\"
-    echo "    --name ${VM_NAME} \\"
-    echo "    --resource-group ${RESOURCE_GROUP} \\"
-    echo "    --security-type ConfidentialVM \\"
-    echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
-    echo "    --image ${IMAGE_ID} \\"
-    echo "    --size ${VM_SIZE} \\"
-    echo "    --enable-vtpm true \\"
-    echo "    --enable-secure-boot false \\"
-    echo "    --boot-diagnostics-storage ${STORAGE_ACCT}"
-    exit 1
+# Check if VM already exists
+if az vm show --name "$VM_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+    log_success "VM already exists: $VM_NAME (skipping creation)"
+else
+    if ! az vm create \
+        --name "$VM_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --security-type ConfidentialVM \
+        --os-disk-security-encryption-type VMGuestStateOnly \
+        --image "$IMAGE_ID" \
+        --size "$VM_SIZE" \
+        --enable-vtpm true \
+        --enable-secure-boot false \
+        --boot-diagnostics-storage "$STORAGE_ACCT" \
+        --generate-ssh-keys \
+        --output none; then
+        log_error "Failed to create VM"
+        echo ""
+        echo "Common issues:"
+        echo "  - DiskServiceInternalError: VHD format issue or region availability"
+        echo "  - QuotaExceeded: Request quota increase for DCesv5 VMs"
+        echo ""
+        echo "You can retry manually:"
+        echo "  az vm create \\"
+        echo "    --name ${VM_NAME} \\"
+        echo "    --resource-group ${RESOURCE_GROUP} \\"
+        echo "    --security-type ConfidentialVM \\"
+        echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
+        echo "    --image ${IMAGE_ID} \\"
+        echo "    --size ${VM_SIZE} \\"
+        echo "    --enable-vtpm true \\"
+        echo "    --enable-secure-boot false \\"
+        echo "    --boot-diagnostics-storage ${STORAGE_ACCT}"
+        exit 1
+    fi
 fi
+
 
 log_success "Created VM: $VM_NAME"
 
@@ -432,13 +448,19 @@ if [ -z "$NSG_NAME" ] || [ "$NSG_NAME" = "None" ]; then
     NSG_NAME="${VM_NAME}-nsg"
     log_info "Creating NSG: $NSG_NAME"
 
-    if ! az network nsg create \
-        --name "$NSG_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --output none; then
-        log_error "Failed to create NSG"
-        exit 1
+    if az network nsg show --name "$NSG_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+        log_info "NSG already exists: $NSG_NAME"
+    else
+        if ! az network nsg create \
+            --name "$NSG_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --output none; then
+            log_error "Failed to create NSG"
+            exit 1
+        fi
+        log_success "Created NSG: $NSG_NAME"
     fi
+
 
     log_info "Associating NSG with network interface..."
     if ! az network nic update \
@@ -452,18 +474,26 @@ fi
 
 log_info "Adding inbound rules for required ports..."
 # Use priority 1010 to avoid conflict with default-allow-ssh at priority 1000
-if ! az network nsg rule create \
+# Check if NSG rule already exists before creating
+if az network nsg rule show \
     --resource-group "$RESOURCE_GROUP" \
     --nsg-name "$NSG_NAME" \
-    --name allow-required-ports \
-    --priority 1010 \
-    --direction Inbound \
-    --access Allow \
-    --protocol Tcp \
-    --destination-port-ranges 80 443 3000 3001 8080 8090 \
-    --source-address-prefixes "*" \
-    --output none; then
-    log_warning "Could not create NSG rule (may already exist)"
+    --name allow-required-ports &>/dev/null; then
+    log_info "NSG rule 'allow-required-ports' already exists in $NSG_NAME"
+else
+    if ! az network nsg rule create \
+        --resource-group "$RESOURCE_GROUP" \
+        --nsg-name "$NSG_NAME" \
+        --name allow-required-ports \
+        --priority 1010 \
+        --direction Inbound \
+        --access Allow \
+        --protocol Tcp \
+        --destination-port-ranges 80 443 3000 3001 8080 8090 \
+        --source-address-prefixes "*" \
+        --output none; then
+        log_warning "Could not create NSG rule 'allow-required-ports'"
+    fi
 fi
 
 log_success "Configured NSG: $NSG_NAME"
