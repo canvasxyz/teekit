@@ -157,8 +157,13 @@ export class TunnelClient {
         this.ws!.send(encodeCbor(hello))
       }
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event: { code?: number; reason?: string }) => {
         this.connectionPromise = null
+
+        // Preserve the close code and reason from the server
+        const closeCode = event?.code ?? 1006
+        const closeReason = event?.reason ?? "tunnel closed"
+
         // Propagate disconnect to all tunneled WebSockets
         try {
           for (const [
@@ -169,8 +174,8 @@ export class TunnelClient {
               type: "ws_event",
               connectionId,
               eventType: "close",
-              code: 1006,
-              reason: "tunnel closed",
+              code: closeCode,
+              reason: closeReason,
             } as RAEncryptedServerEvent)
           }
           this.webSocketConnections.clear()
