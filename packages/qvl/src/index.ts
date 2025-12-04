@@ -16,5 +16,6 @@ export { getTcbStatus, isTcbInfoFresh, verifyTcb } from "./tcb.js"
 
 export * from "./verifyTdx.js"
 export * from "./verifySgx.js"
+export * from "./verifyAzure.js"
 export type * from "./verifyTdx.js"
 export type * from "./verifySgx.js"
