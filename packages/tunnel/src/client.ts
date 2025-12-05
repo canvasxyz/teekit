@@ -147,6 +147,12 @@ export class TunnelClient {
     public readonly origin: string,
     config: TunnelClientConfig,
   ) {
+    if (origin.endsWith("/")) {
+      console.warn(
+        `[teekit] TunnelClient initialized with trailing slash: "${origin}". ` +
+          `Consider "${origin.slice(0, -1)}" instead.`,
+      )
+    }
     this.id = Math.random().toString().slice(2)
     this.config = config
 
