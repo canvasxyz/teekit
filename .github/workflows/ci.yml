@@ -100,7 +100,7 @@ jobs:
         if: steps.cache-kettle-node-modules.outputs.cache-hit != 'true'
         run: npm ci
       - name: Build dependencies
-        run: npm --workspace packages/qvl --workspace packages/tunnel run build
+        run: npm --workspace packages/azure-vtpm-hcl --workspace packages/qvl --workspace packages/tunnel run build
       - name: Build kettle demo
         run: npm --workspace packages/kettle run build
       - name: Build kettle worker
