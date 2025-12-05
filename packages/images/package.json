@@ -25,6 +25,7 @@
 		"deploy:gcp": "bash scripts/deploy_gcp.sh build/tdx-debian.tar.gz",
 		"deploy:gcp:devtools": "bash scripts/deploy_gcp.sh build/tdx-debian-devtools.tar.gz",
 		"ls:az": "bash scripts/ls_azure.sh",
+		"ls:gcp": "bash scripts/ls_gcp.sh",
 		"config:az": "bash scripts/config_azure.sh",
 		"reset:lima": "limactl stop tee-builder && limactl delete tee-builder"
 	}
