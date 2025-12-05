@@ -79,8 +79,13 @@ function App() {
   const fetchUptime = useCallback(async () => {
     try {
       const response = await enc.fetch(baseUrl + "/uptime")
-      const data: UptimeData = await response.json()
-      setUptime(data.uptime.formatted)
+      const text = await response.text()
+      try {
+        const data: UptimeData = JSON.parse(text)
+        setUptime(data.uptime.formatted)
+      } catch (parseError) {
+        console.error("Failed to parse uptime JSON:", text, parseError)
+      }
     } catch (error) {
       console.error("Failed to fetch uptime:", error)
     } finally {
