@@ -1,4 +1,12 @@
-build/
+build/*.log
+build/*.pid
+build/*.efi
+build/*.vhd
+build/*.tar.gz
+build/*.manifest
+build/*.vmlinuz
+build/tdx-debian*
+
 mkosi/
 mkosi.packages/
 mkosi.cache/
