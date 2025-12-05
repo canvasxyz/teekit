@@ -39,11 +39,12 @@
 		]
 	},
 	"dependencies": {
-		"debug": "^4.4.3",
-		"colorette": "^2.0.20"
+		"colorette": "^2.0.20",
+		"debug": "^4.4.3"
 	},
 	"devDependencies": {
-		"@types/debug": "^4.1.12"
+		"@types/debug": "^4.1.12",
+		"prettier": "3.7.4"
 	},
 	"version": "0.0.4"
 }
