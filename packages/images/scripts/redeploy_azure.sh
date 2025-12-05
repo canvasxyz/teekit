@@ -590,10 +590,11 @@ fi
 
 # Add tags if present
 if [ "$VM_TAGS_JSON" != "{}" ] && [ "$VM_TAGS_JSON" != "null" ]; then
-    # Convert JSON tags to space-separated key=value pairs
-    TAGS_STRING=$(echo "$VM_TAGS_JSON" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(" ")' 2>/dev/null || echo "")
-    if [ -n "$TAGS_STRING" ]; then
-        VM_CREATE_CMD+=(--tags "$TAGS_STRING")
+    # Convert JSON tags to array of key=value pairs, each as a separate argument
+    # This prevents Azure CLI from misinterpreting spaces in tag values
+    readarray -t TAG_ARGS < <(echo "$VM_TAGS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' 2>/dev/null || true)
+    if [ ${#TAG_ARGS[@]} -gt 0 ]; then
+        VM_CREATE_CMD+=(--tags "${TAG_ARGS[@]}")
     fi
 fi
 
