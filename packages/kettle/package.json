@@ -69,6 +69,7 @@
 		],
 		"files": [
 			"test/**/*.test.ts"
-		]
+		],
+		"environmentVariables": ["KETTLE_TESTING=1"]
 	}
 }

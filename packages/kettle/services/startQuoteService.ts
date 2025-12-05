@@ -5,6 +5,7 @@ import * as chalk from "colorette"
 import fs from "node:fs"
 import { exec } from "node:child_process"
 import { randomBytes } from "node:crypto"
+import { tappdV4Base64 } from "@teekit/tunnel/samples"
 
 const DEFAULT_PORT = 3002
 const CONFIG_PATH = "/etc/kettle/config.json"
@@ -76,6 +77,15 @@ class QuoteError extends Error {
 export class QuoteBinding {
   async getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
     return await new Promise<QuoteData>(async (resolve, reject) => {
+      // When testing, bypass hardware/CLI and serve the bundled sample quote
+      if (
+        typeof process !== "undefined" &&
+        (process.env.KETTLE_TESTING === "1" || process.env.NODE_ENV === "test")
+      ) {
+        resolve({ quote: base64.decode(tappdV4Base64) })
+        return
+      }
+
       // Check if config.json exists (created by cloud-launcher from metadata)
       if (!fs.existsSync(CONFIG_PATH)) {
         return reject(
