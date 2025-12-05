@@ -203,6 +203,8 @@ jobs:
 
           if [ ! -f "build/tdx-debian.tar.gz" ]; then
             echo "✗ Build artifact not found: build/tdx-debian.tar.gz"
+            echo "  Build directory listing:"
+            ls build
             exit 1
           fi
 
