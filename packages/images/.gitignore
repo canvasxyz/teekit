@@ -5,7 +5,10 @@ build/*.vhd
 build/*.tar.gz
 build/*.manifest
 build/*.vmlinuz
+build/kernel*
 build/tdx-debian*
+build/build-tools
+build/sqld
 
 mkosi/
 mkosi.packages/
