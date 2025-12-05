@@ -69,16 +69,26 @@ function App() {
   const [verifierNonce, setVerifierNonce] = useState<string>("")
   const [verifierNonceIat, setVerifierNonceIat] = useState<string>("")
   const [connectionError, setConnectionError] = useState<string>("")
+  const [isMobile, setIsMobile] = useState<boolean>(false)
   const initializedRef = useRef<boolean>(false)
   const wsRef = useRef<IWebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const initialMessagesLoadRef = useRef<boolean>(true)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  useEffect(scrollToBottom, [messages])
+  useEffect(() => {
+    if (isMobile && initialMessagesLoadRef.current) {
+      initialMessagesLoadRef.current = false
+      return
+    }
+
+    scrollToBottom()
+    initialMessagesLoadRef.current = false
+  }, [messages, isMobile])
 
   const fetchUptime = useCallback(async () => {
     try {
@@ -99,6 +109,29 @@ function App() {
       }
     } catch (e) {
       console.error("Failed to close RA WebSocket:", e)
+    }
+  }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px)")
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches)
+    }
+
+    setIsMobile(mediaQuery.matches)
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", handleChange)
+    } else {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else {
+        mediaQuery.removeListener(handleChange)
+      }
     }
   }, [])
 
@@ -355,7 +388,6 @@ function App() {
               placeholder="Type your message..."
               disabled={!connected}
               className="message-input"
-              autoFocus
             />
             <button
               type="submit"
