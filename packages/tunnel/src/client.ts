@@ -561,8 +561,8 @@ export class TunnelClient {
       response.status === 204
         ? null
         : response.body instanceof Uint8Array
-        ? (response.body as BodyInit)
-        : response.body,
+          ? (response.body as BodyInit)
+          : response.body,
       {
         status: response.status,
         statusText: response.statusText,
@@ -760,8 +760,27 @@ export class TunnelClient {
     const nonce = this.reportBindingData?.verifierData?.val
     const issuedAt = this.reportBindingData?.verifierData?.iat
     const x25519key = this.serverX25519PublicKey
+
+    // Azure vTPM binding uses SHA256(runtime_data) || zeros for report_data and
+    // does not populate verifier_nonce.iat. Derive the expected report_data from
+    // by hashing runtime_data, and concating it with zeros.
+    if (this.config.aztdx) {
+      if (!this.reportBindingData?.runtimeData) {
+        throw new Error("runtimeData should be set for aztdx tunnels already")
+      }
+      const runtimeDataHash = await crypto.subtle.digest(
+        "SHA-256",
+        this.reportBindingData?.runtimeData.slice(),
+      )
+      const expected = new Uint8Array(64)
+      expected.set(new Uint8Array(runtimeDataHash), 0)
+      return expected
+    }
+
+    // Standard TDX binding is SHA512(nonce || iat || x25519key)
     if (!nonce) throw new Error("missing verifier_nonce.val")
-    if (!issuedAt) throw new Error("missing verifier_nonce.iat")
+    if (!issuedAt || issuedAt.length === 0)
+      throw new Error("missing verifier_nonce.iat")
     if (!x25519key) throw new Error("missing x25519 key")
 
     return await getExpectedReportDataFromUserdata(nonce, issuedAt, x25519key)
