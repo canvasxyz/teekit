@@ -9,7 +9,7 @@ import {
 import "./App.css"
 
 import { TunnelClient } from "@teekit/tunnel"
-import { verifyTdxBase64, verifySgxBase64, hex, isTdxQuote } from "@teekit/qvl"
+import { hex, isTdxQuote } from "@teekit/qvl"
 import type {
   WebSocket as IWebSocket,
   MessageEvent,
@@ -18,11 +18,6 @@ import type {
 
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
-import {
-  tappdV4Base64,
-  trusteeV5Base64,
-  occlumSgxBase64,
-} from "@teekit/tunnel/samples"
 
 export const baseUrl = document.location.search.includes("remote=1")
   ? "https://20-110-154-110.dynv6.net/"
@@ -59,7 +54,6 @@ function App() {
   const [uptime, setUptime] = useState<string>("")
   const [uptimeSpinKey, setUptimeSpinKey] = useState<number>(0)
   const [hiddenMessagesCount, setHiddenMessagesCount] = useState<number>(0)
-  const [verifyResult, setVerifyResult] = useState<string>("")
   const [swCounter, setSwCounter] = useState<number>(0)
   const [attestedMrtd, setAttestedMrtd] = useState<string>("")
   const [attestedRtmr0, setAttestedRtmr0] = useState<string>("")
@@ -277,43 +271,6 @@ function App() {
     setNewMessage(e.target.value)
   }
 
-  const verifyTdxInBrowser = useCallback(async () => {
-    setVerifyResult("Verifying TDX quote...")
-    try {
-      const ok = await verifyTdxBase64(tappdV4Base64, {
-        date: Date.parse("2025-09-01"),
-        crls: [],
-        verifyTcb: () => true,
-        verifyMeasurements: () => true,
-      })
-
-      const ok2 = await verifyTdxBase64(trusteeV5Base64, {
-        date: Date.parse("2025-09-01"),
-        crls: [],
-        verifyTcb: () => true,
-        verifyMeasurements: () => true,
-      })
-
-      const ok3 = await verifySgxBase64(occlumSgxBase64, {
-        date: Date.parse("2025-09-01"),
-        crls: [],
-        verifyTcb: () => true,
-        verifyMeasurements: () => true,
-      })
-
-      if (ok && ok2 && ok3) {
-        setVerifyResult("✅ Extra TDX v4, v5, SGX verification tests succeeded")
-        return
-      }
-      setVerifyResult("❌ Extra verification tests failed")
-    } catch (err) {
-      setVerifyResult(
-        `❌ Failed to import/parse QVL: ${(err as Error)?.message || err}`,
-      )
-      throw err
-    }
-  }, [])
-
   return (
     <div className="chat-container">
       <div className="chat-header">
@@ -529,24 +486,6 @@ function App() {
               POST /increment via ServiceWorker
             </button>
 
-            <button
-              onClick={() => {
-                window.open(baseUrl + "/uptime")
-              }}
-              style={buttonStyle}
-            >
-              Open /uptime (disallowed)
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.preventDefault()
-                verifyTdxInBrowser()
-              }}
-              style={buttonStyle}
-            >
-              Verify TDX/SGX in browser
-            </button>
           </div>
 
           <div
@@ -561,9 +500,6 @@ function App() {
               textAlign: "left",
             }}
           >
-            {verifyResult && (
-              <div style={{ marginBottom: 6 }}>{verifyResult}</div>
-            )}
             <div style={{ marginBottom: 6 }}>Server: {baseUrl}</div>
             <div style={{ marginBottom: 6 }}>Attested MRTD: {attestedMrtd}</div>
             <div style={{ marginBottom: 6 }}>

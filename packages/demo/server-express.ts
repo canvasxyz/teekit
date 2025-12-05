@@ -25,19 +25,11 @@ import { hex } from "@teekit/qvl"
 
 async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
   return await new Promise<QuoteData>(async (resolve, reject) => {
-    // If config.json isn't set up, return a sample quote
     if (!fs.existsSync("config.json")) {
-      console.log(
-        "[teekit-demo] TDX config.json not found, serving sample quote",
-      )
-      const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
-      resolve({
-        quote: base64.decode(tappdV4Base64),
-      })
-      return
+      return reject(new Error("[teekit-demo] TDX config.json not found"))
     }
 
-    // Otherwise, get a quote from the SEAM (requires root)
+    // Get a quote from the SEAM (requires root)
     console.log("[teekit-demo] Getting a quote for " + hex(x25519PublicKey))
     const userDataB64 = base64.encode(x25519PublicKey)
     // GCP (v1.10.x): trustauthority-cli evidence --tdx --user-data '<base64>' -c config.json
