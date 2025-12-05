@@ -155,10 +155,6 @@ function App() {
             hex(enc.reportBindingData?.verifierData?.iat ?? new Uint8Array()),
           )
         })
-
-      setTimeout(() => {
-        inputRef.current?.focus()
-      }, 1)
     }
 
     ws.onmessage = (event: MessageEvent) => {
@@ -296,7 +292,6 @@ function App() {
               placeholder="Type your message..."
               disabled={!connected}
               className="message-input"
-              autoFocus
             />
             <button
               type="submit"
