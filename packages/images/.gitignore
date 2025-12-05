@@ -28,3 +28,4 @@ cli.bundle.js
 .dynv6_api_key
 .dynv6_azure_name
 .dynv6_gcp_name
+.dynv6_gcp_zone
