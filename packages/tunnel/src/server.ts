@@ -23,6 +23,7 @@ import {
   RAEncryptedServerEvent,
   ControlChannelEncryptedMessage,
   QuoteData,
+  SevSnpQuoteData,
   VerifierData,
   ControlChannelKXAnnounce,
   TunnelApp,
@@ -64,6 +65,10 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   public quote: Uint8Array | null = null
   public verifierData: VerifierData | null = null
   public runtimeData: Uint8Array | null = null
+  // SEV-SNP certificate fields. These are modified in place during report parsing.
+  public vcekCert: string | null = null
+  public askCert: string | null = null
+  public arkCert: string | null = null
   public readonly wss: ServerRAMockWebSocketServer<TunnelExtraContext<TApp>>
 
   private controlWss?: WebSocketServer // for express
@@ -98,7 +103,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     private getQuote: (
       x25519PublicKey: Uint8Array,
       env?: unknown,
-    ) => Promise<QuoteData> | QuoteData,
+    ) => Promise<QuoteData | SevSnpQuoteData> | QuoteData | SevSnpQuoteData,
     config?: TunnelServerConfig,
   ) {
     this.keyReady = false
@@ -133,7 +138,10 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
 
   static async initialize<TApp extends TunnelApp>(
     app: TApp,
-    getQuote: (x25519PublicKey: Uint8Array, env?: unknown) => Promise<QuoteData> | QuoteData,
+    getQuote: (
+      x25519PublicKey: Uint8Array,
+      env?: unknown,
+    ) => Promise<QuoteData | SevSnpQuoteData> | QuoteData | SevSnpQuoteData,
     config?: TunnelServerConfig,
   ): Promise<TunnelServer<TApp>> {
     const server = new TunnelServer<TApp>(app, getQuote, config)
@@ -388,8 +396,25 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     this.x25519PrivateKey = keypair.privateKey
     const quoteData = await this.getQuote(this.x25519PublicKey, env)
     this.quote = quoteData.quote
-    this.verifierData = quoteData.verifier_data ?? null
-    this.runtimeData = quoteData.runtime_data ?? null
+
+    // Check if this is SEV-SNP quote data (has vcek_cert)
+    if ("vcek_cert" in quoteData) {
+      this.vcekCert = quoteData.vcek_cert
+      this.askCert = quoteData.ask_cert ?? null
+      this.arkCert = quoteData.ark_cert ?? null
+      // For SEV-SNP, use nonce from the quote data for binding
+      this.verifierData = quoteData.nonce
+        ? { val: quoteData.nonce, iat: new Uint8Array() } // iat is unused
+        : null
+      this.runtimeData = null
+    } else {
+      // Standard TDX/SGX quote data
+      this.verifierData = quoteData.verifier_data ?? null
+      this.runtimeData = quoteData.runtime_data ?? null
+      this.vcekCert = null
+      this.askCert = null
+      this.arkCert = null
+    }
     this.keyReady = true
   }
 
@@ -419,6 +444,14 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
         quote: this.quote,
         runtime_data: this.runtimeData ? this.runtimeData : null,
         verifier_data: this.verifierData ? this.verifierData : null,
+        // Include SEV-SNP certificates if present
+        sev_snp_data: this.vcekCert
+          ? {
+              vcek_cert: this.vcekCert,
+              ask_cert: this.askCert,
+              ark_cert: this.arkCert,
+            }
+          : null,
       }
       controlWs.send(encodeCbor(serverKxMessage) as unknown as ArrayBuffer)
     } catch (e) {

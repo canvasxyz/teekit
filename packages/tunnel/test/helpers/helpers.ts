@@ -310,3 +310,34 @@ export async function stopPlainHonoApp(server: ServerType) {
     server.close(() => resolve())
   })
 }
+
+export function parseSevSnpCertChain(chainPem: string): {
+  askPem: string
+  arkPem: string
+} {
+  const certs = chainPem
+    .split(/(?=-----BEGIN CERTIFICATE-----)/)
+    .filter(Boolean)
+  if (certs.length < 2) {
+    throw new Error("Certificate chain must contain at least ASK and ARK")
+  }
+  return {
+    askPem: certs[0].trim(),
+    arkPem: certs[1].trim(),
+  }
+}
+
+export async function stopSevSnpTunnel(
+  tunnelServer: TunnelServer,
+  tunnelClient: TunnelClient,
+) {
+  tunnelClient.close()
+  await new Promise<void>((resolve) => {
+    tunnelServer.wss.close(() => resolve())
+  })
+  if (tunnelServer.server) {
+    await new Promise<void>((resolve) => {
+      tunnelServer.server!.close(() => resolve())
+    })
+  }
+}

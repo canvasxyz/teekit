@@ -17,6 +17,21 @@ export type QuoteData = {
   runtime_data?: Uint8Array
 }
 
+/** SEV-SNP quote data. SEV-SNP reports don't embed certificates. */
+export type SevSnpQuoteData = {
+  quote: Uint8Array
+  vcek_cert: string // required
+  ask_cert?: string // optional, defaults to embedded ASK
+  ark_cert?: string // optional, defaults to embedded Milan ARK
+  nonce?: Uint8Array
+}
+
+export type SevSnpKXAnnounceData = {
+  vcek_cert: string
+  ask_cert?: string | null
+  ark_cert?: string | null
+}
+
 /**
  * Encrypted channel WebSocket payloads.
  */
@@ -90,8 +105,9 @@ export type ControlChannelKXAnnounce = {
   type: "server_kx"
   x25519PublicKey: Uint8Array
   quote: Uint8Array
-  runtime_data: Uint8Array | null
+  runtime_data: Uint8Array | null // used for TDX
   verifier_data: VerifierData | null
+  sev_snp_data?: SevSnpKXAnnounceData | null // used for SEV-SNP cert chain
 }
 
 // Sent by the client to deliver a symmetric key sealed to the server pubkey.
