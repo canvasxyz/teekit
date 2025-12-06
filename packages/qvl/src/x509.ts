@@ -83,8 +83,138 @@ export class QV_X509Certificate {
 
   async verify(issuerCert: QV_X509Certificate): Promise<boolean> {
     try {
-      // Determine hash and curve
       const sigOid = this._cert.signatureAlgorithm.algorithmId
+      const tbs = this._cert.encodeTBS().toBER(false) as ArrayBuffer
+      const sigBytes = new Uint8Array(
+        this._cert.signatureValue.valueBlock.valueHex,
+      )
+      const spki = issuerCert._cert.subjectPublicKeyInfo.toSchema().toBER(false)
+
+      // Check if this is RSA-PSS (OID 1.2.840.113549.1.1.10)
+      if (sigOid === "1.2.840.113549.1.1.10") {
+        return await this._verifyRsaPss(tbs, sigBytes, spki)
+      }
+
+      // Check if this is RSASSA-PKCS1-v1_5
+      if (sigOid.startsWith("1.2.840.113549.1.1.")) {
+        return await this._verifyRsaPkcs1(sigOid, tbs, sigBytes, spki)
+      }
+
+      // Otherwise assume ECDSA
+      return await this._verifyEcdsa(sigOid, tbs, sigBytes, spki, issuerCert)
+    } catch {
+      return false
+    }
+  }
+
+  private async _verifyRsaPss(
+    tbs: ArrayBuffer,
+    sigBytes: Uint8Array,
+    spki: ArrayBuffer,
+  ): Promise<boolean> {
+    try {
+      // Parse RSA-PSS parameters from signatureAlgorithm
+      const params = this._cert.signatureAlgorithm.algorithmParams
+      let hash: "SHA-256" | "SHA-384" | "SHA-512" = "SHA-384" // AMD default
+      let saltLength = 48 // Default for SHA-384
+
+      if (params) {
+        // Parse the RSA-PSS-params ASN.1 structure
+        try {
+          const paramsView = params.valueBeforeDecodeView || params.valueBeforeDecode
+          if (paramsView) {
+            const bytes = paramsView instanceof ArrayBuffer
+              ? new Uint8Array(paramsView)
+              : new Uint8Array(paramsView.buffer, paramsView.byteOffset, paramsView.byteLength)
+            const decoded = fromBER(bytes)
+            if (decoded.offset !== -1) {
+              const seq = decoded.result as any
+              const entries = Array.isArray(seq.valueBlock?.value) ? seq.valueBlock.value : []
+              for (const entry of entries) {
+                if (entry.idBlock?.tagClass !== 3) continue
+                const tagNo = entry.idBlock.tagNumber
+                const inner = entry.valueBlock?.value?.[0]
+                if (!inner) continue
+                if (tagNo === 0) {
+                  // Hash algorithm [0]
+                  const oidNode = inner.valueBlock?.value?.[0]
+                  const oid = oidNode?.valueBlock?.toString?.() || ""
+                  if (oid === "2.16.840.1.101.3.4.2.1") { hash = "SHA-256"; saltLength = 32 }
+                  else if (oid === "2.16.840.1.101.3.4.2.2") { hash = "SHA-384"; saltLength = 48 }
+                  else if (oid === "2.16.840.1.101.3.4.2.3") { hash = "SHA-512"; saltLength = 64 }
+                } else if (tagNo === 2) {
+                  // Salt length [2]
+                  const intNode = inner.valueBlock?.value?.[0] ?? inner
+                  const value = intNode?.valueBlock?.valueDec ?? inner.valueBlock?.valueDec
+                  if (typeof value === "number") saltLength = value
+                }
+              }
+            }
+          }
+        } catch {
+          // Use defaults
+        }
+      }
+
+      const publicKey = await crypto.subtle.importKey(
+        "spki",
+        spki,
+        { name: "RSA-PSS", hash },
+        false,
+        ["verify"],
+      )
+
+      return await crypto.subtle.verify(
+        { name: "RSA-PSS", saltLength },
+        publicKey,
+        sigBytes as BufferSource,
+        tbs,
+      )
+    } catch {
+      return false
+    }
+  }
+
+  private async _verifyRsaPkcs1(
+    sigOid: string,
+    tbs: ArrayBuffer,
+    sigBytes: Uint8Array,
+    spki: ArrayBuffer,
+  ): Promise<boolean> {
+    try {
+      let hash: "SHA-256" | "SHA-384" | "SHA-512" = "SHA-256"
+      if (sigOid === "1.2.840.113549.1.1.11") hash = "SHA-256"
+      else if (sigOid === "1.2.840.113549.1.1.12") hash = "SHA-384"
+      else if (sigOid === "1.2.840.113549.1.1.13") hash = "SHA-512"
+
+      const publicKey = await crypto.subtle.importKey(
+        "spki",
+        spki,
+        { name: "RSASSA-PKCS1-v1_5", hash },
+        false,
+        ["verify"],
+      )
+
+      return await crypto.subtle.verify(
+        "RSASSA-PKCS1-v1_5",
+        publicKey,
+        sigBytes as BufferSource,
+        tbs,
+      )
+    } catch {
+      return false
+    }
+  }
+
+  private async _verifyEcdsa(
+    sigOid: string,
+    tbs: ArrayBuffer,
+    sigDer: Uint8Array,
+    spki: ArrayBuffer,
+    issuerCert: QV_X509Certificate,
+  ): Promise<boolean> {
+    try {
+      // Determine hash
       let hash: "SHA-256" | "SHA-384" | "SHA-512" = "SHA-256"
       if (sigOid.includes("1.2.840.10045.4.3.3")) hash = "SHA-384"
       else if (sigOid.includes("1.2.840.10045.4.3.4")) hash = "SHA-512"
@@ -105,11 +235,6 @@ export class QV_X509Certificate {
       const curveLen =
         namedCurve === "P-256" ? 32 : namedCurve === "P-384" ? 48 : 66
 
-      const tbs = this._cert.encodeTBS().toBER(false) as ArrayBuffer
-      const sigDer = new Uint8Array(
-        this._cert.signatureValue.valueBlock.valueHex,
-      )
-      const spki = issuerCert._cert.subjectPublicKeyInfo.toSchema().toBER(false)
       const publicKey = await crypto.subtle.importKey(
         "spki",
         spki,
@@ -124,7 +249,7 @@ export class QV_X509Certificate {
         ok = await crypto.subtle.verify(
           { name: "ECDSA", hash },
           publicKey,
-          sigDer,
+          sigDer as BufferSource,
           tbs,
         )
       } catch {
