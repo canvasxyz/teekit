@@ -148,12 +148,16 @@ function App() {
         .getX25519ExpectedReportData()
         .then((expectedReportData: Uint8Array) => {
           setExpectedReportData(hex(expectedReportData ?? new Uint8Array()))
-          setVerifierNonce(
-            hex(enc.reportBindingData?.verifierData?.val ?? new Uint8Array()),
-          )
-          setVerifierNonceIat(
-            hex(enc.reportBindingData?.verifierData?.iat ?? new Uint8Array()),
-          )
+
+          const verifierData = enc.reportBindingData?.verifierData
+          if (verifierData === null || verifierData === undefined) return
+
+          if ("val" in verifierData && "iat" in verifierData) {
+            setVerifierNonce(hex(verifierData.val ?? new Uint8Array()))
+            setVerifierNonceIat(hex(verifierData.iat ?? new Uint8Array()))
+          } else {
+            setVerifierNonce(hex(verifierData ?? new Uint8Array()))
+          }
         })
     }
 
@@ -409,7 +413,6 @@ function App() {
             >
               POST /increment via ServiceWorker
             </button>
-
           </div>
 
           <div

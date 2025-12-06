@@ -105,7 +105,7 @@ export type ControlChannelKXAnnounce = {
   x25519PublicKey: Uint8Array
   quote: Uint8Array
   runtime_data: Uint8Array | null // used for TDX
-  verifier_data: VerifierNonce | null
+  verifier_data: VerifierNonce | Uint8Array | null // VerifierNonce for Intel, Uint8Array nonce for SEV-SNP
   sev_snp_data?: SevSnpKXAnnounceData | null // used for SEV-SNP cert chain
 }
 

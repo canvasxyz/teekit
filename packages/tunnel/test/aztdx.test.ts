@@ -153,6 +153,11 @@ test.serial(
         // 2. SHA256(runtime_data) == report_data[0:32]
         // 3. runtime_data["user-data"] == SHA512(nonce || sampleUserData)
         const runtimeData = client.reportBindingData?.runtimeData
+        if (
+          !client.reportBindingData?.verifierData ||
+          !("val" in client.reportBindingData?.verifierData)
+        )
+          return false
         const nonce = client.reportBindingData?.verifierData?.val
         if (!runtimeData || !nonce) return false
 
@@ -335,7 +340,7 @@ test.serial("Azure TDX: binding fails when nonce is missing", async (t) => {
         await tunnelClient.fetch(`${origin}/hello`)
       },
       {
-        message: /missing verifier_nonce\.val/,
+        message: /missing verifier_data for Azure binding/,
       },
     )
   } finally {

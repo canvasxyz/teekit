@@ -63,7 +63,7 @@ type TunnelServerConfig = {
 export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   public server?: HttpServer
   public quote: Uint8Array | null = null
-  public verifierData: VerifierNonce | null = null
+  public verifierData: VerifierNonce | Uint8Array | null = null
   public runtimeData: Uint8Array | null = null
   // SEV-SNP certificate fields. These are modified in place during report parsing.
   public vcekCert: string | null = null
@@ -408,14 +408,8 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
       this.vcekCert = quoteData.vcek_cert
       this.askCert = quoteData.ask_cert ?? null
       this.arkCert = quoteData.ark_cert ?? null
-      // For SEV-SNP, use nonce from the quote data for binding
-      this.verifierData = quoteData.nonce
-        ? {
-            val: quoteData.nonce,
-            iat: new Uint8Array(),
-            signature: new Uint8Array(),
-          } // iat, signature is unused
-        : null
+      // For SEV-SNP, store nonce directly as Uint8Array (no need for VerifierNonce wrapper)
+      this.verifierData = quoteData.nonce ?? null
       this.runtimeData = null
     } else {
       // Standard TDX/SGX quote data

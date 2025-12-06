@@ -141,7 +141,7 @@ export class TunnelClient {
   // Additional bytes used to bind X25519PublicKey to report_data
   public reportBindingData?: {
     runtimeData: Uint8Array | null
-    verifierData: VerifierNonce | null
+    verifierData: VerifierNonce | Uint8Array | null // VerifierNonce for Intel, Uint8Array nonce for SEV-SNP
     // SEV-SNP certificates
     vcekCert: string | null
     askCert: string | null
@@ -356,8 +356,9 @@ export class TunnelClient {
               const runtimeData = message.runtime_data
                 ? (message.runtime_data as Uint8Array)
                 : null
+              // verifier_data can be either VerifierNonce (Intel) or Uint8Array (SEV-SNP nonce)
               const verifierData = message.verifier_data
-                ? (message.verifier_data as VerifierNonce)
+                ? (message.verifier_data as VerifierNonce | Uint8Array)
                 : null
               // Extract SEV-SNP certificates from nested sev_snp_data field
               const sevSnpData = message.sev_snp_data as
@@ -493,8 +494,20 @@ export class TunnelClient {
                 }
               } else {
                 // Standard TDX: report_data = SHA512(nonce || iat || x25519key)
-                const val = this.reportBindingData?.verifierData?.val
-                const iat = this.reportBindingData?.verifierData?.iat
+                const verifierData = this.reportBindingData?.verifierData
+                if (!verifierData) {
+                  throw new Error(
+                    "missing verifier_data, could not validate report_data",
+                  )
+                }
+                // For Intel TDX, verifierData should be VerifierNonce with val and iat
+                if (verifierData instanceof Uint8Array) {
+                  throw new Error(
+                    "expected VerifierNonce for Intel TDX, got plain nonce",
+                  )
+                }
+                const val = verifierData.val
+                const iat = verifierData.iat
                 if (val === undefined) {
                   throw new Error(
                     "missing nonce, could not validate report_data",
@@ -846,8 +859,7 @@ export class TunnelClient {
    * and the verifier nonce/iat obtained during the last remote attestation request.
    */
   async getX25519ExpectedReportData(): Promise<Uint8Array> {
-    const nonce = this.reportBindingData?.verifierData?.val
-    const issuedAt = this.reportBindingData?.verifierData?.iat
+    const verifierData = this.reportBindingData?.verifierData
     const x25519key = this.serverX25519PublicKey
 
     // Azure vTPM binding uses SHA256(runtime_data) || zeros for report_data and
@@ -867,6 +879,14 @@ export class TunnelClient {
     }
 
     // Standard TDX binding is SHA512(nonce || iat || x25519key)
+    if (!verifierData) throw new Error("missing verifier_data")
+    if (verifierData instanceof Uint8Array) {
+      throw new Error("expected VerifierNonce for Intel TDX, got plain nonce")
+    }
+
+    const nonce = verifierData.val
+    const issuedAt = verifierData.iat
+
     if (!nonce) throw new Error("missing verifier_nonce.val")
     if (!issuedAt || issuedAt.length === 0)
       throw new Error("missing verifier_nonce.iat")
@@ -881,9 +901,17 @@ export class TunnelClient {
    * to verify that we have a secure connection.
    */
   async isX25519Bound(quote: TdxQuote | SgxQuote): Promise<boolean> {
-    const nonce = this.reportBindingData?.verifierData?.val
-    const issuedAt = this.reportBindingData?.verifierData?.iat
+    const verifierData = this.reportBindingData?.verifierData
     const x25519key = this.serverX25519PublicKey
+
+    if (!verifierData) throw new Error("missing verifier_data")
+    if (verifierData instanceof Uint8Array) {
+      throw new Error("expected VerifierNonce for Intel TDX, got plain nonce")
+    }
+
+    const nonce = verifierData.val
+    const issuedAt = verifierData.iat
+
     if (!nonce) throw new Error("missing verifier_nonce.val")
     if (!issuedAt) throw new Error("missing verifier_nonce.iat")
     if (!x25519key) throw new Error("missing x25519 key")
@@ -901,11 +929,16 @@ export class TunnelClient {
    * - Policy flags - verified by `sevsnpVerifyConfig` additional configs
    */
   async isSevSnpX25519Bound(report: SevSnpReport): Promise<boolean> {
-    const nonce = this.reportBindingData?.verifierData?.val
+    const verifierData = this.reportBindingData?.verifierData
     const x25519key = this.serverX25519PublicKey
 
-    if (!nonce) throw new Error("missing nonce for SEV-SNP binding")
+    if (!verifierData) throw new Error("missing nonce for SEV-SNP binding")
     if (!x25519key) throw new Error("missing x25519 key")
+
+    // For SEV-SNP, verifierData should be a plain Uint8Array nonce
+    const nonce =
+      verifierData instanceof Uint8Array ? verifierData : verifierData.val
+    if (!nonce) throw new Error("missing nonce for SEV-SNP binding")
 
     // Compute expected report_data: SHA512(nonce || x25519key)
     // TODO: This could be factored into a helper like `isUserdataBound`
@@ -962,13 +995,19 @@ export class TunnelClient {
    * - TCB status and CRL revocation (depends on verifyTdx options)
    */
   async isAzureX25519Bound(quote: TdxQuote | SgxQuote): Promise<boolean> {
-    const nonce = this.reportBindingData?.verifierData?.val
+    const verifierData = this.reportBindingData?.verifierData
     const runtimeData = this.reportBindingData?.runtimeData
     const x25519key = this.serverX25519PublicKey
 
-    if (!nonce) throw new Error("missing verifier_nonce.val for Azure binding")
+    if (!verifierData)
+      throw new Error("missing verifier_data for Azure binding")
     if (!runtimeData) throw new Error("missing runtime_data for Azure binding")
     if (!x25519key) throw new Error("missing x25519 key")
+
+    // For Azure, verifierData can be either VerifierNonce or plain Uint8Array
+    const nonce =
+      verifierData instanceof Uint8Array ? verifierData : verifierData.val
+    if (!nonce) throw new Error("missing nonce for Azure binding")
 
     // Step 1: Verify quote follows Azure structure (report_data[32:64] = zeros)
     if (!isAzureVtpmQuoteStructure(quote as TdxQuote)) {

@@ -79,8 +79,10 @@ test.serial(
         t.truthy(client.reportBindingData?.vcekCert)
         t.truthy(client.reportBindingData?.askCert)
         t.truthy(client.reportBindingData?.arkCert)
-        // Verify nonce was passed
-        t.truthy(client.reportBindingData?.verifierData?.val)
+        // Verify nonce was passed (for SEV-SNP, verifierData is a plain Uint8Array)
+        const verifierData = client.reportBindingData?.verifierData
+        t.truthy(verifierData)
+        t.true(verifierData instanceof Uint8Array)
         // Accept binding (bypassing report_data check for sample data)
         return true
       },
@@ -394,7 +396,13 @@ test.serial(
       // Custom binding that uses the known X25519 key from the sample
       // instead of the dynamically generated one
       x25519Binding: async (client) => {
-        const nonce = client.reportBindingData?.verifierData?.val
+        const verifierData = client.reportBindingData?.verifierData
+        if (!verifierData) {
+          throw new Error("missing nonce for SEV-SNP binding")
+        }
+        // For SEV-SNP, verifierData is a plain Uint8Array nonce
+        const nonce =
+          verifierData instanceof Uint8Array ? verifierData : verifierData.val
         if (!nonce) {
           throw new Error("missing nonce for SEV-SNP binding")
         }
