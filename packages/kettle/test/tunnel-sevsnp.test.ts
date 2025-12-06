@@ -7,25 +7,25 @@ let shared: {
   kettle: WorkerResult
   tunnelClient: TunnelClient
   origin: string
+  cleanup: () => void
 } | null = null
 
 test.before(async () => {
-  shared = await startKettleWithTunnel()
+  shared = await startKettleWithTunnel("sevsnp")
 })
 
 test.after.always(async () => {
   if (shared) {
-    const { kettle, tunnelClient } = shared
+    const { kettle, tunnelClient, cleanup } = shared
     shared = null
-    await stopKettleWithTunnel(kettle, tunnelClient)
+    await stopKettleWithTunnel(kettle, tunnelClient, cleanup)
   }
 })
 
-test.serial("tunnel: GET /uptime", async (t) => {
-  if (!shared) t.fail("shared tunnel not initialized")
+test.serial("SEV-SNP tunnel: GET /uptime", async (t) => {
+  if (!shared) t.fail("SEV-SNP tunnel not initialized")
   const { tunnelClient } = shared!
 
-  // Test the /uptime endpoint through the tunnel
   const response = await tunnelClient.fetch("/uptime")
   t.is(response.status, 200)
 
@@ -35,11 +35,10 @@ test.serial("tunnel: GET /uptime", async (t) => {
   t.regex(data.uptime.formatted, /\d+m \d+/)
 })
 
-test.serial("tunnel: POST /increment", async (t) => {
-  if (!shared) t.fail("shared tunnel not initialized")
+test.serial("SEV-SNP tunnel: POST /increment", async (t) => {
+  if (!shared) t.fail("SEV-SNP tunnel not initialized")
   const { tunnelClient } = shared!
 
-  // Test the /increment endpoint through the tunnel
   const response1 = await tunnelClient.fetch("/increment", {
     method: "POST",
   })
@@ -50,7 +49,6 @@ test.serial("tunnel: POST /increment", async (t) => {
   t.true(typeof counter1 === "number")
   t.true(counter1 > 0)
 
-  // Increment again - should increase by 1
   const response2 = await tunnelClient.fetch("/increment", {
     method: "POST",
   })
@@ -58,8 +56,8 @@ test.serial("tunnel: POST /increment", async (t) => {
   t.is(data2.counter, counter1 + 1)
 })
 
-test.serial("tunnel: WebSocket echo", async (t) => {
-  if (!shared) t.fail("shared tunnel not initialized")
+test.serial("SEV-SNP tunnel: WebSocket echo", async (t) => {
+  if (!shared) t.fail("SEV-SNP tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
   const wsUrl = new URL(origin)
@@ -72,7 +70,6 @@ test.serial("tunnel: WebSocket echo", async (t) => {
   })
   t.is(ws.readyState, WebSocket.OPEN)
 
-  // Send a string; this will fail JSON parsing and be echoed
   const message1 = "hello world"
   const { promise, resolve } = Promise.withResolvers()
   ws.onmessage = (event) => {
@@ -84,11 +81,12 @@ test.serial("tunnel: WebSocket echo", async (t) => {
   t.deepEqual(result, message1)
 })
 
-test.serial("tunnel: WebSocket chat messages", async (t) => {
-  if (!shared) t.fail("shared tunnel not initialized")
+test.serial("SEV-SNP tunnel: WebSocket chat messages", async (t) => {
+  if (!shared) t.fail("SEV-SNP tunnel not initialized")
   const { tunnelClient, origin } = shared!
 
   const tunnelClient2 = await TunnelClient.initialize(origin, {
+    sevsnp: true,
     customVerifyQuote: () => true,
     x25519Binding: () => true,
   })
@@ -96,7 +94,6 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
     tunnelClient2.close()
   })
 
-  // Connect to WebSocket through the tunnel
   const wsUrl = new URL(origin)
   wsUrl.protocol = wsUrl.protocol.replace(/^http/, "ws")
   wsUrl.pathname = "/"
@@ -112,11 +109,9 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
     }),
   ])
 
-  // Verify connection is established
   t.is(ws1.readyState, WebSocket.OPEN)
   t.is(ws2.readyState, WebSocket.OPEN)
 
-  // Send messages from ws1, receive on both ws1/ws2
   const message1 = { type: "chat", username: "id1", text: "meow" }
   const { promise: promise1, resolve: resolveWs1 } = Promise.withResolvers()
   const { promise: promise2, resolve: resolveWs2 } = Promise.withResolvers()
@@ -128,7 +123,6 @@ test.serial("tunnel: WebSocket chat messages", async (t) => {
   const result1 = JSON.parse((await promise1) as any)
   const result2 = JSON.parse((await promise2) as any)
 
-  // Broadcasted message contains some extra data, only check the original fields
   t.is(result1.type, "message")
   t.is(result1.message.username, message1.username)
   t.is(result1.message.text, message1.text)

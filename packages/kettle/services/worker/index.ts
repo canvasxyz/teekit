@@ -4,7 +4,7 @@ export type { Env } from "./worker.js"
 
 // Shared helper functions
 import { base64 } from "@scure/base"
-import type { QuoteData } from "@teekit/tunnel"
+import type { QuoteData, SevSnpQuoteData } from "@teekit/tunnel"
 
 interface FetcherLike {
   fetch(request: Request | string, init?: RequestInit): Promise<Response>
@@ -13,7 +13,7 @@ interface FetcherLike {
 export async function getQuoteFromService(
   x25519PublicKey: Uint8Array,
   env?: unknown,
-): Promise<QuoteData> {
+): Promise<QuoteData | SevSnpQuoteData> {
   let response: Response
 
   const quoteService = (env as { QUOTE_SERVICE?: FetcherLike } | undefined)?.QUOTE_SERVICE
@@ -48,6 +48,19 @@ export async function getQuoteFromService(
   }
 
   const quoteData = await response.json()
+
+  // Check if this is SEV-SNP quote data (has vcek_cert)
+  if (quoteData.vcek_cert) {
+    return {
+      quote: base64.decode(quoteData.quote),
+      vcek_cert: quoteData.vcek_cert,
+      ask_cert: quoteData.ask_cert,
+      ark_cert: quoteData.ark_cert,
+      nonce: quoteData.nonce ? base64.decode(quoteData.nonce) : undefined,
+    }
+  }
+
+  // TDX quote data
   return {
     quote: base64.decode(quoteData.quote),
     verifier_data: quoteData.verifier_data

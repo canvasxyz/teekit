@@ -1,10 +1,23 @@
 import net from "net"
 import { existsSync } from "fs"
 import { ChildProcess } from "child_process"
+import { QuoteData, SevSnpQuoteData } from "@teekit/tunnel"
+
+export function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
 
 export function randomToken(len = 48): string {
   const bytes = crypto.getRandomValues(new Uint8Array(len))
   return Buffer.from(bytes).toString("base64url")
+}
+
+export function isSevSnpQuoteData(
+  data: QuoteData | SevSnpQuoteData,
+): data is SevSnpQuoteData {
+  return "vcek_cert" in data
 }
 
 export async function waitForPortOpen(
@@ -163,4 +176,39 @@ export function isSuppressedSqldLogs(msg: string) {
   ) {
     return true
   }
+}
+
+/**
+ * Parse the plain-text output from Azure trustauthority-cli.
+ *
+ * Format:
+ *   Quote: <base64>
+ *   runtime_data: <base64>
+ *   user_data: <base64>
+ */
+export function parseAzureCLIOutput(stdout: string): {
+  quote: string
+  runtimeData: string
+  userData: string
+} {
+  const lines = stdout.trim().split("\n")
+  let quote = ""
+  let runtimeData = ""
+  let userData = ""
+
+  for (const line of lines) {
+    if (line.startsWith("Quote: ")) {
+      quote = line.slice("Quote: ".length).trim()
+    } else if (line.startsWith("runtime_data: ")) {
+      runtimeData = line.slice("runtime_data: ".length).trim()
+    } else if (line.startsWith("user_data: ")) {
+      userData = line.slice("user_data: ".length).trim()
+    }
+  }
+
+  if (!quote) throw new Error("Missing Quote in Azure CLI output")
+  if (!runtimeData) throw new Error("Missing runtime_data in Azure CLI output")
+  if (!userData) throw new Error("Missing user_data in Azure CLI output")
+
+  return { quote, runtimeData, userData }
 }
