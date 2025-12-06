@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Redeploys an existing GCP VM with a new image while preserving its IP address and metadata.
-# Usage: ./redeploy_gcp.sh <vm-name> <tar.gz-file>
+# Usage: ./redeploy_gcp.sh --tdx|--sev-snp <vm-name> <tar.gz-file>
 #
 # The script will:
 # 1. Capture the existing VM's configuration (IP, metadata, machine type, etc.)
@@ -15,10 +15,10 @@
 # - The VM to redeploy exists
 #
 # Examples:
-#   ./redeploy_gcp.sh gcp-tdx-demo build/tdx-debian.tar.gz
-#   ./redeploy_gcp.sh gcp-tdx-demo build/tdx-debian-devtools.tar.gz
-#   ./redeploy_gcp.sh gcp-tdx-demo build/tdx-debian.tar.gz --dry-run
-#   ./redeploy_gcp.sh gcp-tdx-demo build/tdx-debian.tar.gz --yes
+#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/tdx-debian.tar.gz
+#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/tdx-debian-devtools.tar.gz
+#   ./redeploy_gcp.sh --sev-snp gcp-sev-demo build/tdx-debian.tar.gz
+#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/tdx-debian.tar.gz --dry-run
 #
 
 set -euo pipefail
@@ -65,12 +65,15 @@ cleanup_on_failure() {
     echo "To manually recreate the VM, run:"
     echo "  gcloud compute instances create ${VM_NAME} \\"
     echo "    --image=${NEW_IMAGE_NAME:-<image-name>} \\"
-    echo "    --machine-type=${PRESERVED_MACHINE_TYPE:-c3-standard-4} \\"
+    echo "    --machine-type=${NEW_MACHINE_TYPE} \\"
     echo "    --zone=${VM_ZONE:-$DEFAULT_ZONE} \\"
-    echo "    --confidential-compute-type=TDX \\"
+    echo "    --confidential-compute-type=${CONFIDENTIAL_TYPE} \\"
     echo "    --maintenance-policy=TERMINATE \\"
     echo "    --boot-disk-size=${PRESERVED_DISK_SIZE:-200GB} \\"
-    echo "    --tags=tdx-vm"
+    echo "    --tags=${VM_TAG}"
+    if [ "$TEE_TYPE" = "sev-snp" ]; then
+        echo "    --min-cpu-platform=\"AMD Milan\""
+    fi
     if [ -n "${STATIC_IP_NAME:-}" ]; then
         echo "    --address=${STATIC_IP_NAME}"
     fi
@@ -86,8 +89,12 @@ cleanup_on_failure() {
 }
 
 # Validate arguments
-if [ $# -lt 2 ]; then
-    echo "Usage: $0 <vm-name> <tar.gz-file> [--zone=ZONE]"
+if [ $# -lt 3 ]; then
+    echo "Usage: $0 --tdx|--sev-snp <vm-name> <tar.gz-file> [--zone=ZONE]"
+    echo ""
+    echo "Required first argument (TEE type):"
+    echo "  --tdx        Deploy to Intel TDX machine (c3-standard-4)"
+    echo "  --sev-snp    Deploy to AMD SEV-SNP machine (n2d-standard-2)"
     echo ""
     echo "Arguments:"
     echo "  vm-name      Name of the existing VM to redeploy"
@@ -96,15 +103,40 @@ if [ $# -lt 2 ]; then
     echo "Options:"
     echo "  --zone=ZONE  Zone where the VM is located (default: $DEFAULT_ZONE)"
     echo "  --dry-run    Show what would be done without making changes"
-    echo "  --yes, -y    Skip confirmation prompt"
     echo ""
     echo "Examples:"
-    echo "  $0 gcp-tdx-demo build/tdx-debian.tar.gz"
-    echo "  $0 gcp-tdx-demo build/tdx-debian.tar.gz --zone=us-central1-b"
-    echo "  $0 gcp-tdx-demo build/tdx-debian.tar.gz --dry-run"
-    echo "  $0 gcp-tdx-demo build/tdx-debian.tar.gz --yes"
+    echo "  $0 --tdx gcp-tdx-demo build/tdx-debian.tar.gz"
+    echo "  $0 --sev-snp gcp-sev-demo build/sev-debian.tar.gz"
+    echo "  $0 --tdx gcp-tdx-demo build/tdx-debian.tar.gz --zone=us-central1-b"
+    echo "  $0 --sev-snp gcp-sev-demo build/sev-debian.tar.gz --dry-run"
     exit 1
 fi
+
+# Parse required TEE type argument
+TEE_TYPE=""
+case "$1" in
+    --tdx)
+        TEE_TYPE="tdx"
+        CONFIDENTIAL_TYPE="TDX"
+        NEW_MACHINE_TYPE="c3-standard-4"
+        IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE"
+        VM_TAG="tdx-vm"
+        ;;
+    --sev-snp)
+        TEE_TYPE="sev-snp"
+        CONFIDENTIAL_TYPE="SEV_SNP"
+        NEW_MACHINE_TYPE="n2d-standard-2"
+        IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,SEV_SNP_CAPABLE"
+        VM_TAG="sev-snp-vm"
+        ;;
+    *)
+        echo "Error: First argument must be --tdx or --sev-snp"
+        echo ""
+        echo "Usage: $0 --tdx|--sev-snp <vm-name> <tar.gz-file> [options]"
+        exit 1
+        ;;
+esac
+shift
 
 VM_NAME="$1"
 TAR_FILE="$2"
@@ -112,7 +144,6 @@ VM_ZONE="$DEFAULT_ZONE"
 
 # Parse optional arguments
 DRY_RUN=false
-SKIP_CONFIRM=false
 shift 2
 for arg in "$@"; do
     case "$arg" in
@@ -121,9 +152,6 @@ for arg in "$@"; do
             ;;
         --dry-run)
             DRY_RUN=true
-            ;;
-        --yes|-y)
-            SKIP_CONFIRM=true
             ;;
     esac
 done
@@ -142,11 +170,13 @@ fi
 DEPLOY_HASH=$(openssl rand -hex 4)
 TAR_BASENAME=$(basename "$TAR_FILE")
 BLOB_NAME="${TAR_BASENAME%.tar.gz}-redeploy-${DEPLOY_HASH}.tar.gz"
-NEW_IMAGE_NAME="tdx-debian-redeploy-${DEPLOY_HASH}"
+NEW_IMAGE_NAME="${TEE_TYPE}-debian-redeploy-${DEPLOY_HASH}"
 
 echo ""
 log_info "GCP VM Redeployment"
 log_info "==================="
+log_info "TEE Type: $TEE_TYPE (${CONFIDENTIAL_TYPE})"
+log_info "Default Machine Type: $NEW_MACHINE_TYPE"
 log_info "VM Name: $VM_NAME"
 log_info "Zone: $VM_ZONE"
 log_info "tar.gz File: $TAR_FILE"
@@ -193,11 +223,6 @@ fi
 
 log_success "Found VM: $VM_NAME"
 
-# Get machine type
-PRESERVED_MACHINE_TYPE=$(gcloud compute instances describe "$VM_NAME" --zone="$VM_ZONE" \
-    --format='get(machineType)' | xargs basename)
-log_info "Machine Type: $PRESERVED_MACHINE_TYPE"
-
 # Get boot disk size
 PRESERVED_DISK_SIZE=$(gcloud compute instances describe "$VM_NAME" --zone="$VM_ZONE" \
     --format='get(disks[0].diskSizeGb)')
@@ -215,8 +240,8 @@ VM_TAGS=$(gcloud compute instances describe "$VM_NAME" --zone="$VM_ZONE" \
 if [ -n "$VM_TAGS" ]; then
     log_info "Network Tags: $VM_TAGS"
 else
-    VM_TAGS="tdx-vm"
-    log_info "Network Tags: (none, will use default: tdx-vm)"
+    VM_TAGS="$VM_TAG"
+    log_info "Network Tags: (none, will use default: $VM_TAG)"
 fi
 
 # Get network interface info
@@ -265,13 +290,13 @@ echo ""
 echo "  UPLOAD:"
 echo "    - tar.gz: $TAR_FILE -> $BLOB_NAME"
 echo "    - Create image: $NEW_IMAGE_NAME"
+echo "    - Create Machine Type: $NEW_MACHINE_TYPE"
 echo ""
 echo "  DELETE:"
 echo "    - VM: $VM_NAME"
 echo "    - Boot disk (auto-deleted with VM)"
 echo ""
 echo "  PRESERVE:"
-echo "    - Machine Type: $PRESERVED_MACHINE_TYPE"
 echo "    - Boot Disk Size: $PRESERVED_DISK_SIZE"
 echo "    - Network Tags: $VM_TAGS"
 echo "    - Metadata: $(echo "$VM_METADATA_JSON" | jq -c '.metadata.items // []')"
@@ -298,16 +323,6 @@ if [ "$DRY_RUN" = true ]; then
     echo ""
     echo "Run without --dry-run to perform the actual redeployment."
     exit 0
-fi
-
-if [ "$SKIP_CONFIRM" = true ]; then
-    log_info "Skipping confirmation (--yes flag)"
-else
-    read -p "Proceed with redeployment? [y/N]: " CONFIRM
-    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-        log_info "Aborted by user."
-        exit 0
-    fi
 fi
 
 # Set up error handler
@@ -363,7 +378,7 @@ log_info "This may take 5-10 minutes..."
 if ! gcloud compute images create "$NEW_IMAGE_NAME" \
     --source-uri "$BLOB_URI" \
     --storage-location="$REGION" \
-    --guest-os-features=UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE; then
+    --guest-os-features="$IMAGE_OS_FEATURES"; then
     log_error "Failed to create GCE image"
     exit 1
 fi
@@ -422,18 +437,23 @@ log_step "Creating new VM with preserved configuration"
 
 log_info "Creating VM: $VM_NAME"
 log_info "Image: $NEW_IMAGE_NAME"
-log_info "Machine Type: $PRESERVED_MACHINE_TYPE"
+log_info "Machine Type: $NEW_MACHINE_TYPE"
 log_info "This may take 5-10 minutes..."
 
 # Build the create command
 CREATE_CMD="gcloud compute instances create $VM_NAME \
     --image=$NEW_IMAGE_NAME \
-    --machine-type=$PRESERVED_MACHINE_TYPE \
+    --machine-type=$NEW_MACHINE_TYPE \
     --zone=$VM_ZONE \
-    --confidential-compute-type=TDX \
+    --confidential-compute-type=$CONFIDENTIAL_TYPE \
     --maintenance-policy=TERMINATE \
     --boot-disk-size=$PRESERVED_DISK_SIZE \
     --tags=$VM_TAGS"
+
+# Add min-cpu-platform for SEV-SNP
+if [ "$TEE_TYPE" = "sev-snp" ]; then
+    CREATE_CMD="$CREATE_CMD --min-cpu-platform='AMD Milan'"
+fi
 
 # Add network configuration
 if [ -n "$SUBNETWORK" ] && [ "$SUBNETWORK" != "None" ]; then
@@ -496,10 +516,11 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║             REDEPLOYMENT COMPLETE                              ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
+echo "TEE Type:       $TEE_TYPE ($CONFIDENTIAL_TYPE)"
 echo "VM Name:        $VM_NAME"
 echo "External IP:    $NEW_EXTERNAL_IP"
 echo "Image Name:     $NEW_IMAGE_NAME"
-echo "Machine Type:   $PRESERVED_MACHINE_TYPE"
+echo "Machine Type:   $NEW_MACHINE_TYPE"
 echo "Zone:           $VM_ZONE"
 echo "Deploy Hash:    $DEPLOY_HASH"
 echo ""
@@ -508,7 +529,6 @@ echo "  - Blob: $BLOB_NAME"
 echo "  - Image: $NEW_IMAGE_NAME"
 echo ""
 echo "Configuration preserved:"
-echo "  - Machine Type: $PRESERVED_MACHINE_TYPE"
 echo "  - Boot Disk Size: $PRESERVED_DISK_SIZE"
 echo "  - Network Tags: $VM_TAGS"
 if [ -n "$STATIC_IP_NAME" ]; then

@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# Deploys a tar.gz image to GCP as a Confidential VM with Intel TDX.
-# Usage: ./deploy_gcp.sh <tar.gz-file>
+# Deploys a tar.gz image to GCP as a Confidential VM with Intel TDX or AMD SEV-SNP.
+# Usage: ./deploy_gcp.sh --tdx|--sev-snp <tar.gz-file> [name]
 #
 # The script will:
 # 1. Upload the tar.gz image to GCP Cloud Storage
 # 2. Create a GCE image from the uploaded file
 # 3. Create firewall rules (if they don't exist)
-# 4. Create a Confidential VM with TDX from the image
+# 4. Create a Confidential VM from the image
 #
 # Prerequisites:
 # - Google Cloud CLI installed and logged in (gcloud auth login)
@@ -18,6 +18,12 @@
 # - Creates firewall rules for required ports
 # - Prompts for manifest and Trust Authority configuration
 #
+# Examples:
+#   ./deploy_gcp.sh --tdx build/tdx-debian.tar.gz
+#   ./deploy_gcp.sh --tdx build/tdx-debian.tar.gz demo
+#   ./deploy_gcp.sh --sev-snp build/tdx-debian.tar.gz
+#   ./deploy_gcp.sh --sev-snp build/tdx-debian.tar.gz myvm
+#
 
 set -euo pipefail
 
@@ -25,7 +31,6 @@ set -euo pipefail
 BUCKET_NAME=""  # Will be set based on project ID
 ZONE="us-central1-a"
 REGION="us-central1"
-MACHINE_TYPE="c3-standard-4"
 BOOT_DISK_SIZE="200GB"
 
 # Colors for logging
@@ -69,19 +74,52 @@ cleanup_on_failure() {
 }
 
 # Validate arguments
-if [ $# -lt 1 ]; then
-    echo "Usage: $0 <tar.gz-file> [name]"
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 --tdx|--sev-snp <tar.gz-file> [name]"
+    echo ""
+    echo "Required first argument (TEE type):"
+    echo "  --tdx        Deploy to Intel TDX machine (c3-standard-4)"
+    echo "  --sev-snp    Deploy to AMD SEV-SNP machine (n2d-standard-2)"
     echo ""
     echo "Arguments:"
     echo "  tar.gz-file  Path to the tar.gz file to deploy (e.g., build/tdx-debian.tar.gz)"
     echo "  name         Optional name for the VM and image (default: random hash)"
     echo ""
-    echo "Example:"
-    echo "  $0 build/tdx-debian.tar.gz"
-    echo "  $0 build/tdx-debian.tar.gz demo"
-    echo "  $0 build/tdx-debian-devtools.tar.gz devtools"
+    echo "Examples:"
+    echo "  $0 --tdx build/tdx-debian.tar.gz"
+    echo "  $0 --tdx build/tdx-debian.tar.gz demo"
+    echo "  $0 --sev-snp build/tdx-debian.tar.gz"
+    echo "  $0 --sev-snp build/tdx-debian.tar.gz myvm"
     exit 1
 fi
+
+# Parse required TEE type argument
+TEE_TYPE=""
+case "$1" in
+    --tdx)
+        TEE_TYPE="tdx"
+        CONFIDENTIAL_TYPE="TDX"
+        MACHINE_TYPE="c3-standard-4"
+        IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE"
+        VM_TAG="tdx-vm"
+        FIREWALL_RULE_NAME="allow-tdx-ports"
+        ;;
+    --sev-snp)
+        TEE_TYPE="sev-snp"
+        CONFIDENTIAL_TYPE="SEV_SNP"
+        MACHINE_TYPE="n2d-standard-2"
+        IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,SEV_SNP_CAPABLE"
+        VM_TAG="sev-snp-vm"
+        FIREWALL_RULE_NAME="allow-sev-snp-ports"
+        ;;
+    *)
+        echo "Error: First argument must be --tdx or --sev-snp"
+        echo ""
+        echo "Usage: $0 --tdx|--sev-snp <tar.gz-file> [name]"
+        exit 1
+        ;;
+esac
+shift
 
 TAR_FILE="$1"
 
@@ -91,8 +129,8 @@ if [ $# -ge 2 ]; then
 else
     DEPLOY_HASH=$(openssl rand -hex 4)
 fi
-VM_NAME="gcp-tdx-${DEPLOY_HASH}"
-IMAGE_NAME="tdx-debian-${DEPLOY_HASH}"
+VM_NAME="gcp-${TEE_TYPE}-${DEPLOY_HASH}"
+IMAGE_NAME="${TEE_TYPE}-debian-${DEPLOY_HASH}"
 
 # Validate tar.gz file exists
 if [ ! -f "$TAR_FILE" ]; then
@@ -108,8 +146,10 @@ TAR_BASENAME=$(basename "$TAR_FILE")
 BLOB_NAME="${TAR_BASENAME%.tar.gz}-${DEPLOY_HASH}.tar.gz"
 
 echo ""
-log_info "GCP TDX Image Deployment"
-log_info "========================"
+log_info "GCP Confidential VM Deployment"
+log_info "==============================="
+log_info "TEE Type: $TEE_TYPE ($CONFIDENTIAL_TYPE)"
+log_info "Machine Type: $MACHINE_TYPE"
 log_info "tar.gz File: $TAR_FILE"
 log_info "Blob Name: $BLOB_NAME"
 log_info "Image Name: $IMAGE_NAME"
@@ -197,14 +237,14 @@ else
     if ! gcloud compute images create "$IMAGE_NAME" \
         --source-uri "$BLOB_URI" \
         --storage-location="$REGION" \
-        --guest-os-features=UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE; then
+        --guest-os-features="$IMAGE_OS_FEATURES"; then
         log_error "Failed to create GCE image"
         echo ""
         echo "You can retry manually:"
         echo "  gcloud compute images create $IMAGE_NAME \\"
         echo "    --source-uri $BLOB_URI \\"
         echo "    --storage-location=$REGION \\"
-        echo "    --guest-os-features=UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE"
+        echo "    --guest-os-features=$IMAGE_OS_FEATURES"
         exit 1
     fi
 fi
@@ -215,8 +255,6 @@ log_success "Created GCE image: $IMAGE_NAME"
 # STEP 5: Create firewall rules (if they don't exist)
 # ============================================================================
 log_step "Configuring firewall rules"
-
-FIREWALL_RULE_NAME="allow-tdx-ports"
 
 if gcloud compute firewall-rules describe "$FIREWALL_RULE_NAME" &>/dev/null; then
     log_success "Firewall rule already exists: $FIREWALL_RULE_NAME"
@@ -230,7 +268,7 @@ else
         --action=ALLOW \
         --rules=tcp:80,tcp:443,tcp:3000,tcp:3001,tcp:8080,tcp:8090 \
         --source-ranges=0.0.0.0/0 \
-        --target-tags=tdx-vm; then
+        --target-tags="$VM_TAG"; then
         log_warning "Could not create firewall rule (may already exist or insufficient permissions)"
     else
         log_success "Created firewall rule: $FIREWALL_RULE_NAME"
@@ -328,9 +366,9 @@ if [ -n "$TRUSTAUTHORITY_API_KEY" ]; then
 fi
 
 # ============================================================================
-# STEP 7: Create Confidential VM with TDX
+# STEP 7: Create Confidential VM
 # ============================================================================
-log_step "Creating Confidential VM with TDX"
+log_step "Creating Confidential VM with $CONFIDENTIAL_TYPE"
 
 log_info "Creating VM: $VM_NAME"
 log_info "Machine Type: $MACHINE_TYPE"
@@ -345,10 +383,15 @@ else
         --image=$IMAGE_NAME \
         --machine-type=$MACHINE_TYPE \
         --zone=$ZONE \
-        --confidential-compute-type=TDX \
+        --confidential-compute-type=$CONFIDENTIAL_TYPE \
         --maintenance-policy=TERMINATE \
         --boot-disk-size=$BOOT_DISK_SIZE \
-        --tags=tdx-vm"
+        --tags=$VM_TAG"
+
+    # Add min-cpu-platform for SEV-SNP
+    if [ "$TEE_TYPE" = "sev-snp" ]; then
+        CREATE_CMD="$CREATE_CMD --min-cpu-platform='AMD Milan'"
+    fi
 
     if [ -n "$METADATA_ARGS" ]; then
         CREATE_CMD="$CREATE_CMD --metadata=$METADATA_ARGS"
@@ -358,18 +401,26 @@ else
         log_error "Failed to create VM"
         echo ""
         echo "Common issues:"
-        echo "  - Quota exceeded: Request quota increase for C3 confidential VMs"
-        echo "  - Region availability: TDX may not be available in all zones"
+        if [ "$TEE_TYPE" = "tdx" ]; then
+            echo "  - Quota exceeded: Request quota increase for C3 confidential VMs"
+            echo "  - Region availability: TDX may not be available in all zones"
+        else
+            echo "  - Quota exceeded: Request quota increase for N2D confidential VMs"
+            echo "  - Region availability: SEV-SNP may not be available in all zones"
+        fi
         echo ""
         echo "You can retry manually:"
         echo "  gcloud compute instances create $VM_NAME \\"
         echo "    --image=$IMAGE_NAME \\"
         echo "    --machine-type=$MACHINE_TYPE \\"
         echo "    --zone=$ZONE \\"
-        echo "    --confidential-compute-type=TDX \\"
+        echo "    --confidential-compute-type=$CONFIDENTIAL_TYPE \\"
         echo "    --maintenance-policy=TERMINATE \\"
         echo "    --boot-disk-size=$BOOT_DISK_SIZE \\"
-        echo "    --tags=tdx-vm"
+        echo "    --tags=$VM_TAG"
+        if [ "$TEE_TYPE" = "sev-snp" ]; then
+            echo "    --min-cpu-platform=\"AMD Milan\""
+        fi
         if [ -n "$METADATA_ARGS" ]; then
             echo "    --metadata=\"...\""
         fi
@@ -398,9 +449,11 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║             DEPLOYMENT COMPLETE                                ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
+echo "TEE Type:       $TEE_TYPE ($CONFIDENTIAL_TYPE)"
 echo "VM Name:        $VM_NAME"
 echo "External IP:    $EXTERNAL_IP"
 echo "Image Name:     $IMAGE_NAME"
+echo "Machine Type:   $MACHINE_TYPE"
 echo "Deploy Hash:    $DEPLOY_HASH"
 echo ""
 echo "Resources created:"
