@@ -1,9 +1,10 @@
 ## @teekit/qvl
 
-@teekit/qvl is a lightweight, WebCrypto-based SGX/TDX quote
-verification library written in TypeScript (ESM). It provides full
-chain-of-trust validation from the Intel SGX Root CA, through quoting
-enclave checks, down to quote signature verification.
+@teekit/qvl is a lightweight, WebCrypto-based SGX, TDX, and SEV-SNP
+quote verification library written in TypeScript. It provides full
+chain-of-trust validation from the Root CA, through intermediate
+certificates, and quoting enclaves (SGX/TDX only), down to quote
+signature verification.
 
 See the
 [tests](https://github.com/canvasxyz/teekit/tree/main/packages/qvl/test)
@@ -11,6 +12,39 @@ for usage examples.
 
 For more information, see the [workspace
 readme](https://github.com/canvasxyz/teekit) in Github.
+
+### SEV-SNP Chain of Trust
+
+AMD SEV-SNP uses a certificate chain rooted at AMD's ARK (AMD Root Key).
+The ARK and ASK certificates for Milan are embedded in this library.
+Only the VCEK must be fetched from AMD's Key Distribution Service (KDS)
+since it's derived from the chip's unique ID and TCB version.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 AMD Root Key (ARK)                              │
+│                           ↓                                     │
+│                 AMD SEV Key (ASK)                               │
+│                           ↓                                     │
+│           Versioned Chip Endorsement Key (VCEK)                 │
+│              [fetched from AMD KDS per chip]                    │
+│                           ↓                                     │
+│                   Report Signature                              │
+│                    (ECDSA P-384)                                │
+│                           ↓                                     │
+│                    SEV-SNP Report                               │
+│                           │                                     │
+│       ┌───────────────────┼───────────────────┐                 │
+│       ↓                   ↓                   ↓                 │
+│   measurement        report_data          host_data             │
+│   (launch digest)  (guest-provided)   (host-provided)           │
+│                                                                 │
+│   Policy Fields:                                                │
+│   ├── vmpl (privilege level 0-3)                                │
+│   ├── guest_svn (security version)                              │
+│   └── policy (debug, migration, SMT flags)                      │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### TDX Chain of Trust
 
@@ -34,7 +68,7 @@ readme](https://github.com/canvasxyz/teekit) in Github.
 ### Azure Chain of Trust
 
 For Azure TDX, we support vTPM-based attestation. This relies on hash
-binding via a separate `runtime_data` object:
+binding via a separate `runtime_data` object.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
