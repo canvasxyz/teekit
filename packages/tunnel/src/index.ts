@@ -18,4 +18,8 @@ export {
 // Hono middleware for enforcing encryption
 export { encryptedOnlyHono } from "./encryptedOnlyHono.js"
 
-export type { QuoteData, SevSnpQuoteData, VerifierData } from "./types.js"
+export type {
+  IntelQuoteData as IntelQuoteData,
+  SevSnpQuoteData,
+  VerifierNonce,
+} from "./types.js"

@@ -4,7 +4,7 @@ export type { Env } from "./worker.js"
 
 // Shared helper functions
 import { base64 } from "@scure/base"
-import type { QuoteData, SevSnpQuoteData } from "@teekit/tunnel"
+import type { IntelQuoteData, SevSnpQuoteData } from "@teekit/tunnel"
 
 interface FetcherLike {
   fetch(request: Request | string, init?: RequestInit): Promise<Response>
@@ -13,10 +13,11 @@ interface FetcherLike {
 export async function getQuoteFromService(
   x25519PublicKey: Uint8Array,
   env?: unknown,
-): Promise<QuoteData | SevSnpQuoteData> {
+): Promise<IntelQuoteData | SevSnpQuoteData> {
   let response: Response
 
-  const quoteService = (env as { QUOTE_SERVICE?: FetcherLike } | undefined)?.QUOTE_SERVICE
+  const quoteService = (env as { QUOTE_SERVICE?: FetcherLike } | undefined)
+    ?.QUOTE_SERVICE
   if (quoteService) {
     // Use the QUOTE_SERVICE binding (required in workerd)
     response = await quoteService.fetch(
@@ -67,9 +68,7 @@ export async function getQuoteFromService(
       ? {
           iat: base64.decode(quoteData.verifier_data.iat),
           val: base64.decode(quoteData.verifier_data.val),
-          signature: quoteData.verifier_data.signature
-            ? base64.decode(quoteData.verifier_data.signature)
-            : undefined,
+          signature: base64.decode(quoteData.verifier_data.signature),
         }
       : undefined,
     runtime_data: quoteData.runtime_data

@@ -1,7 +1,7 @@
 import net from "net"
 import { existsSync } from "fs"
 import { ChildProcess } from "child_process"
-import { QuoteData, SevSnpQuoteData } from "@teekit/tunnel"
+import { IntelQuoteData, SevSnpQuoteData } from "@teekit/tunnel"
 
 export function toHex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -15,7 +15,7 @@ export function randomToken(len = 48): string {
 }
 
 export function isSevSnpQuoteData(
-  data: QuoteData | SevSnpQuoteData,
+  data: IntelQuoteData | SevSnpQuoteData,
 ): data is SevSnpQuoteData {
   return "vcek_cert" in data
 }

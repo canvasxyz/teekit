@@ -9,7 +9,6 @@ export {
 } from "./utils.js"
 
 export { startQuoteService } from "./startQuoteService.js"
-export type { QuoteData, SevSnpQuoteData, VerifierData } from "./quote.js"
 
 export { getDb } from "./worker/db.js"
 export { serveStatic } from "./worker/static.js"

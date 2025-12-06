@@ -22,9 +22,9 @@ import {
   RAEncryptedClientCloseEvent,
   RAEncryptedServerEvent,
   ControlChannelEncryptedMessage,
-  QuoteData,
+  IntelQuoteData,
   SevSnpQuoteData,
-  VerifierData,
+  VerifierNonce,
   ControlChannelKXAnnounce,
   TunnelApp,
 } from "./types.js"
@@ -63,7 +63,7 @@ type TunnelServerConfig = {
 export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
   public server?: HttpServer
   public quote: Uint8Array | null = null
-  public verifierData: VerifierData | null = null
+  public verifierData: VerifierNonce | null = null
   public runtimeData: Uint8Array | null = null
   // SEV-SNP certificate fields. These are modified in place during report parsing.
   public vcekCert: string | null = null
@@ -103,7 +103,10 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     private getQuote: (
       x25519PublicKey: Uint8Array,
       env?: unknown,
-    ) => Promise<QuoteData | SevSnpQuoteData> | QuoteData | SevSnpQuoteData,
+    ) =>
+      | Promise<IntelQuoteData | SevSnpQuoteData>
+      | IntelQuoteData
+      | SevSnpQuoteData,
     config?: TunnelServerConfig,
   ) {
     this.keyReady = false
@@ -141,7 +144,10 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     getQuote: (
       x25519PublicKey: Uint8Array,
       env?: unknown,
-    ) => Promise<QuoteData | SevSnpQuoteData> | QuoteData | SevSnpQuoteData,
+    ) =>
+      | Promise<IntelQuoteData | SevSnpQuoteData>
+      | IntelQuoteData
+      | SevSnpQuoteData,
     config?: TunnelServerConfig,
   ): Promise<TunnelServer<TApp>> {
     const server = new TunnelServer<TApp>(app, getQuote, config)
@@ -404,7 +410,11 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
       this.arkCert = quoteData.ark_cert ?? null
       // For SEV-SNP, use nonce from the quote data for binding
       this.verifierData = quoteData.nonce
-        ? { val: quoteData.nonce, iat: new Uint8Array() } // iat is unused
+        ? {
+            val: quoteData.nonce,
+            iat: new Uint8Array(),
+            signature: new Uint8Array(),
+          } // iat, signature is unused
         : null
       this.runtimeData = null
     } else {

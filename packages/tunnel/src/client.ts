@@ -31,7 +31,7 @@ import {
   ControlChannelKXConfirm,
   ControlChannelEncryptedMessage,
   RAEncryptedMessage,
-  VerifierData,
+  VerifierNonce,
 } from "./types.js"
 import {
   isControlChannelEncryptedMessage,
@@ -141,7 +141,7 @@ export class TunnelClient {
   // Additional bytes used to bind X25519PublicKey to report_data
   public reportBindingData?: {
     runtimeData: Uint8Array | null
-    verifierData: VerifierData | null
+    verifierData: VerifierNonce | null
     // SEV-SNP certificates
     vcekCert: string | null
     askCert: string | null
@@ -357,7 +357,7 @@ export class TunnelClient {
                 ? (message.runtime_data as Uint8Array)
                 : null
               const verifierData = message.verifier_data
-                ? (message.verifier_data as VerifierData)
+                ? (message.verifier_data as VerifierNonce)
                 : null
               // Extract SEV-SNP certificates from nested sev_snp_data field
               const sevSnpData = message.sev_snp_data as

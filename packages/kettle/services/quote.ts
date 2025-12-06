@@ -15,6 +15,7 @@ import {
   sevSnpGcpX25519Nonce,
 } from "@teekit/tunnel/samples"
 import { parseAzureCLIOutput, toHex } from "./utils.js"
+import type { IntelQuoteData, SevSnpQuoteData } from "@teekit/tunnel"
 
 const CONFIG_PATH = "/etc/kettle/config.json"
 const AZURE_NONCE_LENGTH = 32
@@ -22,26 +23,6 @@ const SEV_SNP_NONCE_LENGTH = 32
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
-
-export interface VerifierData {
-  iat: Uint8Array
-  val: Uint8Array
-  signature: Uint8Array
-}
-
-export interface QuoteData {
-  quote: Uint8Array
-  verifier_data?: VerifierData
-  runtime_data?: Uint8Array
-}
-
-export interface SevSnpQuoteData {
-  quote: Uint8Array
-  vcek_cert: string
-  ask_cert?: string
-  ark_cert?: string
-  nonce?: Uint8Array
-}
 
 export class QuoteError extends Error {
   constructor(
@@ -152,6 +133,8 @@ export class QuoteBinding {
       // If ASK/ARK not found, try to fetch the certificate chain
       // snpguest fetch ca <encoding> <certs_dir>
 
+      // Currently disabled because quote validation has default (Milan) certificates
+
       // if (!askCert || !arkCert) {
       //   try {
       //     await execFileAsync("snpguest", ["fetch", "ca", "pem", certsDir])
@@ -221,7 +204,7 @@ export class QuoteBinding {
    */
   private async getAzureTdxQuote(
     x25519PublicKey: Uint8Array,
-  ): Promise<QuoteData> {
+  ): Promise<IntelQuoteData> {
     console.log(
       "[kettle] Getting Azure TDX quote for " + toHex(x25519PublicKey),
     )
@@ -260,7 +243,7 @@ export class QuoteBinding {
    */
   private async getGcpTdxQuote(
     x25519PublicKey: Uint8Array,
-  ): Promise<QuoteData> {
+  ): Promise<IntelQuoteData> {
     if (!fs.existsSync(CONFIG_PATH)) {
       throw new QuoteError(
         `TDX config.json not found at ${CONFIG_PATH}`,
@@ -297,7 +280,7 @@ export class QuoteBinding {
 
   async getQuote(
     x25519PublicKey: Uint8Array,
-  ): Promise<QuoteData | SevSnpQuoteData> {
+  ): Promise<IntelQuoteData | SevSnpQuoteData> {
     const teeType = (process.env.TEE_TYPE || "tdx").toLowerCase()
     const isSevSnp =
       teeType === "sev-snp" || teeType === "sevsnp" || teeType === "sev_snp"

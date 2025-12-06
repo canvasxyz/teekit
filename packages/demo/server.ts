@@ -15,14 +15,18 @@ import {
 /* ********************************************************************************
  * Begin teekit tunnel code.
  * ******************************************************************************** */
-import { TunnelServer, ServerRAMockWebSocket, QuoteData } from "@teekit/tunnel"
+import {
+  TunnelServer,
+  ServerRAMockWebSocket,
+  IntelQuoteData,
+} from "@teekit/tunnel"
 import fs from "node:fs"
 import { exec } from "node:child_process"
 import { base64 } from "@scure/base"
 import { hex } from "@teekit/qvl"
 
-async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
-  return await new Promise<QuoteData>(async (resolve, reject) => {
+async function getQuote(x25519PublicKey: Uint8Array): Promise<IntelQuoteData> {
+  return await new Promise<IntelQuoteData>(async (resolve, reject) => {
     if (!fs.existsSync("config.json")) {
       return reject(new Error("[teekit-demo] TDX config.json not found"))
     }
@@ -33,9 +37,10 @@ async function getQuote(x25519PublicKey: Uint8Array): Promise<QuoteData> {
     // GCP (v1.10.x): trustauthority-cli evidence --tdx --user-data '<base64>' -c config.json
     // Azure (v1.6.1): trustauthority-cli quote --aztdx --user-data '<base64>'
     const cloudProvider = process.env.CLOUD_PROVIDER || "gcp"
-    const cmd = cloudProvider === "azure"
-      ? `trustauthority-cli quote --aztdx --user-data '${userDataB64}'`
-      : `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
+    const cmd =
+      cloudProvider === "azure"
+        ? `trustauthority-cli quote --aztdx --user-data '${userDataB64}'`
+        : `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
     exec(cmd, (err, stdout) => {
       if (err) {
         return reject(err)

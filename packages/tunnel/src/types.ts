@@ -3,21 +3,20 @@ import type { Hono } from "hono"
 
 export type TunnelApp = Express | Hono<any, any, any>
 
-/** Used by trustauthority-cli to bind the public keys we provide to report_data. */
-export type VerifierData = {
-  val: Uint8Array
-  iat: Uint8Array
-  signature?: Uint8Array
+export type VerifierNonce = {
+  val: Uint8Array // random nonce from ITA
+  iat: Uint8Array // issued-at value from ITA
+  signature: Uint8Array // signature from ITA
 }
 
 /** Quote package including Intel VerifierData. */
-export type QuoteData = {
+export type IntelQuoteData = {
   quote: Uint8Array
-  verifier_data?: VerifierData
-  runtime_data?: Uint8Array
+  verifier_data?: VerifierNonce // used by trustauthority-cli to bind the public keys we provide to report_data
+  runtime_data?: Uint8Array // for aztdx, takes the place of report_data for binding
 }
 
-/** SEV-SNP quote data. SEV-SNP reports don't embed certificates. */
+/** SEV-SNP report data. Certs included since SEV-SNP reports don't embed certificates. */
 export type SevSnpQuoteData = {
   quote: Uint8Array
   vcek_cert: string // required
@@ -106,7 +105,7 @@ export type ControlChannelKXAnnounce = {
   x25519PublicKey: Uint8Array
   quote: Uint8Array
   runtime_data: Uint8Array | null // used for TDX
-  verifier_data: VerifierData | null
+  verifier_data: VerifierNonce | null
   sev_snp_data?: SevSnpKXAnnounceData | null // used for SEV-SNP cert chain
 }
 

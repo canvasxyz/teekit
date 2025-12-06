@@ -5,7 +5,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { TunnelClient, TunnelServer, QuoteData } from "@teekit/tunnel"
+import { TunnelClient, TunnelServer, IntelQuoteData } from "@teekit/tunnel"
 import { base64 } from "@scure/base"
 import { hex, parseTdxQuote, getAzureExpectedReportData } from "@teekit/qvl"
 
@@ -116,12 +116,15 @@ test.serial(
     // For a real deployment, the server would generate a fresh quote with
     // the X25519 key bound. For testing, we use the sample quote and pass
     // the sample userData as the "x25519 key" to verify the binding logic works.
-    const getQuote = async (_x25519PublicKey: Uint8Array): Promise<QuoteData> => {
+    const getQuote = async (
+      _x25519PublicKey: Uint8Array,
+    ): Promise<IntelQuoteData> => {
       return {
         quote: azureQuote,
         verifier_data: {
           val: sampleNonce, // nonce used to generate the sample quote
           iat: new Uint8Array(), // Not used in Azure binding
+          signature: new Uint8Array(),
         },
         // Use the real runtime_data - its hash matches report_data[0:32]
         runtime_data: azureRuntimeData,
@@ -166,7 +169,10 @@ test.serial(
         const runtimeDataObj = JSON.parse(runtimeDataStr)
         const userDataHex = runtimeDataObj["user-data"]
 
-        const expectedHash = await getAzureExpectedReportData(nonce, sampleUserData)
+        const expectedHash = await getAzureExpectedReportData(
+          nonce,
+          sampleUserData,
+        )
         const expectedHex = hex(expectedHash).toUpperCase()
 
         return userDataHex.toUpperCase() === expectedHex
@@ -194,12 +200,15 @@ test.serial(
     // The runtime_data hash is valid, but user-data was bound to sampleUserData
     // When aztdx mode tries to verify SHA512(nonce || x25519key) == user-data,
     // it will fail because x25519key != sampleUserData
-    const getQuote = async (_x25519PublicKey: Uint8Array): Promise<QuoteData> => {
+    const getQuote = async (
+      _x25519PublicKey: Uint8Array,
+    ): Promise<IntelQuoteData> => {
       return {
         quote: azureQuote,
         verifier_data: {
           val: sampleNonce,
           iat: new Uint8Array(),
+          signature: new Uint8Array(),
         },
         // Use real runtime_data - hash matches, but user-data is for sampleUserData
         runtime_data: azureRuntimeData,
@@ -246,12 +255,15 @@ test.serial(
     app.get("/hello", (_req, res) => res.status(200).send("world"))
 
     // Server returns quote WITHOUT runtime_data
-    const getQuote = async (_x25519PublicKey: Uint8Array): Promise<QuoteData> => {
+    const getQuote = async (
+      _x25519PublicKey: Uint8Array,
+    ): Promise<IntelQuoteData> => {
       return {
         quote: azureQuote,
         verifier_data: {
           val: sampleNonce,
           iat: new Uint8Array(),
+          signature: new Uint8Array(),
         },
         // No runtime_data!
       }
@@ -287,50 +299,49 @@ test.serial(
   },
 )
 
-test.serial(
-  "Azure TDX: binding fails when nonce is missing",
-  async (t) => {
-    const app = express()
-    app.get("/hello", (_req, res) => res.status(200).send("world"))
+test.serial("Azure TDX: binding fails when nonce is missing", async (t) => {
+  const app = express()
+  app.get("/hello", (_req, res) => res.status(200).send("world"))
 
-    // Server returns quote WITHOUT nonce in verifier_data
-    const getQuote = async (_x25519PublicKey: Uint8Array): Promise<QuoteData> => {
-      return {
-        quote: azureQuote,
-        // No verifier_data with nonce!
-        runtime_data: azureRuntimeData,
-      }
+  // Server returns quote WITHOUT nonce in verifier_data
+  const getQuote = async (
+    _x25519PublicKey: Uint8Array,
+  ): Promise<IntelQuoteData> => {
+    return {
+      quote: azureQuote,
+      // No verifier_data with nonce!
+      runtime_data: azureRuntimeData,
     }
+  }
 
-    const tunnelServer = await TunnelServer.initialize(app, getQuote)
-    await new Promise<void>((resolve) => {
-      tunnelServer.server!.listen(0, "127.0.0.1", () => resolve())
-    })
-    const address = tunnelServer.server!.address() as AddressInfo
-    const origin = `http://127.0.0.1:${address.port}`
+  const tunnelServer = await TunnelServer.initialize(app, getQuote)
+  await new Promise<void>((resolve) => {
+    tunnelServer.server!.listen(0, "127.0.0.1", () => resolve())
+  })
+  const address = tunnelServer.server!.address() as AddressInfo
+  const origin = `http://127.0.0.1:${address.port}`
 
-    const quoteBody = parseTdxQuote(azureQuote).body
-    const tunnelClient = await TunnelClient.initialize(origin, {
-      measurements: {
-        mrtd: hex(quoteBody.mr_td),
+  const quoteBody = parseTdxQuote(azureQuote).body
+  const tunnelClient = await TunnelClient.initialize(origin, {
+    measurements: {
+      mrtd: hex(quoteBody.mr_td),
+    },
+    aztdx: true,
+  })
+
+  try {
+    await t.throwsAsync(
+      async () => {
+        await tunnelClient.fetch(`${origin}/hello`)
       },
-      aztdx: true,
-    })
-
-    try {
-      await t.throwsAsync(
-        async () => {
-          await tunnelClient.fetch(`${origin}/hello`)
-        },
-        {
-          message: /missing verifier_nonce\.val/,
-        },
-      )
-    } finally {
-      await stopAzureTunnel(tunnelServer, tunnelClient)
-    }
-  },
-)
+      {
+        message: /missing verifier_nonce\.val/,
+      },
+    )
+  } finally {
+    await stopAzureTunnel(tunnelServer, tunnelClient)
+  }
+})
 
 test.serial(
   "Azure TDX: binding fails when runtime_data is malformed",
@@ -339,12 +350,15 @@ test.serial(
     app.get("/hello", (_req, res) => res.status(200).send("world"))
 
     // Server returns quote with malformed runtime_data (not valid HCL report)
-    const getQuote = async (_x25519PublicKey: Uint8Array): Promise<QuoteData> => {
+    const getQuote = async (
+      _x25519PublicKey: Uint8Array,
+    ): Promise<IntelQuoteData> => {
       return {
         quote: azureQuote,
         verifier_data: {
           val: sampleNonce,
           iat: new Uint8Array(),
+          signature: new Uint8Array(),
         },
         runtime_data: new TextEncoder().encode("not valid data"),
       }
@@ -399,4 +413,3 @@ test.serial(
     )
   },
 )
-
