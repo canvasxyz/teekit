@@ -1,15 +1,12 @@
 #!/bin/bash
 set -euxo pipefail
 
-# Install Intel Trust Authority CLI for TDX attestation (GCP version)
+# Install Intel Trust Authority CLI for TDX attestation
 # This script downloads a pinned version of trustauthority-cli and installs it
 # to /usr/bin for use by kettle and other services.
 #
 # This binary uses configfs-based TDX attestation (--tdx flag):
 #   trustauthority-cli evidence --tdx --user-data '<base64>' -c config.json
-#
-# Note: Azure requires a separate binary with --aztdx flag, which is installed
-# by the Azure profile (mkosi.profiles/azure/install-trustauthority-cli-azure.sh)
 #
 # Reference: https://github.com/intel/trustauthority-client-for-go
 
@@ -65,4 +62,4 @@ rm -rf "$TARBALL" "$EXTRACT_DIR"
 echo "Verifying installation..."
 ls -la "$BUILDROOT/usr/bin/trustauthority-cli"
 
-echo "trustauthority-cli ${CLI_VERSION} installed successfully (GCP, uses --tdx flag)"
+echo "trustauthority-cli ${CLI_VERSION} installed successfully"

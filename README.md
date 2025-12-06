@@ -266,8 +266,7 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher.
 
 ## License
 
-@teekit/tunnel, @teekit/qvl, @teekit/demo, and @teekit/azure-vtpm-hcl
-packages are made available under the
+@teekit/tunnel, @teekit/qvl, and @teekit/demo packages are made available under the
 [MIT License](https://opensource.org/license/mit).
 
 @teekit/kettle is made available under the

@@ -8,7 +8,7 @@
 	},
 	"scripts": {
 		"clean": "rm -rf packages/*/dist/* packages/*/test/lib/* packages/*/*.tsbuildinfo && npm run clean --workspace packages/kettle",
-		"build": "npm --workspace packages/azure-vtpm-hcl --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo --workspace packages/kettle run build",
+		"build": "npm --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo --workspace packages/kettle run build",
 		"build:vm": "npm --workspace packages/images run build:vm",
 		"build:vm:incremental": "npm --workspace packages/images run build:vm:incremental",
 		"build:vm:clean": "npm --workspace packages/images run build:vm:clean",

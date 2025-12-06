@@ -14,11 +14,10 @@ import {
   sevSnpGcpArkPem,
   sevSnpGcpX25519Nonce,
 } from "@teekit/tunnel/samples"
-import { parseAzureCLIOutput, toHex } from "./utils.js"
+import { toHex } from "./utils.js"
 import type { IntelQuoteData, SevSnpQuoteData } from "@teekit/tunnel"
 
 const CONFIG_PATH = "/etc/kettle/config.json"
-const AZURE_NONCE_LENGTH = 32
 const SEV_SNP_NONCE_LENGTH = 32
 
 const execAsync = promisify(exec)
@@ -197,51 +196,10 @@ export class QuoteBinding {
   }
 
   /**
-   * Get Azure TDX attestation quote using trustauthority-cli. Binding format:
-   * - report_data[0:32] = SHA256(runtime_data JSON)
-   * - runtime_data["user-data"] = base64(x25519PublicKey)
-   * - runtime_data["nonce"] = base64(nonce)
-   */
-  private async getAzureTdxQuote(
-    x25519PublicKey: Uint8Array,
-  ): Promise<IntelQuoteData> {
-    console.log(
-      "[kettle] Getting Azure TDX quote for " + toHex(x25519PublicKey),
-    )
-
-    const userDataB64 = base64.encode(x25519PublicKey)
-    const nonce = randomBytes(AZURE_NONCE_LENGTH)
-    const nonceB64 = base64.encode(new Uint8Array(nonce))
-
-    try {
-      const { stdout } = await execAsync(
-        `trustauthority-cli quote --aztdx --nonce '${nonceB64}' --user-data '${userDataB64}'`,
-      )
-
-      const azureOutput = parseAzureCLIOutput(stdout)
-      return {
-        quote: base64.decode(azureOutput.quote),
-        verifier_data: {
-          // The nonce is returned so the client can verify it matches what's in runtime_data
-          val: new Uint8Array(nonce),
-          iat: new Uint8Array(), // Not used in Azure binding
-          signature: new Uint8Array(), // Not used in Azure binding
-        },
-        runtime_data: base64.decode(azureOutput.runtimeData),
-      }
-    } catch (err) {
-      throw new QuoteError(
-        `Failed to get Azure TDX quote: ${err instanceof Error ? err.message : String(err)}`,
-        "QUOTE_FAILED",
-      )
-    }
-  }
-
-  /**
-   * Get GCP TDX attestation quote using trustauthority-cli.
+   * Get TDX attestation quote using trustauthority-cli.
    * Binding format: report_data = SHA512(verifier_nonce.val || verifier_nonce.iat || runtime_data)
    */
-  private async getGcpTdxQuote(
+  private async getTdxQuote(
     x25519PublicKey: Uint8Array,
   ): Promise<IntelQuoteData> {
     if (!fs.existsSync(CONFIG_PATH)) {
@@ -312,14 +270,10 @@ export class QuoteBinding {
       console.log("[kettle] Using SEV-SNP attestation")
       await this.ensureSnpGuestCliAvailable()
       return this.getSevSnpQuote(x25519PublicKey)
-    } else if (process.env.CLOUD_PROVIDER === "azure") {
-      console.log("[kettle] Using Azure TDX attestation")
-      await this.ensureTrustauthorityCliAvailable()
-      return this.getAzureTdxQuote(x25519PublicKey)
     } else {
       console.log("[kettle] Using TDX attestation")
       await this.ensureTrustauthorityCliAvailable()
-      return this.getGcpTdxQuote(x25519PublicKey)
+      return this.getTdxQuote(x25519PublicKey)
     }
   }
 }

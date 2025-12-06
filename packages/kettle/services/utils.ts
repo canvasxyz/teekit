@@ -177,38 +177,3 @@ export function isSuppressedSqldLogs(msg: string) {
     return true
   }
 }
-
-/**
- * Parse the plain-text output from Azure trustauthority-cli.
- *
- * Format:
- *   Quote: <base64>
- *   runtime_data: <base64>
- *   user_data: <base64>
- */
-export function parseAzureCLIOutput(stdout: string): {
-  quote: string
-  runtimeData: string
-  userData: string
-} {
-  const lines = stdout.trim().split("\n")
-  let quote = ""
-  let runtimeData = ""
-  let userData = ""
-
-  for (const line of lines) {
-    if (line.startsWith("Quote: ")) {
-      quote = line.slice("Quote: ".length).trim()
-    } else if (line.startsWith("runtime_data: ")) {
-      runtimeData = line.slice("runtime_data: ".length).trim()
-    } else if (line.startsWith("user_data: ")) {
-      userData = line.slice("user_data: ".length).trim()
-    }
-  }
-
-  if (!quote) throw new Error("Missing Quote in Azure CLI output")
-  if (!runtimeData) throw new Error("Missing runtime_data in Azure CLI output")
-  if (!userData) throw new Error("Missing user_data in Azure CLI output")
-
-  return { quote, runtimeData, userData }
-}

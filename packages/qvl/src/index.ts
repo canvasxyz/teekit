@@ -26,7 +26,6 @@ export { getTcbStatus, isTcbInfoFresh, verifyTcb } from "./tcb.js"
 
 export * from "./verifyTdx.js"
 export * from "./verifySgx.js"
-export * from "./verifyAzure.js"
 export * from "./verifySev.js"
 export {
   DEFAULT_AMD_ARK_CERTS,

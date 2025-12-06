@@ -13,7 +13,7 @@ export type VerifierNonce = {
 export type IntelQuoteData = {
   quote: Uint8Array
   verifier_data?: VerifierNonce // used by trustauthority-cli to bind the public keys we provide to report_data
-  runtime_data?: Uint8Array // for aztdx, takes the place of report_data for binding
+  runtime_data?: Uint8Array // runtime data from attestation
 }
 
 /** SEV-SNP report data. Certs included since SEV-SNP reports don't embed certificates. */

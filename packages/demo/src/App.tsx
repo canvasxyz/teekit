@@ -30,9 +30,7 @@ export const baseUrl = document.location.search.includes("remote=1")
 const UPTIME_REFRESH_MS = 10000
 
 const enc = await TunnelClient.initialize(baseUrl, {
-  // TODO: Add measurements from the Azure TDX VM.
   customVerifyQuote: async () => true,
-  aztdx: true,
 })
 
 const buttonStyle = {

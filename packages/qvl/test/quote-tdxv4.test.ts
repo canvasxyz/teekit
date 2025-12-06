@@ -23,7 +23,6 @@ import {
   rebuildTdxQuoteWithCertData,
   getCertPemsFromQuote,
 } from "./qvl-helpers.js"
-import { parseTrustAuthorityCLIOutput } from "./aztdx-helpers.js"
 
 const BASE_TIME = Date.parse("2025-09-01")
 
@@ -252,55 +251,6 @@ test.serial("Verify a V4 TDX quote from Azure", async (t) => {
         mrtd: expectedMRTD,
         rtmr1: hex(body.rtmr1),
         rtmr2: hex(body.rtmr2),
-        reportData: expectedReportData,
-      },
-    }),
-  )
-})
-
-test.serial("Verify a V4 TDX quote from Azure TDX (aztdx)", async (t) => {
-  // This quote is from the trustauthority-cli aztdx output format
-  const cliOutput = parseTrustAuthorityCLIOutput(
-    "test/sampleQuotes/tdx-v4-aztdx",
-  )
-  const { header, body } = parseTdxQuote(cliOutput.quote)
-  const { fmspc, pcesvn } = await _verifyTdx(cliOutput.quote)
-
-  const expectedMRTD =
-    "fe27b2aa3a05ec56864c308aff03dd13c189a6112d21e417ec1afe626a8cb9d91482d1379ec02fe6308972950a930d0a"
-  const expectedReportData =
-    "b90974044504104ee9d81db6af96e5403561281d0cacf04517d24df08805a0ea0000000000000000000000000000000000000000000000000000000000000000"
-  const expectedRtmr0 =
-    "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-  const expectedRtmr1 =
-    "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-  const expectedRtmr2 =
-    "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-
-  t.is(header.version, 4)
-  t.is(header.tee_type, 129)
-  t.is(hex(body.mr_td), expectedMRTD)
-  t.is(hex(body.report_data), expectedReportData)
-  t.is(hex(body.rtmr0), expectedRtmr0)
-  t.is(hex(body.rtmr1), expectedRtmr1)
-  t.is(hex(body.rtmr2), expectedRtmr2)
-  t.deepEqual(body.mr_config_id, new Uint8Array(48))
-  t.deepEqual(body.mr_owner, new Uint8Array(48))
-  t.deepEqual(body.mr_owner_config, new Uint8Array(48))
-  t.is(hex(body.tee_tcb_svn), "04010700000000000000000000000000")
-  t.is(fmspc, "00806f050000")
-  t.is(pcesvn, 11)
-
-  t.true(
-    await verifyTdx(cliOutput.quote, {
-      date: BASE_TIME,
-      crls: [],
-      verifyTcb: () => true,
-      verifyMeasurements: {
-        mrtd: expectedMRTD,
-        rtmr0: expectedRtmr0,
-        rtmr1: expectedRtmr1,
-        rtmr2: expectedRtmr2,
         reportData: expectedReportData,
       },
     }),

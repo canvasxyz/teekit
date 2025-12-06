@@ -32,7 +32,6 @@
 	},
 	"dependencies": {
 		"@scure/base": "^2.0.0",
-		"@teekit/azure-vtpm-hcl": "*",
 		"asn1js": "^3.0.5",
 		"pkijs": "^3.0.18",
 		"restructure": "^3.0.2",

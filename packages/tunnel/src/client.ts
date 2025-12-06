@@ -8,8 +8,6 @@ import {
   getExpectedReportDataFromUserdata,
   isUserdataBound,
   verifyTdxMeasurements,
-  isAzureQuoteReportDataBound,
-  isAzureVtpmQuoteStructure,
   type MeasurementConfig,
   // SEV-SNP imports
   parseSevSnpReport,
@@ -55,23 +53,12 @@ type TunnelClientConfigBase = {
    * Override default X25519 binding verifier.
    * - TDX: report_data = SHA512(nonce || iat || x25519key)
    * - SEV-SNP: report_data = SHA512(nonce || x25519key)
-   * - Azure TDX: runtime_data["user-data"] = SHA512(nonce || x25519key)
    */
   x25519Binding?: (client: TunnelClient) => Awaitable<boolean>
 }
 
 /** TDX attestation config (default) */
 type TdxClientConfig = TunnelClientConfigBase & {
-  sevsnp?: false
-  sgx?: false
-  aztdx?: false
-  measurements?: MeasurementConfig
-  customVerifyQuote?: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
-}
-
-/** Azure vTPM TDX attestation config */
-type AzureTdxClientConfig = TunnelClientConfigBase & {
-  aztdx: true
   sevsnp?: false
   sgx?: false
   measurements?: MeasurementConfig
@@ -82,7 +69,6 @@ type AzureTdxClientConfig = TunnelClientConfigBase & {
 type SgxClientConfig = TunnelClientConfigBase & {
   sgx: true
   sevsnp?: false
-  aztdx?: false
   measurements?: MeasurementConfig
   customVerifyQuote: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
 }
@@ -91,7 +77,6 @@ type SgxClientConfig = TunnelClientConfigBase & {
 type SevSnpClientConfig = TunnelClientConfigBase & {
   sevsnp: true
   sgx?: false
-  aztdx?: false
   measurements?: SevSnpMeasurementConfig
   customVerifyQuote?: (report: SevSnpReport) => Awaitable<boolean>
   /** Additional SEV-SNP verification options: policy flags, etc. */
@@ -103,7 +88,6 @@ type SevSnpClientConfig = TunnelClientConfigBase & {
 
 export type TunnelClientConfig =
   | TdxClientConfig
-  | AzureTdxClientConfig
   | SgxClientConfig
   | SevSnpClientConfig
 
@@ -485,13 +469,6 @@ export class TunnelClient {
                     "Error opening channel: SEV-SNP binding failed - report_data did not match sha512(nonce || x25519key)",
                   )
                 }
-              } else if (this.config.aztdx) {
-                // Azure TDX: verify SHA512(nonce || x25519key) matches runtime_data binding
-                if (!(await this.isAzureX25519Bound(validQuote!))) {
-                  throw new Error(
-                    "Error opening channel: Azure binding failed - runtime_data did not match sha512(nonce || x25519key)",
-                  )
-                }
               } else {
                 // Standard TDX: report_data = SHA512(nonce || iat || x25519key)
                 const verifierData = this.reportBindingData?.verifierData
@@ -862,22 +839,6 @@ export class TunnelClient {
     const verifierData = this.reportBindingData?.verifierData
     const x25519key = this.serverX25519PublicKey
 
-    // Azure vTPM binding uses SHA256(runtime_data) || zeros for report_data and
-    // does not populate verifier_nonce.iat. Derive the expected report_data from
-    // by hashing runtime_data, and concating it with zeros.
-    if (this.config.aztdx) {
-      if (!this.reportBindingData?.runtimeData) {
-        throw new Error("runtimeData should be set for aztdx tunnels already")
-      }
-      const runtimeDataHash = await crypto.subtle.digest(
-        "SHA-256",
-        this.reportBindingData?.runtimeData.slice(),
-      )
-      const expected = new Uint8Array(64)
-      expected.set(new Uint8Array(runtimeDataHash), 0)
-      return expected
-    }
-
     // Standard TDX binding is SHA512(nonce || iat || x25519key)
     if (!verifierData) throw new Error("missing verifier_data")
     if (verifierData instanceof Uint8Array) {
@@ -961,133 +922,6 @@ export class TunnelClient {
     }
 
     return true
-  }
-
-  /**
-   * Check whether an Azure TDX quote attests to this tunnel's connected server's X25519 key.
-   *
-   * Azure vTPM uses a different binding formula than standard TDX.
-   * This method verifies:
-   *
-   * 1. report_data[32:64] = zeros (Azure vTPM structure)
-   * 2. report_data[0:32] = SHA256(runtime_data JSON)
-   * 3. runtime_data.keys contains HCLAkPub RSA key (presence + format check)
-   * 4. runtime_data["user-data"] = SHA512(nonce || x25519key)
-   *
-   * ## Security Model
-   *
-   * The TDX quote signature covers Header || Body, where Body contains BOTH:
-   * - Measurements (mr_td, rtmr0-3) - identifies what code is running
-   * - report_data (64 bytes) - contains SHA256(runtime_data)
-   *
-   * Since measurements and report_data are in the same signed message, they cannot
-   * be separated. If the measurements are verified (via config.measurements), then
-   * the runtime_data is guaranteed to come from code with those exact measurements.
-   *
-   * HCLAkPub is NOT signed by a certificate authority - it's certified by being
-   * included in the hash-bound runtime_data. The TDX hardware acts as the
-   * "certification authority" by binding SHA256(runtime_data) to the signed quote.
-   *
-   * ## What This Method Does NOT Verify
-   *
-   * - Intel TDX chain (Root CA → PCK → QE → Quote) - verified by verifyTdx()
-   * - vTPM quotes signed by HCLAkPub (requires TPM2 attestation, not implemented)
-   * - TCB status and CRL revocation (depends on verifyTdx options)
-   */
-  async isAzureX25519Bound(quote: TdxQuote | SgxQuote): Promise<boolean> {
-    const verifierData = this.reportBindingData?.verifierData
-    const runtimeData = this.reportBindingData?.runtimeData
-    const x25519key = this.serverX25519PublicKey
-
-    if (!verifierData)
-      throw new Error("missing verifier_data for Azure binding")
-    if (!runtimeData) throw new Error("missing runtime_data for Azure binding")
-    if (!x25519key) throw new Error("missing x25519 key")
-
-    // For Azure, verifierData can be either VerifierNonce or plain Uint8Array
-    const nonce =
-      verifierData instanceof Uint8Array ? verifierData : verifierData.val
-    if (!nonce) throw new Error("missing nonce for Azure binding")
-
-    // Step 1: Verify quote follows Azure structure (report_data[32:64] = zeros)
-    if (!isAzureVtpmQuoteStructure(quote as TdxQuote)) {
-      throw new Error(
-        "quote does not follow Azure vTPM structure: report_data[32:64] must be zeros",
-      )
-    }
-
-    // Step 2: Verify runtime_data binding - SHA256(runtime_data) = report_data[0:32]
-    // The runtime_data from trustauthority-cli is JSON containing the HCL claims
-    const runtimeDataHash = await crypto.subtle.digest(
-      "SHA-256",
-      runtimeData.slice(),
-    )
-    const runtimeDataHashBytes = new Uint8Array(runtimeDataHash)
-    const reportDataFirst32 = (quote as TdxQuote).body.report_data.slice(0, 32)
-
-    let runtimeDataBound = true
-    if (runtimeDataHashBytes.length !== reportDataFirst32.length) {
-      runtimeDataBound = false
-    } else {
-      for (let i = 0; i < runtimeDataHashBytes.length; i++) {
-        if (runtimeDataHashBytes[i] !== reportDataFirst32[i]) {
-          runtimeDataBound = false
-          break
-        }
-      }
-    }
-
-    if (!runtimeDataBound) {
-      throw new Error(
-        "Azure chain of trust failed: SHA256(runtime_data) does not match report_data[0:32]",
-      )
-    }
-
-    // Step 3: Parse runtime_data JSON
-    let runtimeDataObj: {
-      "user-data"?: string
-      keys?: Array<{ kid?: string; kty?: string; n?: string; e?: string }>
-    }
-    try {
-      const runtimeDataStr = textDecoder.decode(runtimeData)
-      runtimeDataObj = JSON.parse(runtimeDataStr)
-    } catch {
-      throw new Error("failed to parse runtime_data as JSON")
-    }
-
-    // Step 4: Verify HCLAkPub (vTPM attestation key) is present
-    // The AK is bound to the TDX quote via the runtime_data hash, establishing
-    // that this specific vTPM instance is running in the attested TDX environment.
-    const akPubKey = runtimeDataObj.keys?.find((k) => k.kid === "HCLAkPub")
-    if (!akPubKey) {
-      throw new Error("runtime_data missing HCLAkPub key")
-    }
-    if (akPubKey.kty !== "RSA") {
-      throw new Error(
-        `HCLAkPub has unexpected key type: ${akPubKey.kty}, expected RSA`,
-      )
-    }
-    if (!akPubKey.n || !akPubKey.e) {
-      throw new Error("HCLAkPub missing RSA modulus (n) or exponent (e)")
-    }
-
-    // Step 5: Extract and verify user-data field
-    const userDataHex = runtimeDataObj["user-data"]
-    if (!userDataHex) {
-      throw new Error("runtime_data missing user-data field")
-    }
-
-    // Convert the hex string to bytes for comparison
-    const userDataFromRuntime = new Uint8Array(
-      userDataHex.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)),
-    )
-
-    // Step 6: Verify user-data binding - SHA512(nonce || x25519key) = runtime_data["user-data"]
-    return await isAzureQuoteReportDataBound(
-      userDataFromRuntime,
-      nonce,
-      x25519key,
-    )
   }
 
   /**
