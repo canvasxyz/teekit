@@ -19,12 +19,13 @@ import type {
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
 
+const REMOTE = "https://136-112-93-209.dynv6.net"
 export const baseUrl = document.location.search.includes("remote=1")
-  ? "https://20-110-154-110-a.dynv6.net"
+  ? REMOTE
   : document.location.hostname === "localhost"
     ? "http://localhost:3001"
     : document.location.hostname.endsWith(".vercel.app")
-      ? "https://20-110-154-110-a.dynv6.net"
+      ? REMOTE
       : `${document.location.protocol}//${document.location.hostname}`
 
 const UPTIME_REFRESH_MS = 10000
