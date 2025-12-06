@@ -28,12 +28,12 @@ protect the connection between the user and the TEE.
 
 @teekit/tunnel implements protocols for remotely-attested HTTPS and
 WSS channels, which web pages can use to establish secure connections
-that verifiably terminate inside trusted execution environments
-(currently Intel TDX/SGX). This makes it possible to create
-applications that interact with a TEE trustlessly, especially if
-applications are pinned on IPFS or other immutable hosting services.
-This also allows TEE developers to use public certificate authorities
-like Let's Encrypt, without custom configuration.
+that verifiably terminate inside trusted execution environments.  This
+makes it possible to create applications that interact with a TEE
+trustlessly, especially if clients are pinned on IPFS or other
+immutable hosting services. This also allows TEE developers to use
+public certificate authorities like Let's Encrypt, without custom
+configuration.
 
 ## Components
 
@@ -45,11 +45,11 @@ like Let's Encrypt, without custom configuration.
   - Includes a ServiceWorker for upgrading all HTTP requests from a
     browser page to use the encrypted channel
 - @teekit/qvl:
-  - WebCrypto-based SGX/TDX quote verification library
+  - WebCrypto-based SGX/TDX/SEV-SNP quote verification library
   - Validates the full chain of trust from the root CA, down to binding
     the public key of the encrypted channel in `report_data`
-  - Includes optional CRL/TCB validation inside the browser. (TCB info
-    cannot be fetched from Intel in the browser without a CORS proxy.)
+  - Includes optional CRL/TCB validation inside the browser. (Intel TCB
+    info cannot be fetched in the browser without a CORS proxy.)
 - @teekit/demo:
   - A [demo application](https://teekit.vercel.app/) that supports
     HTTPS and WSS requests over the encrypted channel, both with and without
@@ -247,7 +247,7 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher.
 1. Client opens a control WebSocket to the server at
    `ws(s)://<host>:<port>/__ra__`.
 2. Server immediately sends `server_kx` with an X25519 public key and
-   a TDX/SGX attestation quote.
+   a remotely attested quote.
 3. Client verifies the quote (using `@teekit/qvl`), optionally
    enforces `mrtd`/`report_data` or a custom matcher, generates a
    symmetric key, and sends it sealed to the server via `client_kx`.

@@ -1,17 +1,24 @@
 ## Deploying to GCP
 
+_Note: It is now recommended to use `npm run build:gcp`, `npm run deploy:gcp`,
+`npm run config:gcp`, and/or `npm run redeploy:gcp` instead of this guide._
+
 This document covers how to deploy a @teekit VM image to Google Cloud,
 with configuration for Intel TDX Confidential Computing.
 
-_Note: GCP is not supported as a primary deployment platform right now.
-These instructions may be incomplete or out of date._
+We assume you have logged into the Google Cloud CLI with `gcloud auth
+login`, and have a builder machine set up. If not, see BUILDER.md.
 
 ## Setup
 
 To build an image for GCP:
 
 ```
-scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-kettle.conf
+cd packages/images
+npm run build:gcp
+
+# Or to build an image with sshd access
+npm run build:gcp:devtools
 ```
 
 This creates an image at `build/tdx-debian.tar.gz` which contains a

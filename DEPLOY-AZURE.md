@@ -1,5 +1,8 @@
 ## Deploying to Azure
 
+_Note: It is now recommended to use `npm run build:az`, `npm run deploy:az`,
+`npm run config:az`, and/or `npm run redeploy:az` instead of this guide._
+
 This document covers how to deploy a @teekit VM image to Azure, and
 with configuration for Intel TDX Confidential Computing.
 
@@ -7,6 +10,16 @@ We assume you have logged into the Azure CLI with `az login`, and
 already have a builder machine set up. If not, see BUILDER.md.
 
 ### Prerequisites
+
+To build an image for GCP:
+
+```
+cd packages/images
+npm run build:az
+
+# Or to build an image with sshd access
+npm run build:az:devtools
+```
 
 Make sure the Azure build completed successfully. The build creates:
 - `build/tdx-debian-azure.efi` - The UEFI kernel image
