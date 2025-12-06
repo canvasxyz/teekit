@@ -386,8 +386,9 @@ if [ "$HOSTNAME_TAG_SET" = true ]; then
             while [ $HTTPS_ATTEMPT -lt $HTTPS_MAX_ATTEMPTS ]; do
                 HTTPS_ATTEMPT=$((HTTPS_ATTEMPT + 1))
 
-                # Try to connect via HTTPS (allow self-signed certs during initial setup)
-                if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$HTTPS_URL" 2>/dev/null | grep -qE "^[23]"; then
+                # Try to connect via HTTPS - any HTTP response means TLS is working
+                # (we accept 2xx, 3xx, 4xx, 5xx - the server may return 404 on root path)
+                if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$HTTPS_URL" 2>/dev/null | grep -qE "^[2345]"; then
                     echo ""
                     log_success "HTTPS is up!"
                     log_success "$HTTPS_URL is now accessible"
