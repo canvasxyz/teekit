@@ -19,6 +19,7 @@ import type { IntelQuoteData, SevSnpQuoteData } from "@teekit/tunnel"
 
 const CONFIG_PATH = "/etc/kettle/config.json"
 const SEV_SNP_NONCE_LENGTH = 32
+const SEV_SNP_DEVICE_PATH = "/dev/sev-guest"
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -36,6 +37,35 @@ export class QuoteError extends Error {
     super(message)
     this.name = "QuoteError"
   }
+}
+
+/**
+ * Detect TEE type by checking for hardware devices.
+ * Returns "sev-snp" if /dev/sev-guest exists, otherwise "tdx".
+ * Can be overridden by TEE_TYPE environment variable.
+ */
+export function detectTeeType(): "sev-snp" | "tdx" {
+  // Allow explicit override via environment variable
+  const envTeeType = process.env.TEE_TYPE?.toLowerCase()
+  if (envTeeType) {
+    if (
+      envTeeType === "sev-snp" ||
+      envTeeType === "sevsnp" ||
+      envTeeType === "sev_snp"
+    ) {
+      return "sev-snp"
+    }
+    if (envTeeType === "tdx") {
+      return "tdx"
+    }
+  }
+
+  // Auto-detect based on device presence
+  if (fs.existsSync(SEV_SNP_DEVICE_PATH)) {
+    return "sev-snp"
+  }
+
+  return "tdx"
 }
 
 export class QuoteBinding {
@@ -239,9 +269,8 @@ export class QuoteBinding {
   async getQuote(
     x25519PublicKey: Uint8Array,
   ): Promise<IntelQuoteData | SevSnpQuoteData> {
-    const teeType = (process.env.TEE_TYPE || "tdx").toLowerCase()
-    const isSevSnp =
-      teeType === "sev-snp" || teeType === "sevsnp" || teeType === "sev_snp"
+    const teeType = detectTeeType()
+    const isSevSnp = teeType === "sev-snp"
 
     // When testing, bypass hardware/CLI, and serve a bundled sample quote
     if (
@@ -267,7 +296,7 @@ export class QuoteBinding {
     }
 
     if (isSevSnp) {
-      console.log("[kettle] Using SEV-SNP attestation")
+      console.log("[kettle] Using SEV-SNP attestation (detected /dev/sev-guest)")
       await this.ensureSnpGuestCliAvailable()
       return this.getSevSnpQuote(x25519PublicKey)
     } else {

@@ -3,7 +3,7 @@ import { base64 } from "@scure/base"
 import * as chalk from "colorette"
 
 import { isSevSnpQuoteData } from "./utils.js"
-import { QuoteBinding, QuoteError } from "./quote.js"
+import { QuoteBinding, QuoteError, detectTeeType } from "./quote.js"
 
 const DEFAULT_PORT = 3002
 
@@ -24,7 +24,7 @@ export function startQuoteService(port: number = DEFAULT_PORT) {
     }
 
     if (req.url === "/healthz") {
-      const teeType = (process.env.TEE_TYPE || "tdx").toLowerCase()
+      const teeType = detectTeeType()
       res.writeHead(200, { "Content-Type": "application/json" })
       res.end(
         JSON.stringify({
