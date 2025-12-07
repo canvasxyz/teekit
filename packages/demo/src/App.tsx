@@ -9,7 +9,7 @@ import {
 import "./App.css"
 
 import { TunnelClient } from "@teekit/tunnel"
-import { hex, isTdxQuote } from "@teekit/qvl"
+import { hex } from "@teekit/qvl"
 import type {
   WebSocket as IWebSocket,
   MessageEvent,
@@ -31,6 +31,7 @@ export const baseUrl = document.location.search.includes("remote=1")
 const UPTIME_REFRESH_MS = 10000
 
 const enc = await TunnelClient.initialize(baseUrl, {
+  sevsnp: true,
   customVerifyQuote: async () => true,
 })
 
@@ -53,13 +54,10 @@ function App() {
   const [uptimeSpinKey, setUptimeSpinKey] = useState<number>(0)
   const [hiddenMessagesCount, setHiddenMessagesCount] = useState<number>(0)
   const [swCounter, setSwCounter] = useState<number>(0)
-  const [attestedMrtd, setAttestedMrtd] = useState<string>("")
-  const [attestedRtmr0, setAttestedRtmr0] = useState<string>("")
-  const [attestedRtmr1, setAttestedRtmr1] = useState<string>("")
+  const [attestedMeasurement, setAttestedMeasurement] = useState<string>("")
   const [expectedReportData, setExpectedReportData] = useState<string>("")
   const [attestedReportData, setAttestedReportData] = useState<string>("")
   const [verifierNonce, setVerifierNonce] = useState<string>("")
-  const [verifierNonceIat, setVerifierNonceIat] = useState<string>("")
   const [connectionError, setConnectionError] = useState<string>("")
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const initializedRef = useRef<boolean>(false)
@@ -174,14 +172,10 @@ function App() {
       console.log("Connected to chat server")
 
       // Set up control panel UI with attested measurements, expected measurements, etc.
-      if (!enc.quote)
-        throw new Error("unexpected: ws shouldn't open without a quote")
-      if (!isTdxQuote(enc.quote))
-        throw new Error("unexpected: should be a tdx quote")
-      setAttestedMrtd(hex(enc.quote.body.mr_td))
-      setAttestedRtmr0(hex(enc.quote.body.rtmr0))
-      setAttestedRtmr1(hex(enc.quote.body.rtmr1))
-      setAttestedReportData(hex(enc.quote.body.report_data))
+      if (!enc.sevsnpReport)
+        throw new Error("unexpected: ws shouldn't open without a SEV-SNP report")
+      setAttestedMeasurement(hex(enc.sevsnpReport.body.measurement))
+      setAttestedReportData(hex(enc.sevsnpReport.body.report_data))
       enc
         .getX25519ExpectedReportData()
         .then((expectedReportData: Uint8Array) => {
@@ -190,11 +184,11 @@ function App() {
           const verifierData = enc.reportBindingData?.verifierData
           if (verifierData === null || verifierData === undefined) return
 
-          if ("val" in verifierData && "iat" in verifierData) {
+          // For SEV-SNP, verifierData is a plain Uint8Array nonce
+          if (verifierData instanceof Uint8Array) {
+            setVerifierNonce(hex(verifierData))
+          } else if ("val" in verifierData) {
             setVerifierNonce(hex(verifierData.val ?? new Uint8Array()))
-            setVerifierNonceIat(hex(verifierData.iat ?? new Uint8Array()))
-          } else {
-            setVerifierNonce(hex(verifierData ?? new Uint8Array()))
           }
         })
 
@@ -502,12 +496,8 @@ function App() {
             }}
           >
             <div style={{ marginBottom: 6 }}>Server: {baseUrl}</div>
-            <div style={{ marginBottom: 6 }}>Attested MRTD: {attestedMrtd}</div>
             <div style={{ marginBottom: 6 }}>
-              Attested RTMR0: {attestedRtmr0}
-            </div>
-            <div style={{ marginBottom: 6 }}>
-              Attested RTMR1: {attestedRtmr1}
+              Attested Measurement (launch digest): {attestedMeasurement}
             </div>
             <div style={{ marginBottom: 6 }}>
               Attested report_data: {attestedReportData}
@@ -533,15 +523,11 @@ function App() {
             </div>
             <div style={{ borderLeft: "1px solid #ccc", paddingLeft: 12 }}>
               <div style={{ marginBottom: 6 }}>
-                Based on sha512(nonce, iat, key):
+                Based on sha512(nonce, key):
               </div>
               <div style={{ marginBottom: 6 }}>
                 Nonce:{" "}
                 {verifierNonce || <span style={{ color: "red" }}>None</span>}
-              </div>
-              <div style={{ marginBottom: 6 }}>
-                Nonce issued at:{" "}
-                {verifierNonceIat || <span style={{ color: "red" }}>None</span>}
               </div>
               <div style={{ marginBottom: 6 }}>
                 X25519 tunnel key:{" "}

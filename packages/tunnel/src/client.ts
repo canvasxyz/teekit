@@ -834,13 +834,32 @@ export class TunnelClient {
   /**
    * Get the `report_data` expected based on the current X25519 key,
    * and the verifier nonce/iat obtained during the last remote attestation request.
+   *
+   * - TDX: SHA512(nonce || iat || x25519key)
+   * - SEV-SNP: SHA512(nonce || x25519key)
    */
   async getX25519ExpectedReportData(): Promise<Uint8Array> {
     const verifierData = this.reportBindingData?.verifierData
     const x25519key = this.serverX25519PublicKey
 
-    // Standard TDX binding is SHA512(nonce || iat || x25519key)
     if (!verifierData) throw new Error("missing verifier_data")
+    if (!x25519key) throw new Error("missing x25519 key")
+
+    // SEV-SNP binding: SHA512(nonce || x25519key)
+    if (this.config.sevsnp) {
+      const nonce =
+        verifierData instanceof Uint8Array ? verifierData : verifierData.val
+      if (!nonce) throw new Error("missing nonce for SEV-SNP binding")
+
+      const combined = new Uint8Array(nonce.length + x25519key.length)
+      combined.set(nonce, 0)
+      combined.set(x25519key, nonce.length)
+
+      const hashBuffer = await crypto.subtle.digest("SHA-512", combined)
+      return new Uint8Array(hashBuffer)
+    }
+
+    // TDX binding: SHA512(nonce || iat || x25519key)
     if (verifierData instanceof Uint8Array) {
       throw new Error("expected VerifierNonce for Intel TDX, got plain nonce")
     }
@@ -851,7 +870,6 @@ export class TunnelClient {
     if (!nonce) throw new Error("missing verifier_nonce.val")
     if (!issuedAt || issuedAt.length === 0)
       throw new Error("missing verifier_nonce.iat")
-    if (!x25519key) throw new Error("missing x25519 key")
 
     return await getExpectedReportDataFromUserdata(nonce, issuedAt, x25519key)
   }
