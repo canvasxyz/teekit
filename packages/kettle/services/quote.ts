@@ -21,8 +21,28 @@ const CONFIG_PATH = "/etc/kettle/config.json"
 const SEV_SNP_NONCE_LENGTH = 32
 const SEV_SNP_DEVICE_PATH = "/dev/sev-guest"
 
+// VCEK cache directory - persisted across restarts
+const VCEK_CACHE_DIR = "/var/lib/kettle/vcek-cache"
+
+// Retry configuration for VCEK fetch
+const VCEK_FETCH_MAX_RETRIES = 5
+const VCEK_FETCH_INITIAL_DELAY_MS = 1000
+const VCEK_FETCH_MAX_DELAY_MS = 30000
+
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getBackoffDelay(attempt: number): number {
+  const exponentialDelay = VCEK_FETCH_INITIAL_DELAY_MS * Math.pow(2, attempt)
+  const cappedDelay = Math.min(exponentialDelay, VCEK_FETCH_MAX_DELAY_MS)
+  // Add 10-30% jitter to prevent thundering herd
+  const jitter = cappedDelay * (0.1 + Math.random() * 0.2)
+  return Math.floor(cappedDelay + jitter)
+}
 
 export class QuoteError extends Error {
   constructor(
@@ -68,7 +88,207 @@ export function detectTeeType(): "sev-snp" | "tdx" {
   return "tdx"
 }
 
+/**
+ * Cached VCEK certificates - keyed by chip_id extracted from attestation report.
+ * The VCEK is per-CPU and per-TCB, so it can be safely cached.
+ */
+interface VcekCache {
+  vcek_cert: string
+  ask_cert?: string
+  ark_cert?: string
+}
+
 export class QuoteBinding {
+  // In-memory VCEK cache (also persisted to disk)
+  private vcekCache: Map<string, VcekCache> = new Map()
+
+  // Mutex for VCEK fetch operations to prevent concurrent fetches
+  private vcekFetchPromise: Promise<VcekCache> | null = null
+  private vcekFetchKey: string | null = null
+
+  constructor() {
+    // Load cached VCEK from disk on startup
+    this.loadVcekCache()
+  }
+
+  private loadVcekCache(): void {
+    try {
+      if (!fs.existsSync(VCEK_CACHE_DIR)) {
+        return
+      }
+
+      const files = fs.readdirSync(VCEK_CACHE_DIR)
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          const cacheKey = file.replace(".json", "")
+          const cachePath = path.join(VCEK_CACHE_DIR, file)
+          try {
+            const data = JSON.parse(fs.readFileSync(cachePath, "utf-8"))
+            this.vcekCache.set(cacheKey, data)
+            console.log(`[kettle] Loaded cached VCEK for ${cacheKey}`)
+          } catch {
+            // Ignore corrupt cache files
+          }
+        }
+      }
+    } catch {
+      // Ignore cache load errors
+    }
+  }
+
+  private saveVcekCache(cacheKey: string, cache: VcekCache): void {
+    try {
+      if (!fs.existsSync(VCEK_CACHE_DIR)) {
+        fs.mkdirSync(VCEK_CACHE_DIR, { recursive: true })
+      }
+      const cachePath = path.join(VCEK_CACHE_DIR, `${cacheKey}.json`)
+      fs.writeFileSync(cachePath, JSON.stringify(cache))
+      console.log(`[kettle] Saved VCEK to cache: ${cacheKey}`)
+    } catch (err) {
+      console.error("[kettle] Failed to save VCEK cache:", err)
+    }
+  }
+
+  private getVcekCacheKey(attestationPath: string): string {
+    // Read the attestation report and extract chip_id (bytes 416-479, 64 bytes)
+    // and reported_tcb (bytes 384-391, 8 bytes)
+    const report = fs.readFileSync(attestationPath)
+    const chipId = report.subarray(416, 480)
+    const reportedTcb = report.subarray(384, 392)
+    return toHex(chipId) + "-" + toHex(reportedTcb)
+  }
+
+  /**
+   * Fetch VCEK certificate with retry logic and exponential backoff.
+   * Uses caching to avoid repeated fetches for the same chip.
+   * Handles concurrent requests by deduplicating in-flight fetches.
+   */
+  private async fetchVcekWithRetry(
+    attestationPath: string,
+    certsDir: string,
+  ): Promise<VcekCache> {
+    const cacheKey = this.getVcekCacheKey(attestationPath)
+
+    // Check in-memory cache first
+    const cached = this.vcekCache.get(cacheKey)
+    if (cached) {
+      console.log(`[kettle] Using cached VCEK for chip: ${cacheKey.substring(0, 16)}...`)
+      return cached
+    }
+
+    // If there's already a fetch in progress for this key, wait for it
+    if (this.vcekFetchPromise && this.vcekFetchKey === cacheKey) {
+      console.log(`[kettle] Waiting for in-flight VCEK fetch...`)
+      return this.vcekFetchPromise
+    }
+
+    // Start a new fetch with retry logic
+    this.vcekFetchKey = cacheKey
+    this.vcekFetchPromise = this.doVcekFetchWithRetry(
+      attestationPath,
+      certsDir,
+      cacheKey,
+    )
+
+    try {
+      return await this.vcekFetchPromise
+    } finally {
+      this.vcekFetchPromise = null
+      this.vcekFetchKey = null
+    }
+  }
+
+  /**
+   * Internal method that performs the actual VCEK fetch with retries
+   */
+  private async doVcekFetchWithRetry(
+    attestationPath: string,
+    certsDir: string,
+    cacheKey: string,
+  ): Promise<VcekCache> {
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt < VCEK_FETCH_MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = getBackoffDelay(attempt - 1)
+          console.log(
+            `[kettle] Retrying VCEK fetch (attempt ${attempt + 1}/${VCEK_FETCH_MAX_RETRIES}) after ${delay}ms...`,
+          )
+          await sleep(delay)
+        }
+
+        await execFileAsync("snpguest", [
+          "fetch",
+          "vcek",
+          "pem",
+          certsDir,
+          attestationPath,
+        ])
+
+        // Read VCEK certificate
+        const vcekPath = path.join(certsDir, "vcek.pem")
+        if (!fs.existsSync(vcekPath)) {
+          throw new Error("VCEK certificate not found after fetch")
+        }
+        const vcekCert = fs.readFileSync(vcekPath, "utf-8")
+
+        // Try to read ASK and ARK certificates if available
+        let askCert: string | undefined
+        let arkCert: string | undefined
+
+        const askPath = path.join(certsDir, "ask.pem")
+        const arkPath = path.join(certsDir, "ark.pem")
+
+        if (fs.existsSync(askPath)) {
+          askCert = fs.readFileSync(askPath, "utf-8")
+        }
+        if (fs.existsSync(arkPath)) {
+          arkCert = fs.readFileSync(arkPath, "utf-8")
+        }
+
+        const cache: VcekCache = { vcek_cert: vcekCert, ask_cert: askCert, ark_cert: arkCert }
+
+        // Cache the result
+        this.vcekCache.set(cacheKey, cache)
+        this.saveVcekCache(cacheKey, cache)
+
+        if (attempt > 0) {
+          console.log(`[kettle] VCEK fetch succeeded on attempt ${attempt + 1}`)
+        }
+
+        return cache
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err))
+        const errorMsg = lastError.message
+
+        // Check if this is a retryable error (5xx from AMD KDS)
+        const isRetryable =
+          errorMsg.includes("500") ||
+          errorMsg.includes("502") ||
+          errorMsg.includes("503") ||
+          errorMsg.includes("504") ||
+          errorMsg.includes("ETIMEDOUT") ||
+          errorMsg.includes("ECONNRESET") ||
+          errorMsg.includes("ECONNREFUSED")
+
+        if (!isRetryable) {
+          console.error(`[kettle] VCEK fetch failed with non-retryable error: ${errorMsg}`)
+          break
+        }
+
+        console.warn(
+          `[kettle] VCEK fetch attempt ${attempt + 1} failed: ${errorMsg}`,
+        )
+      }
+    }
+
+    throw new QuoteError(
+      `Failed to fetch VCEK certificate after ${VCEK_FETCH_MAX_RETRIES} attempts: ${lastError?.message}`,
+      "VCEK_FETCH_FAILED",
+    )
+  }
+
   /**
    * Get SEV-SNP attestation report and certificates using snpguest.
    * SEV-SNP binding uses SHA512(nonce || x25519PublicKey) as the report_data.
@@ -115,77 +335,17 @@ export class QuoteBinding {
         )
       }
 
-      // Fetch VCEK certificate from AMD KDS
-      // snpguest fetch vcek <encoding> <certs_dir> <attestation_report>
-      try {
-        await execFileAsync("snpguest", [
-          "fetch",
-          "vcek",
-          "pem",
-          certsDir,
-          attestationPath,
-        ])
-      } catch (err) {
-        throw new QuoteError(
-          `Failed to fetch VCEK certificate: ${err instanceof Error ? err.message : String(err)}`,
-          "VCEK_FETCH_FAILED",
-        )
-      }
+      // Fetch VCEK certificate from AMD KDS (with retry and caching)
+      const vcekData = await this.fetchVcekWithRetry(attestationPath, certsDir)
 
       // Read attestation report
       const quote = new Uint8Array(fs.readFileSync(attestationPath))
 
-      // Read VCEK certificate
-      const vcekPath = path.join(certsDir, "vcek.pem")
-      if (!fs.existsSync(vcekPath)) {
-        throw new QuoteError(
-          "VCEK certificate not found after fetch",
-          "VCEK_FETCH_FAILED",
-        )
-      }
-      const vcekCert = fs.readFileSync(vcekPath, "utf-8")
-
-      // Try to read ASK and ARK certificates if available
-      let askCert: string | undefined
-      let arkCert: string | undefined
-
-      const askPath = path.join(certsDir, "ask.pem")
-      const arkPath = path.join(certsDir, "ark.pem")
-
-      if (fs.existsSync(askPath)) {
-        askCert = fs.readFileSync(askPath, "utf-8")
-      }
-      if (fs.existsSync(arkPath)) {
-        arkCert = fs.readFileSync(arkPath, "utf-8")
-      }
-
-      // If ASK/ARK not found, try to fetch the certificate chain
-      // snpguest fetch ca <encoding> <certs_dir>
-
-      // Currently disabled because quote validation has default (Milan) certificates
-
-      // if (!askCert || !arkCert) {
-      //   try {
-      //     await execFileAsync("snpguest", ["fetch", "ca", "pem", certsDir])
-      //     if (fs.existsSync(askPath)) {
-      //       askCert = fs.readFileSync(askPath, "utf-8")
-      //     }
-      //     if (fs.existsSync(arkPath)) {
-      //       arkCert = fs.readFileSync(arkPath, "utf-8")
-      //     }
-      //   } catch {
-      //     // CA fetch is optional - the client can use embedded AMD root certs
-      //     console.log(
-      //       "[kettle] Could not fetch AMD CA certificates, client will use embedded roots",
-      //     )
-      //   }
-      // }
-
       return {
         quote,
-        vcek_cert: vcekCert,
-        ask_cert: askCert,
-        ark_cert: arkCert,
+        vcek_cert: vcekData.vcek_cert,
+        ask_cert: vcekData.ask_cert,
+        ark_cert: vcekData.ark_cert,
         nonce: new Uint8Array(nonce),
       }
     } catch (err) {
