@@ -18,44 +18,33 @@ import {
 import {
   TunnelServer,
   ServerRAMockWebSocket,
-  IntelQuoteData,
+  SevSnpQuoteData,
+  sevSnpGcpX25519Base64,
+  sevSnpGcpVcekPem,
+  sevSnpGcpAskPem,
+  sevSnpGcpArkPem,
+  sevSnpGcpX25519Nonce,
 } from "@teekit/tunnel"
-import fs from "node:fs"
-import { exec } from "node:child_process"
 import { base64 } from "@scure/base"
-import { hex } from "@teekit/qvl"
 
-async function getQuote(x25519PublicKey: Uint8Array): Promise<IntelQuoteData> {
-  return await new Promise<IntelQuoteData>(async (resolve, reject) => {
-    if (!fs.existsSync("config.json")) {
-      return reject(new Error("[teekit-demo] TDX config.json not found"))
-    }
+/**
+ * Serve a sample SEV-SNP quote for demo purposes.
+ * In production, this would use snpguest to get a real attestation report.
+ */
+async function getQuote(_x25519PublicKey: Uint8Array): Promise<SevSnpQuoteData> {
+  console.log("[teekit-demo] Serving sample SEV-SNP quote")
 
-    // Get a quote from the SEAM (requires root)
-    console.log("[teekit-demo] Getting a quote for " + hex(x25519PublicKey))
-    const userDataB64 = base64.encode(x25519PublicKey)
-    const cmd = `trustauthority-cli evidence --tdx --user-data '${userDataB64}' -c config.json`
-    exec(cmd, (err, stdout) => {
-      if (err) {
-        return reject(err)
-      }
+  const nonceBytes = new Uint8Array(
+    sevSnpGcpX25519Nonce.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)),
+  )
 
-      try {
-        const response = JSON.parse(stdout)
-        resolve({
-          quote: base64.decode(response.tdx.quote),
-          verifier_data: {
-            iat: base64.decode(response.tdx.verifier_nonce.iat),
-            val: base64.decode(response.tdx.verifier_nonce.val),
-            signature: base64.decode(response.tdx.verifier_nonce.signature),
-          },
-          runtime_data: base64.decode(response.tdx.runtime_data),
-        })
-      } catch (err) {
-        reject(err)
-      }
-    })
-  })
+  return {
+    quote: base64.decode(sevSnpGcpX25519Base64),
+    vcek_cert: sevSnpGcpVcekPem,
+    ask_cert: sevSnpGcpAskPem,
+    ark_cert: sevSnpGcpArkPem,
+    nonce: nonceBytes,
+  }
 }
 
 const app = new Hono()

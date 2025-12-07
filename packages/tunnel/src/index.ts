@@ -23,3 +23,13 @@ export type {
   SevSnpQuoteData,
   VerifierNonce,
 } from "./types.js"
+
+// Sample quotes for testing
+export {
+  tappdV4Base64,
+  sevSnpGcpX25519Base64,
+  sevSnpGcpVcekPem,
+  sevSnpGcpAskPem,
+  sevSnpGcpArkPem,
+  sevSnpGcpX25519Nonce,
+} from "./samples.js"
