@@ -489,7 +489,7 @@ else
         --direction Inbound \
         --access Allow \
         --protocol Tcp \
-        --destination-port-ranges 80 443 3000 3001 8080 8090 \
+        --destination-port-ranges 80 443 3000 3001 8090 \
         --source-address-prefixes "*" \
         --output none; then
         log_warning "Could not create NSG rule 'allow-required-ports'"

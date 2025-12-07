@@ -212,7 +212,7 @@ endpoint using `curl`. Or, go to packages/demo/src/App.tsx and replace
 the remote server with your new hostname.
 
 ```
-curl http://136.112.93.209:8080/uptime
+curl http://136.112.93.209:3001/uptime
 curl https://136-112-93-209.dynv6.net/uptime
 ```
 

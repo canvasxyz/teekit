@@ -82,9 +82,8 @@ After building the image, you can test it locally with QEMU:
 ./scripts/test_local.sh
 ```
 
-This will boot the image with:
-- Kettle service on port 3001 (http://localhost:3001)
-- Dummy TDX DCAP server on port 8080 (http://localhost:8080)
+This will boot the image with the kettle service on port 3001
+(http://localhost:3001).
 
 ## Deploying
 

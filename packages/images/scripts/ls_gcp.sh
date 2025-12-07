@@ -116,7 +116,6 @@ else
         # Show service URLs for running VMs with external IPs
         if [[ "$status" == "RUNNING" ]] && [ "$external_ip" != "-" ]; then
             printf "%-30s %-20s %-12s ${CYAN}http://%s:3001${NC}\n" "" "" "" "$external_ip"
-            printf "%-30s %-20s %-12s ${CYAN}http://%s:8080${NC}\n" "" "" "" "$external_ip"
         fi
     done
 fi

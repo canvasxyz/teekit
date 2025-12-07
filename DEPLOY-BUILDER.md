@@ -103,5 +103,5 @@ a `devtools` profile, it will also start an ssh server on port 2222.
 socat - UNIX-CONNECT:/tmp/qemu-teekit-serial.sock
 
 # After the system has booted:
-curl http://localhost:8080/uptime
+curl http://localhost:3001/uptime
 ```

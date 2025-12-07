@@ -266,7 +266,7 @@ else
         --priority=1000 \
         --network=default \
         --action=ALLOW \
-        --rules=tcp:80,tcp:443,tcp:3000,tcp:3001,tcp:8080,tcp:8090 \
+        --rules=tcp:80,tcp:443,tcp:3000,tcp:3001,tcp:8090 \
         --source-ranges=0.0.0.0/0 \
         --target-tags="$VM_TAG"; then
         log_warning "Could not create firewall rule (may already exist or insufficient permissions)"
@@ -463,8 +463,7 @@ echo "- Image: $IMAGE_NAME"
 echo "- VM: $VM_NAME"
 echo ""
 echo "Test the VM:"
-echo "curl http://${EXTERNAL_IP}:8080/uptime"
-echo "curl http://${EXTERNAL_IP}:3001/healthz"
+echo "curl http://${EXTERNAL_IP}:3001/uptime"
 echo ""
 echo "View serial console output:"
 echo "gcloud compute instances tail-serial-port-output $VM_NAME --zone=$ZONE"

@@ -121,7 +121,6 @@ if [ ! -f "$OVMF_CODE" ]; then
 fi
 
 echo "Kettle service should be available on http://localhost:3001"
-echo "Dummy TDX DCAP on http://localhost:8080"
 echo "Local metadata service on http://localhost:8090"
 echo ""
 echo "Serial console available at: $SERIAL_SOCKET"
@@ -164,7 +163,7 @@ QEMU_CMD+=(
 
 # Port forwarding for services
 QEMU_CMD+=(
-  -netdev user,id=net0,hostfwd=tcp::3001-:3001,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22
+  -netdev user,id=net0,hostfwd=tcp::3001-:3001,hostfwd=tcp::2222-:22
   -device virtio-net-pci,netdev=net0
 )
 
