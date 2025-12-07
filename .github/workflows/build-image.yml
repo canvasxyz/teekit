@@ -1,4 +1,4 @@
-name: Build Kettle VM Images
+name: Build Images
 
 on:
   # Trigger on pushes to main branch only. Do not trigger on PR (for security reasons)
