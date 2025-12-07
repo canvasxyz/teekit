@@ -19,10 +19,10 @@
 # - Prompts for manifest and Trust Authority configuration
 #
 # Examples:
-#   ./deploy_gcp.sh --tdx build/tdx-debian.tar.gz
-#   ./deploy_gcp.sh --tdx build/tdx-debian.tar.gz demo
-#   ./deploy_gcp.sh --sev-snp build/tdx-debian.tar.gz
-#   ./deploy_gcp.sh --sev-snp build/tdx-debian.tar.gz myvm
+#   ./deploy_gcp.sh --tdx build/kettle-vm.tar.gz
+#   ./deploy_gcp.sh --tdx build/kettle-vm.tar.gz demo
+#   ./deploy_gcp.sh --sev-snp build/kettle-vm.tar.gz
+#   ./deploy_gcp.sh --sev-snp build/kettle-vm.tar.gz myvm
 #
 
 set -euo pipefail
@@ -82,14 +82,14 @@ if [ $# -lt 2 ]; then
     echo "  --sev-snp    Deploy to AMD SEV-SNP machine (n2d-standard-2)"
     echo ""
     echo "Arguments:"
-    echo "  tar.gz-file  Path to the tar.gz file to deploy (e.g., build/tdx-debian.tar.gz)"
+    echo "  tar.gz-file  Path to the tar.gz file to deploy (e.g., build/kettle-vm.tar.gz)"
     echo "  name         Optional name for the VM and image (default: random hash)"
     echo ""
     echo "Examples:"
-    echo "  $0 --tdx build/tdx-debian.tar.gz"
-    echo "  $0 --tdx build/tdx-debian.tar.gz demo"
-    echo "  $0 --sev-snp build/tdx-debian.tar.gz"
-    echo "  $0 --sev-snp build/tdx-debian.tar.gz myvm"
+    echo "  $0 --tdx build/kettle-vm.tar.gz"
+    echo "  $0 --tdx build/kettle-vm.tar.gz demo"
+    echo "  $0 --sev-snp build/kettle-vm.tar.gz"
+    echo "  $0 --sev-snp build/kettle-vm.tar.gz myvm"
     exit 1
 fi
 
@@ -129,15 +129,15 @@ if [ $# -ge 2 ]; then
 else
     DEPLOY_HASH=$(openssl rand -hex 4)
 fi
-VM_NAME="gcp-${TEE_TYPE}-${DEPLOY_HASH}"
-IMAGE_NAME="${TEE_TYPE}-debian-${DEPLOY_HASH}"
+VM_NAME="kettle-${TEE_TYPE}-${DEPLOY_HASH}"
+IMAGE_NAME="kettle-vm-${TEE_TYPE}-${DEPLOY_HASH}"
 
 # Validate tar.gz file exists
 if [ ! -f "$TAR_FILE" ]; then
     log_error "tar.gz file not found: $TAR_FILE"
     echo ""
     echo "Make sure you have built the image first:"
-    echo "  npm run build:gcp          # For tdx-debian.tar.gz"
+    echo "  npm run build:gcp          # For kettle-vm.tar.gz"
     echo "  npm run build:gcp:devtools # For devtools tar.gz"
     exit 1
 fi
@@ -176,7 +176,7 @@ if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
     exit 1
 fi
 
-BUCKET_NAME="${PROJECT_ID}-tdx-images"
+BUCKET_NAME="${PROJECT_ID}-images"
 log_success "Logged in to GCP (Project: $PROJECT_ID)"
 
 # ============================================================================

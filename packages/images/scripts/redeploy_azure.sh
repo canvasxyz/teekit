@@ -15,10 +15,10 @@
 # - The VM to redeploy exists
 #
 # Examples:
-#   ./redeploy_azure.sh tdx-kettle-demo build/tdx-debian-azure.vhd
-#   ./redeploy_azure.sh my-vm build/tdx-debian-azure.vhd.tar.gz
-#   ./redeploy_azure.sh tdx-kettle-demo build/tdx-debian-azure.vhd --dry-run
-#   ./redeploy_azure.sh tdx-kettle-demo build/tdx-debian-azure.vhd --yes
+#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd
+#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd.tar.gz
+#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd --dry-run
+#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd --yes
 #
 
 set -euo pipefail
@@ -26,7 +26,7 @@ set -euo pipefail
 # Configuration
 RESOURCE_GROUP="tdx-group"
 GALLERY_NAME="tdxGallery"
-IMAGE_DEFINITION="tdx-debian-azure"
+IMAGE_DEFINITION="kettle-vm-azure"
 CONTAINER_NAME="vhds"
 VM_SIZE="Standard_DC2es_v5"
 
@@ -97,9 +97,9 @@ if [ $# -lt 2 ]; then
     echo "  --dry-run  Show what would be done without making changes"
     echo ""
     echo "Examples:"
-    echo "  $0 tdx-kettle-demo build/tdx-debian-azure.vhd"
-    echo "  $0 my-vm build/tdx-debian-azure.vhd.tar.gz"
-    echo "  $0 tdx-kettle-demo build/tdx-debian-azure.vhd --dry-run"
+    echo "  $0 my-vm build/kettle-vm-azure.vhd"
+    echo "  $0 my-vm build/kettle-vm-azure.vhd.tar.gz"
+    echo "  $0 my-vm build/kettle-vm-azure.vhd --dry-run"
     exit 1
 fi
 
@@ -142,7 +142,7 @@ if [ ! -f "$VHD_FILE" ]; then
     log_error "VHD file not found: $VHD_FILE"
     echo ""
     echo "Make sure you have built the image first:"
-    echo "  npm run build:az          # For tdx-debian-azure.vhd"
+    echo "  npm run build:az          # For kettle-vm-azure.vhd"
     echo "  npm run build:az:devtools # For devtools VHD"
     exit 1
 fi
@@ -469,7 +469,7 @@ if ! az sig image-definition show \
         --gallery-name "$GALLERY_NAME" \
         --gallery-image-definition "$IMAGE_DEFINITION" \
         --publisher TeeKit \
-        --offer tdx-debian-azure \
+        --offer kettle-vm-azure \
         --sku 1.0 \
         --os-type Linux \
         --os-state Generalized \

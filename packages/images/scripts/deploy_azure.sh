@@ -16,7 +16,7 @@
 #
 # The script automatically creates the following resources if they don't exist:
 # - Azure Compute Gallery 'tdxGallery'
-# - Image definition 'tdx-debian-azure' with Confidential VM support
+# - Image definition 'kettle-vm-azure' with Confidential VM support
 #
 
 set -euo pipefail
@@ -24,7 +24,7 @@ set -euo pipefail
 # Configuration
 RESOURCE_GROUP="tdx-group"
 GALLERY_NAME="tdxGallery"
-IMAGE_DEFINITION="tdx-debian-azure"
+IMAGE_DEFINITION="kettle-vm-azure"
 CONTAINER_NAME="vhds"
 VM_SIZE="Standard_DC2es_v5"
 
@@ -62,7 +62,7 @@ cleanup_on_failure() {
     log_error "Deployment failed. Resources created with hash '$DEPLOY_HASH' may need manual cleanup."
     echo ""
     echo "To clean up, you can run:"
-    echo "  az vm delete --name tdx-kettle-${DEPLOY_HASH} --resource-group ${RESOURCE_GROUP} --yes 2>/dev/null"
+    echo "  az vm delete --name kettle-${DEPLOY_HASH} --resource-group ${RESOURCE_GROUP} --yes 2>/dev/null"
     echo "  az sig image-version delete -g ${RESOURCE_GROUP} -r ${GALLERY_NAME} -i ${IMAGE_DEFINITION} -e ${IMAGE_VERSION:-unknown} 2>/dev/null"
     echo "  az storage blob delete -n ${BLOB_NAME:-unknown} -c ${CONTAINER_NAME} --account-name \${STORAGE_ACCT} --auth-mode login 2>/dev/null"
     exit 1
@@ -77,9 +77,9 @@ if [ $# -lt 1 ]; then
     echo "  name      Optional name for the VM (default: random hash)"
     echo ""
     echo "Example:"
-    echo "  $0 build/tdx-debian-azure.vhd"
-    echo "  $0 build/tdx-debian-azure.vhd demo"
-    echo "  $0 build/tdx-debian-devtools.vhd devtools"
+    echo "  $0 build/kettle-vm-azure.vhd"
+    echo "  $0 build/kettle-vm-azure.vhd demo"
+    echo "  $0 build/kettle-vm-devtools.vhd devtools"
     exit 1
 fi
 
@@ -91,7 +91,7 @@ if [ $# -ge 2 ]; then
 else
     DEPLOY_HASH=$(openssl rand -hex 4)
 fi
-VM_NAME="tdx-kettle-${DEPLOY_HASH}"
+VM_NAME="kettle-${DEPLOY_HASH}"
 
 # Convert hex hash to decimal for patch version (modulo to keep it reasonable)
 IMAGE_PATCH_VERSION=$((1 + (0x${DEPLOY_HASH} % 10000000)))  # 1 to 10,000,000
@@ -101,7 +101,7 @@ if [ ! -f "$VHD_FILE" ]; then
     log_error "VHD file not found: $VHD_FILE"
     echo ""
     echo "Make sure you have built the image first:"
-    echo "  npm run build:az          # For tdx-debian-azure.vhd"
+    echo "  npm run build:az          # For kettle-vm-azure.vhd"
     echo "  npm run build:az:devtools # For devtools VHD"
     exit 1
 fi
@@ -316,7 +316,7 @@ if ! az sig image-definition show \
         --gallery-name "$GALLERY_NAME" \
         --gallery-image-definition "$IMAGE_DEFINITION" \
         --publisher TeeKit \
-        --offer tdx-debian-azure \
+        --offer kettle-vm-azure \
         --sku 1.0 \
         --os-type Linux \
         --os-state Generalized \
@@ -331,7 +331,7 @@ if ! az sig image-definition show \
         echo "    --gallery-name ${GALLERY_NAME} \\"
         echo "    --gallery-image-definition ${IMAGE_DEFINITION} \\"
         echo "    --publisher TeeKit \\"
-        echo "    --offer tdx-debian-azure \\"
+        echo "    --offer kettle-vm-azure \\"
         echo "    --sku 1.0 \\"
         echo "    --os-type Linux \\"
         echo "    --os-state Generalized \\"

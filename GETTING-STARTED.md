@@ -99,7 +99,7 @@ npm run build:gcp:devtools
 ```
 
 This will take 20-30 minutes and produces a GCP image at
-`build/tdx-debian-devtools.tar.gz`.
+`build/kettle-vm-devtools.tar.gz`.
 
 ## Step 3: Deploy the VM Image
 
@@ -140,10 +140,10 @@ use a redeploy script to do this, to avoid reconfiguring the machine:
 
 ```
 # Try a dry run first
-scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/tdx-debian-devtools.tar.gz --dry-run
+scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/kettle-vm-devtools.tar.gz --dry-run
 
 # Actually redeploy the VM
-scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/tdx-debian-devtools.tar.gz --dry-run
+scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/kettle-vm-devtools.tar.gz --dry-run
 ```
 
 ## Step 6: Write Your Application

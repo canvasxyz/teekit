@@ -26,8 +26,8 @@ on:
 env:
   # Set build directory for caching
   BUILD_DIR: packages/images/build
-  ARTIFACT_NAME_GCP: tdx-debian-gcp
-  ARTIFACT_NAME_AZURE: tdx-debian-azure
+  ARTIFACT_NAME_GCP: kettle-vm-gcp
+  ARTIFACT_NAME_AZURE: kettle-vm-azure
   FORCE_LIMA: "1"
   # SOURCE_DATE_EPOCH is set to 0 (fixed epoch) for truly reproducible builds
 
@@ -191,8 +191,8 @@ jobs:
         run: |
           echo "Verifying build artifacts..."
 
-          if [ ! -f "build/tdx-debian.tar.gz" ]; then
-            echo "✗ Build artifact not found: build/tdx-debian.tar.gz"
+          if [ ! -f "build/kettle-vm.tar.gz" ]; then
+            echo "✗ Build artifact not found: build/kettle-vm.tar.gz"
             echo "  Build directory listing:"
             ls build
             exit 1
@@ -202,7 +202,7 @@ jobs:
           ls -lh build/
 
           # Check file size (should be 400MB+)
-          SIZE=$(stat -c%s "build/tdx-debian.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian.tar.gz")
+          SIZE=$(stat -c%s "build/kettle-vm.tar.gz" 2>/dev/null || stat -f%z "build/kettle-vm.tar.gz")
           SIZE_MB=$((SIZE / 1024 / 1024))
           echo "Artifact size: ${SIZE_MB}MB"
 
@@ -231,7 +231,7 @@ jobs:
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           # Get artifact info
-          ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian.tar.gz")
+          ARTIFACT_SIZE=$(stat -c%s "build/kettle-vm.tar.gz" 2>/dev/null || stat -f%z "build/kettle-vm.tar.gz")
           ARTIFACT_SIZE_MB=$((ARTIFACT_SIZE / 1024 / 1024))
 
           # Create metadata file
@@ -256,27 +256,27 @@ jobs:
           cat build/metadata.json
 
           # Set outputs for use in later steps
-          echo "gcp_artifact_name=tdx-debian-gcp-$COMMIT_SHORT" >> $GITHUB_OUTPUT
-          echo "azure_artifact_name=tdx-debian-azure-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "gcp_artifact_name=kettle-vm-gcp-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "azure_artifact_name=kettle-vm-azure-$COMMIT_SHORT" >> $GITHUB_OUTPUT
           echo "commit_short=$COMMIT_SHORT" >> $GITHUB_OUTPUT
 
       - name: Generate TDX measurements
         run: |
           echo "Generating TDX measurements..."
 
-          if [ ! -f "build/tdx-debian.efi" ]; then
-            echo "✗ EFI file not found: build/tdx-debian.efi"
+          if [ ! -f "build/kettle-vm.efi" ]; then
+            echo "✗ EFI file not found: build/kettle-vm.efi"
             echo "Skipping measurement generation"
             exit 0
           fi
 
           # Generate TPM PCR measurements using measured-boot
-          ./scripts/env_wrapper.sh measured-boot build/tdx-debian.efi build/pcr_measurements.json --direct-uki
+          ./scripts/env_wrapper.sh measured-boot build/kettle-vm.efi build/pcr_measurements.json --direct-uki
           echo "✓ PCR measurements generated"
 
           # Generate TDX MRTD/RTMR measurements using dstack-mr
           # Use grep to extract only the JSON object (lines between { and }) since env_wrapper.sh outputs extra messages
-          ./scripts/env_wrapper.sh dstack-mr -uki build/tdx-debian.efi -json | sed -n '/^{/,/^}/p' > build/tdx_measurements.json
+          ./scripts/env_wrapper.sh dstack-mr -uki build/kettle-vm.efi -json | sed -n '/^{/,/^}/p' > build/tdx_measurements.json
           echo "✓ TDX measurements generated (MRTD, RTMR0-2)"
 
           echo ""
@@ -291,18 +291,18 @@ jobs:
         run: |
           echo "Generating checksums..."
           cd build
-          sha256sum tdx-debian.tar.gz > tdx-debian.tar.gz.sha256
+          sha256sum kettle-vm.tar.gz > kettle-vm.tar.gz.sha256
 
           echo "Checksums:"
-          cat tdx-debian.tar.gz.sha256
+          cat kettle-vm.tar.gz.sha256
 
       - name: Upload GCP build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.metadata.outputs.gcp_artifact_name }}
           path: |
-            packages/images/build/tdx-debian.tar.gz
-            packages/images/build/tdx-debian.tar.gz.sha256
+            packages/images/build/kettle-vm.tar.gz
+            packages/images/build/kettle-vm.tar.gz.sha256
             packages/images/build/metadata.json
             packages/images/build/tdx_measurements.json
             packages/images/build/pcr_measurements.json
@@ -325,8 +325,8 @@ jobs:
 
           # Clear only the final image artifacts, not the subimage caches
           # The .efi file needs to be rebuilt for Azure due to different content
-          rm -f build/tdx-debian.efi || true
-          rm -rf build/tdx-debian/ || true
+          rm -f build/kettle-vm.efi || true
+          rm -rf build/kettle-vm/ || true
 
           echo "Final image artifacts cleared for Azure build"
 
@@ -352,9 +352,9 @@ jobs:
                        echo "197001010000.00")
 
           # Normalize Azure-specific files
-          touch -h -t "$TOUCH_TIME" build/tdx-debian-azure.vhd 2>/dev/null || true
-          touch -h -t "$TOUCH_TIME" build/tdx-debian-azure.vhd.tar.gz 2>/dev/null || true
-          touch -h -t "$TOUCH_TIME" build/tdx-debian-azure.efi 2>/dev/null || true
+          touch -h -t "$TOUCH_TIME" build/kettle-vm-azure.vhd 2>/dev/null || true
+          touch -h -t "$TOUCH_TIME" build/kettle-vm-azure.vhd.tar.gz 2>/dev/null || true
+          touch -h -t "$TOUCH_TIME" build/kettle-vm-azure.efi 2>/dev/null || true
 
           echo "Azure timestamp normalization complete"
 
@@ -362,16 +362,16 @@ jobs:
         run: |
           echo "Verifying Azure build artifacts..."
 
-          if [ ! -f "build/tdx-debian-azure.vhd" ]; then
-            echo "✗ Azure build artifact not found: build/tdx-debian-azure.vhd"
+          if [ ! -f "build/kettle-vm-azure.vhd" ]; then
+            echo "✗ Azure build artifact not found: build/kettle-vm-azure.vhd"
             exit 1
           fi
 
           echo "✓ Azure build artifact found"
-          ls -lh build/tdx-debian-azure*
+          ls -lh build/kettle-vm-azure*
 
           # Check VHD file size (should be substantial)
-          SIZE=$(stat -c%s "build/tdx-debian-azure.vhd" 2>/dev/null || stat -f%z "build/tdx-debian-azure.vhd")
+          SIZE=$(stat -c%s "build/kettle-vm-azure.vhd" 2>/dev/null || stat -f%z "build/kettle-vm-azure.vhd")
           SIZE_MB=$((SIZE / 1024 / 1024))
           echo "Azure VHD size: ${SIZE_MB}MB"
 
@@ -386,11 +386,11 @@ jobs:
           cd build
 
           # Create tar.gz of the VHD file
-          tar -czvf tdx-debian-azure.vhd.tar.gz tdx-debian-azure.vhd
+          tar -czvf kettle-vm-azure.vhd.tar.gz kettle-vm-azure.vhd
 
           # Show compression results
-          VHD_SIZE=$(stat -c%s "tdx-debian-azure.vhd" 2>/dev/null || stat -f%z "tdx-debian-azure.vhd")
-          COMPRESSED_SIZE=$(stat -c%s "tdx-debian-azure.vhd.tar.gz" 2>/dev/null || stat -f%z "tdx-debian-azure.vhd.tar.gz")
+          VHD_SIZE=$(stat -c%s "kettle-vm-azure.vhd" 2>/dev/null || stat -f%z "kettle-vm-azure.vhd")
+          COMPRESSED_SIZE=$(stat -c%s "kettle-vm-azure.vhd.tar.gz" 2>/dev/null || stat -f%z "kettle-vm-azure.vhd.tar.gz")
           VHD_SIZE_MB=$((VHD_SIZE / 1024 / 1024))
           COMPRESSED_SIZE_MB=$((COMPRESSED_SIZE / 1024 / 1024))
           RATIO=$((100 - (COMPRESSED_SIZE * 100 / VHD_SIZE)))
@@ -401,7 +401,7 @@ jobs:
           echo "  Compression ratio: ${RATIO}% reduction"
 
           # Remove the original VHD to save disk space
-          rm -f tdx-debian-azure.vhd
+          rm -f kettle-vm-azure.vhd
           echo "✓ Removed original VHD to save disk space"
 
       - name: Measure Azure build output
@@ -415,7 +415,7 @@ jobs:
           echo "Generating Azure build metadata..."
 
           # Get artifact info (use compressed .tar.gz size)
-          ARTIFACT_SIZE=$(stat -c%s "build/tdx-debian-azure.vhd.tar.gz" 2>/dev/null || stat -f%z "build/tdx-debian-azure.vhd.tar.gz")
+          ARTIFACT_SIZE=$(stat -c%s "build/kettle-vm-azure.vhd.tar.gz" 2>/dev/null || stat -f%z "build/kettle-vm-azure.vhd.tar.gz")
           ARTIFACT_SIZE_MB=$((ARTIFACT_SIZE / 1024 / 1024))
 
           # Create Azure-specific metadata file
@@ -440,18 +440,18 @@ jobs:
         run: |
           echo "Generating TDX measurements for Azure..."
 
-          if [ ! -f "build/tdx-debian-azure.efi" ]; then
-            echo "✗ Azure EFI file not found: build/tdx-debian-azure.efi"
+          if [ ! -f "build/kettle-vm-azure.efi" ]; then
+            echo "✗ Azure EFI file not found: build/kettle-vm-azure.efi"
             echo "Skipping Azure measurement generation"
             exit 0
           fi
 
           # Generate TPM PCR measurements using measured-boot
-          ./scripts/env_wrapper.sh measured-boot build/tdx-debian-azure.efi build/azure_pcr_measurements.json --direct-uki
+          ./scripts/env_wrapper.sh measured-boot build/kettle-vm-azure.efi build/azure_pcr_measurements.json --direct-uki
           echo "✓ Azure PCR measurements generated"
 
           # Generate TDX MRTD/RTMR measurements using dstack-mr
-          ./scripts/env_wrapper.sh dstack-mr -uki build/tdx-debian-azure.efi -json | sed -n '/^{/,/^}/p' > build/azure_tdx_measurements.json
+          ./scripts/env_wrapper.sh dstack-mr -uki build/kettle-vm-azure.efi -json | sed -n '/^{/,/^}/p' > build/azure_tdx_measurements.json
           echo "✓ Azure TDX measurements generated (MRTD, RTMR0-2)"
 
           echo ""
@@ -466,18 +466,18 @@ jobs:
         run: |
           echo "Generating Azure checksums..."
           cd build
-          sha256sum tdx-debian-azure.vhd.tar.gz > tdx-debian-azure.vhd.tar.gz.sha256
+          sha256sum kettle-vm-azure.vhd.tar.gz > kettle-vm-azure.vhd.tar.gz.sha256
 
           echo "Azure Checksum:"
-          cat tdx-debian-azure.vhd.tar.gz.sha256
+          cat kettle-vm-azure.vhd.tar.gz.sha256
 
       - name: Upload Azure build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.metadata.outputs.azure_artifact_name }}
           path: |
-            packages/images/build/tdx-debian-azure.vhd.tar.gz
-            packages/images/build/tdx-debian-azure.vhd.tar.gz.sha256
+            packages/images/build/kettle-vm-azure.vhd.tar.gz
+            packages/images/build/kettle-vm-azure.vhd.tar.gz.sha256
             packages/images/build/azure_metadata.json
             packages/images/build/azure_tdx_measurements.json
             packages/images/build/azure_pcr_measurements.json
@@ -497,7 +497,7 @@ jobs:
 
           # Keep only the last 3 builds
           cd build
-          ls -t tdx-debian*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -v
+          ls -t kettle-vm*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -v
 
           echo "Cleanup complete"
 
@@ -524,11 +524,11 @@ jobs:
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [ -f "build/tdx-debian.tar.gz.sha256" ]; then
+          if [ -f "build/kettle-vm.tar.gz.sha256" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### GCP SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            cat build/tdx-debian.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
+            cat build/kettle-vm.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
@@ -561,11 +561,11 @@ jobs:
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [ -f "build/tdx-debian-azure.vhd.tar.gz.sha256" ]; then
+          if [ -f "build/kettle-vm-azure.vhd.tar.gz.sha256" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Azure VHD.tar.gz SHA256 Checksum" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            cat build/tdx-debian-azure.vhd.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
+            cat build/kettle-vm-azure.vhd.tar.gz.sha256 >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 

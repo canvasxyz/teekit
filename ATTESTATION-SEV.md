@@ -38,7 +38,7 @@ settings, run the `gcloud init` command again.
 
 ---
 
-## Creating a TDX VM
+## Creating a VM
 
 We are going to create a VM with these configuration options:
 

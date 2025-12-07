@@ -20,20 +20,20 @@ build-dev:
 
 # Export TPM PCR measurements for the built image
 measure:
-	@if [ ! -f build/tdx-debian.efi ]; then \
-		echo "Error: build/tdx-debian.efi not found. Run 'make build' first."; \
+	@if [ ! -f build/kettle-vm.efi ]; then \
+		echo "Error: build/kettle-vm.efi not found. Run 'make build' first."; \
 		exit 1; \
 	fi
-	$(WRAPPER) measured-boot build/tdx-debian.efi build/pcr_measurements.json --direct-uki
+	$(WRAPPER) measured-boot build/kettle-vm.efi build/pcr_measurements.json --direct-uki
 	@echo "PCR measurements exported to build/pcr_measurements.json"
 
 # Export TDX MRTD/RTMR measurements for GCP
 measure-gcp:
-	@if [ ! -f build/tdx-debian.efi ]; then \
-		echo "Error: build/tdx-debian.efi not found. Run 'make build' first."; \
+	@if [ ! -f build/kettle-vm.efi ]; then \
+		echo "Error: build/kettle-vm.efi not found. Run 'make build' first."; \
 		exit 1; \
 	fi
-	$(WRAPPER) dstack-mr -uki build/tdx-debian.efi -json > build/tdx_measurements.json
+	$(WRAPPER) dstack-mr -uki build/kettle-vm.efi -json > build/tdx_measurements.json
 	@echo "TDX measurements (MRTD, RTMR0-2) exported to build/tdx_measurements.json"
 
 # Remove cache and build artifacts

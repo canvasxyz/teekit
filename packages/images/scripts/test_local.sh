@@ -36,24 +36,24 @@ BUILD_DIR="$IMAGES_DIR/build"
 
 # Select image based on devtools flag
 if [ "$USE_DEVTOOLS" = true ]; then
-  # Check for tdx-debian-devtools.efi, fall back to tdx-debian-azure.efi if not found
-  if [ -f "$BUILD_DIR/tdx-debian-devtools.efi" ]; then
-    IMAGE_NAME="tdx-debian-devtools.efi"
-  elif [ -f "$BUILD_DIR/tdx-debian-azure.efi" ]; then
-    IMAGE_NAME="tdx-debian-azure.efi"
-    echo "Note: Using tdx-debian-azure.efi (tdx-debian-devtools.efi not found)"
+  # Check for kettle-vm-devtools.efi, fall back to kettle-vm-azure.efi if not found
+  if [ -f "$BUILD_DIR/kettle-vm-devtools.efi" ]; then
+    IMAGE_NAME="kettle-vm-devtools.efi"
+  elif [ -f "$BUILD_DIR/kettle-vm-azure.efi" ]; then
+    IMAGE_NAME="kettle-vm-azure.efi"
+    echo "Note: Using kettle-vm-azure.efi (kettle-vm-devtools.efi not found)"
   else
-    IMAGE_NAME="tdx-debian-devtools.efi"  # Set to default for error message
+    IMAGE_NAME="kettle-vm-devtools.efi"  # Set to default for error message
   fi
 else
-  # Check for tdx-debian.efi, fall back to tdx-debian-azure.efi if not found
-  if [ -f "$BUILD_DIR/tdx-debian.efi" ]; then
-    IMAGE_NAME="tdx-debian.efi"
-  elif [ -f "$BUILD_DIR/tdx-debian-azure.efi" ]; then
-    IMAGE_NAME="tdx-debian-azure.efi"
-    echo "Note: Using tdx-debian-azure.efi (tdx-debian.efi not found)"
+  # Check for kettle-vm.efi, fall back to kettle-vm-azure.efi if not found
+  if [ -f "$BUILD_DIR/kettle-vm.efi" ]; then
+    IMAGE_NAME="kettle-vm.efi"
+  elif [ -f "$BUILD_DIR/kettle-vm-azure.efi" ]; then
+    IMAGE_NAME="kettle-vm-azure.efi"
+    echo "Note: Using kettle-vm-azure.efi (kettle-vm.efi not found)"
   else
-    IMAGE_NAME="tdx-debian.efi"  # Set to default for error message
+    IMAGE_NAME="kettle-vm.efi"  # Set to default for error message
   fi
 fi
 

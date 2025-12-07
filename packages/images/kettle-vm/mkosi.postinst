@@ -61,7 +61,7 @@ fi
 # Note: sqld (libsql server) is built in sqld stage and included via BaseTrees
 
 # Install kettle launcher
-install -m 755 "tdx-kettle/kettle-launcher.sh" "$BUILDROOT/usr/bin/kettle-launcher"
+install -m 755 "kettle-vm/kettle-launcher.sh" "$BUILDROOT/usr/bin/kettle-launcher"
 
 # Install cloud-launcher scripts, for different cloud config services
 KETTLE_LIB_DIR="$BUILDROOT/usr/lib/kettle"
@@ -71,15 +71,15 @@ install -m 755 "scripts/config_azure" "$KETTLE_LIB_DIR/"
 install -m 755 "scripts/config_local" "$KETTLE_LIB_DIR/"
 
 # Install cloud-launcher
-install -m 755 "tdx-kettle/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
+install -m 755 "kettle-vm/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
 
 # Install certbot-launcher
-install -m 755 "tdx-kettle/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
+install -m 755 "kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
 
 # Install systemd services
-install -m 644 "tdx-kettle/cloud-launcher.service" "$SERVICE_DIR/"
-install -m 644 "tdx-kettle/certbot-launcher.service" "$SERVICE_DIR/"
-install -m 644 "tdx-kettle/kettle-launcher.service" "$SERVICE_DIR/"
+install -m 644 "kettle-vm/cloud-launcher.service" "$SERVICE_DIR/"
+install -m 644 "kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
+install -m 644 "kettle-vm/kettle-launcher.service" "$SERVICE_DIR/"
 
 # Enable services
 systemctl --root="$BUILDROOT" enable cloud-launcher.service

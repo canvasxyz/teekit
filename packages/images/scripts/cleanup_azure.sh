@@ -4,7 +4,7 @@
 # Usage: ./cleanup_azure.sh [--dry-run]
 #
 # This script will:
-# 1. Delete all VMs matching "tdx-kettle-*" pattern
+# 1. Delete all VMs matching "kettle-*" pattern
 # 2. Delete associated disks, network interfaces, NSGs, and public IPs
 # 3. Delete all image versions in tdxGallery
 # 4. Delete all image definitions in tdxGallery
@@ -29,7 +29,7 @@ set -euo pipefail
 RESOURCE_GROUP="tdx-group"
 GALLERY_NAME="tdxGallery"
 CONTAINER_NAME="vhds"
-VM_PATTERN="tdx-kettle-"
+VM_PATTERN="kettle-"
 
 # Parse arguments
 DRY_RUN=false

@@ -68,7 +68,7 @@ if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
     exit 1
 fi
 
-BUCKET_NAME="${PROJECT_ID}-tdx-images"
+BUCKET_NAME="${PROJECT_ID}-images"
 log_success "Logged in to GCP (Project: $PROJECT_ID)"
 echo ""
 log_info "Default Zone: $ZONE"
@@ -157,8 +157,8 @@ fi
 # ============================================================================
 log_section "IMAGES (TDX)"
 
-# List images that match our naming convention (tdx-*)
-IMAGE_LIST=$(gcloud compute images list --filter="name~'^tdx-'" --format="csv[no-heading](name,status,diskSizeGb,creationTimestamp)" 2>/dev/null || echo "")
+# List images that match our naming convention (tdx-* or kettle-vm-*)
+IMAGE_LIST=$(gcloud compute images list --filter="name~'^(tdx-|kettle-vm-)'" --format="csv[no-heading](name,status,diskSizeGb,creationTimestamp)" 2>/dev/null || echo "")
 
 if [ -z "$IMAGE_LIST" ]; then
     log_warning "No TDX images found"

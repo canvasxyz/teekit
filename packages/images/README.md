@@ -12,7 +12,7 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
 - Base System (`base/`): Minimal Debian runtime environment (systemd, busybox, kmod, etc.)
 - Build Tools (`build-tools/`): Used only during build, not in final image
 - sqld: (`sqld/`): Builds the libsql server binary, depends on build-tools stage
-- TDX Kettle (`tdx-kettle/`): Includes kettle artifacts, services, and configuration
+- Kettle Runtime (`kettle-vm/`): Includes kettle artifacts, services, and configuration
   - Depends on base (for runtime) and sqld (for binary)
 
 ## Usage
@@ -48,11 +48,9 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
    ```
    scripts/check_perms.sh
    scripts/setup_deps.sh
-
-   # If building tdx-kettle with kettle integration, bundle kettle first
    scripts/prep_kettle.sh
 
-   scripts/env_wrapper.sh mkosi --force --profile=gcp -I tdx-kettle.conf
+   scripts/env_wrapper.sh mkosi --force --profile=gcp -I kettle-vm.conf
    ```
 
 5. Export measurements:
@@ -67,11 +65,11 @@ After building, artifacts are located in the `build/` directory:
 
 ```
 build/
-├── tdx-debian.efi           # Base UKI image (no profile)
-├── tdx-debian.tar.gz         # GCP disk image (gcp profile)
-├── tdx-debian-azure.efi      # Azure UKI image (azure profile)
-├── tdx-debian-azure.vhd      # Azure VHD image (azure profile)
-└── tdx-debian-devtools.efi   # Development UKI image (devtools profile)
+├── kettle-vm.efi           # Base UKI image (no profile)
+├── kettle-vm.tar.gz         # GCP disk image (gcp profile)
+├── kettle-vm-azure.efi      # Azure UKI image (azure profile)
+├── kettle-vm-azure.vhd      # Azure VHD image (azure profile)
+└── kettle-vm-devtools.efi   # Development UKI image (devtools profile)
 ```
 
 The different ImageId values ensure that building multiple profiles (via `npm run build:all`) won't overwrite each other's EFI artifacts.
@@ -125,7 +123,7 @@ MANIFEST_B64=$(base64 -w0 manifest.json)
 
 # Create VM instance with manifest metadata
 gcloud compute instances create my-tee-vm \
-  --image=tdx-debian \
+  --image=kettle-vm \
   --metadata=manifest="$MANIFEST_B64"
 ```
 
@@ -138,7 +136,7 @@ MANIFEST_B64=$(base64 -w0 manifest.json)
 # Create VM with manifest tag
 az vm create \
   --name my-tee-vm \
-  --image tdx-debian \
+  --image kettle-vm \
   --tags manifest="$MANIFEST_B64"
 ```
 
@@ -170,7 +168,7 @@ If no `MANIFEST` environment variable is provided via cloud metadata, the
 kettle launcher will automatically use the embedded default manifest.
 
 You may also inspect the generated default manifest used for testing at:
-- `packages/images/build/tdx-debian/build/kettle/manifest.json` (during build)
+- `packages/images/build/kettle-vm/build/kettle/manifest.json` (during build)
 - `packages/images/kettle-artifacts/manifest.json` (for testing)
 - `/usr/lib/kettle/manifest.json` (inside the VM)
 

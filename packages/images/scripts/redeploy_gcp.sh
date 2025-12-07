@@ -15,10 +15,10 @@
 # - The VM to redeploy exists
 #
 # Examples:
-#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/tdx-debian.tar.gz
-#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/tdx-debian-devtools.tar.gz
-#   ./redeploy_gcp.sh --sev-snp gcp-sev-demo build/tdx-debian.tar.gz
-#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/tdx-debian.tar.gz --dry-run
+#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/kettle-vm.tar.gz
+#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/kettle-vm-devtools.tar.gz
+#   ./redeploy_gcp.sh --sev-snp gcp-sev-demo build/kettle-vm.tar.gz
+#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/kettle-vm.tar.gz --dry-run
 #
 
 set -euo pipefail
@@ -105,10 +105,10 @@ if [ $# -lt 3 ]; then
     echo "  --dry-run    Show what would be done without making changes"
     echo ""
     echo "Examples:"
-    echo "  $0 --tdx gcp-tdx-demo build/tdx-debian.tar.gz"
-    echo "  $0 --sev-snp gcp-sev-demo build/sev-debian.tar.gz"
-    echo "  $0 --tdx gcp-tdx-demo build/tdx-debian.tar.gz --zone=us-central1-b"
-    echo "  $0 --sev-snp gcp-sev-demo build/sev-debian.tar.gz --dry-run"
+    echo "  $0 --tdx gcp-tdx-demo build/kettle-vm.tar.gz"
+    echo "  $0 --tdx gcp-tdx-demo build/kettle-vm.tar.gz --zone=us-central1-b"
+    echo "  $0 --sev-snp gcp-sev-demo build/kettle-vm.tar.gz"
+    echo "  $0 --sev-snp gcp-sev-demo build/kettle-vm.tar.gz --dry-run"
     exit 1
 fi
 
@@ -161,7 +161,7 @@ if [ ! -f "$TAR_FILE" ]; then
     log_error "tar.gz file not found: $TAR_FILE"
     echo ""
     echo "Make sure you have built the image first:"
-    echo "  npm run build:gcp          # For tdx-debian.tar.gz"
+    echo "  npm run build:gcp          # For kettle-vm.tar.gz"
     echo "  npm run build:gcp:devtools # For devtools tar.gz"
     exit 1
 fi
@@ -170,7 +170,7 @@ fi
 DEPLOY_HASH=$(openssl rand -hex 4)
 TAR_BASENAME=$(basename "$TAR_FILE")
 BLOB_NAME="${TAR_BASENAME%.tar.gz}-redeploy-${DEPLOY_HASH}.tar.gz"
-NEW_IMAGE_NAME="${TEE_TYPE}-debian-redeploy-${DEPLOY_HASH}"
+NEW_IMAGE_NAME="kettle-vm-${TEE_TYPE}-redeploy-${DEPLOY_HASH}"
 
 echo ""
 log_info "GCP VM Redeployment"
@@ -204,7 +204,7 @@ if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
     exit 1
 fi
 
-BUCKET_NAME="${PROJECT_ID}-tdx-images"
+BUCKET_NAME="${PROJECT_ID}-images"
 log_success "Logged in to GCP (Project: $PROJECT_ID)"
 
 # ============================================================================

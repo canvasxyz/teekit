@@ -33,10 +33,6 @@ config.json
 .env
 manifest.json
 
-tdx-debian.*
-tdx-debian-devtools.*
-tdx-debian-azure.*
-tdx-debian-azure-devtools.*
 *.vhd
 
 .storageaccount

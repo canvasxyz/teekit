@@ -25,7 +25,7 @@ mkdir -p "$BUILDROOT/boot"
 # happens AFTER package installation, which is too late for postinst scripts.
 #
 # The sqld image output (including these files) is used as BaseTrees for the
-# main tdx-kettle image, so these users/groups will be available when nginx
+# main kettle-vm image, so these users/groups will be available when nginx
 # and other packages are installed in that stage.
 mkdir -p "$BUILDROOT/etc"
 

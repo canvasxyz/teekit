@@ -77,19 +77,20 @@ measure_file() {
 }
 
 # Measure based on stage
+# TODO: Can probably be removed
 case "$STAGE_NAME" in
     stage1-base)
         # Stage 1: Base image only
         measure_directory "$OUTPUT_DIR" "base_image"
-        if [ -f "$OUTPUT_DIR/tdx-debian.efi" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian.efi" "base_efi"
+        if [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm.efi" "base_efi"
         fi
         ;;
     stage2-kernel)
         # Stage 2: Base + kernel
         measure_directory "$OUTPUT_DIR" "kernel_image"
-        if [ -f "$OUTPUT_DIR/tdx-debian.efi" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian.efi" "kernel_efi"
+        if [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm.efi" "kernel_efi"
         fi
         # Measure kernel files
         if [ -d "$OUTPUT_DIR/usr/lib/modules" ]; then
@@ -99,8 +100,8 @@ case "$STAGE_NAME" in
     stage3-sqld)
         # Stage 3: Base + kernel + sqld
         measure_directory "$OUTPUT_DIR" "sqld_image"
-        if [ -f "$OUTPUT_DIR/tdx-debian.efi" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian.efi" "sqld_efi"
+        if [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm.efi" "sqld_efi"
         fi
         # Measure sqld binary
         if [ -f "$OUTPUT_DIR/usr/bin/sqld" ]; then
@@ -108,10 +109,10 @@ case "$STAGE_NAME" in
         fi
         ;;
     stage4-kettle)
-        # Stage 4: Base + kernel + sqld + tdx-kettle
+        # Stage 4: Base + kernel + sqld + runtime
         measure_directory "$OUTPUT_DIR" "kettle_image"
-        if [ -f "$OUTPUT_DIR/tdx-debian.efi" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian.efi" "kettle_efi"
+        if [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm.efi" "kettle_efi"
         fi
         # Measure kettle artifacts
         if [ -d "$OUTPUT_DIR/usr/lib/kettle" ]; then
@@ -125,15 +126,15 @@ case "$STAGE_NAME" in
         # Stage 5: Full GCP build
         measure_directory "$OUTPUT_DIR" "gcp_image"
         # GCP profile creates tar.gz - check both possible names
-        if [ -f "$OUTPUT_DIR/tdx-debian-stage5.tar.gz" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian-stage5.tar.gz" "gcp_tar"
-        elif [ -f "$OUTPUT_DIR/tdx-debian.tar.gz" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian.tar.gz" "gcp_tar"
+        if [ -f "$OUTPUT_DIR/kettle-vm-stage5.tar.gz" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm-stage5.tar.gz" "gcp_tar"
+        elif [ -f "$OUTPUT_DIR/kettle-vm.tar.gz" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm.tar.gz" "gcp_tar"
         fi
-        if [ -f "$OUTPUT_DIR/tdx-debian-stage5.efi" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian-stage5.efi" "gcp_efi"
-        elif [ -f "$OUTPUT_DIR/tdx-debian.efi" ]; then
-            measure_file "$OUTPUT_DIR/tdx-debian.efi" "gcp_efi"
+        if [ -f "$OUTPUT_DIR/kettle-vm-stage5.efi" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm-stage5.efi" "gcp_efi"
+        elif [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm.efi" "gcp_efi"
         fi
         ;;
     *)

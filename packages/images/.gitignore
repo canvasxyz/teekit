@@ -6,9 +6,13 @@ build/*.tar.gz
 build/*.manifest
 build/*.vmlinuz
 build/kernel*
-build/tdx-debian*
+build/kettle-vm*
 build/build-tools
 build/sqld
+
+# Legacy artifacts
+build/tdx-debian*
+build/tdx-debian.*
 
 mkosi/
 mkosi.packages/

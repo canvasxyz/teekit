@@ -52,7 +52,7 @@ done
 # Clear current stage output if --cached was specified
 if [ "$clear_current_stage" = true ]; then
   echo "Clearing current stage output (keeping earlier cached stages)..."
-  rm -f "$IMAGES_DIR/build/tdx-debian"*
+  rm -f "$IMAGES_DIR/build/kettle-vm"*
 
   # Also clear mkosi output in Lima VM if it exists
   LIMA_VM="${LIMA_VM:-tee-builder}"
@@ -69,7 +69,7 @@ fi
 
 if [ ${#profiles[@]} -eq 0 ]; then
   echo "Building default mkosi image (no profile)..."
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} -I tdx-kettle.conf
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} -I kettle-vm.conf
   exit 0
 fi
 
@@ -86,8 +86,8 @@ done
 
 if [ ${#profile_names[@]} -eq 0 ]; then
   echo "Building default mkosi image (no profile)..."
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} -I tdx-kettle.conf
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} -I kettle-vm.conf
 else
   echo "Building mkosi image with profiles: ${profile_names[*]}"
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} "${profile_args[@]}" -I tdx-kettle.conf
+  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} "${profile_args[@]}" -I kettle-vm.conf
 fi

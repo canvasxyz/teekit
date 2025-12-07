@@ -92,7 +92,7 @@ you can start qemu:
 scripts/test_local.sh
 ```
 
-This will start qemu with the tdx-debian image, and bind a serial
+This will start qemu with the kettle-vm image, and bind a serial
 console which you can use to watch the machine boot. If you have used
 a `devtools` profile, it will also start an ssh server on port 2222.
 
