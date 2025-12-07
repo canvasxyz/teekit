@@ -143,7 +143,7 @@ use a redeploy script to do this, to avoid reconfiguring the machine:
 scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/kettle-vm-devtools.tar.gz --dry-run
 
 # Actually redeploy the VM
-scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/kettle-vm-devtools.tar.gz --dry-run
+scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/kettle-vm-devtools.tar.gz
 ```
 
 ## Step 6: Write Your Application

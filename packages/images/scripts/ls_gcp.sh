@@ -154,16 +154,16 @@ fi
 # ============================================================================
 # Images
 # ============================================================================
-log_section "IMAGES (TDX)"
+log_section "IMAGES (Filtered to Kettles)"
 
-# List images that match our naming convention (tdx-* or kettle-vm-*)
-IMAGE_LIST=$(gcloud compute images list --filter="name~'^(tdx-|kettle-vm-)'" --format="csv[no-heading](name,status,diskSizeGb,creationTimestamp)" 2>/dev/null || echo "")
+# List images that match our naming convention (kettle-* or tdx-*)
+IMAGE_LIST=$(gcloud compute images list --filter="name~'^(kettle-|tdx-)'" --format="csv[no-heading](name,status,diskSizeGb,creationTimestamp)" 2>/dev/null || echo "")
 
 if [ -z "$IMAGE_LIST" ]; then
     log_warning "No TDX images found"
 else
     IMAGE_COUNT=$(echo "$IMAGE_LIST" | wc -l)
-    log_success "Found $IMAGE_COUNT TDX image(s)"
+    log_success "Found $IMAGE_COUNT TDX image(s) matching kettle- or tdx-"
     echo ""
     printf "${GREEN}%-40s %-10s %-12s %-25s${NC}\n" "NAME" "STATUS" "SIZE (GB)" "CREATED"
     printf "%s\n" "$(printf '%.0s-' {1..90})"
