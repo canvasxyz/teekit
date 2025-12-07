@@ -1,14 +1,14 @@
-name: Build GCP and Azure TDX Images
+name: Build Kettle VM Images
 
 on:
-  # Trigger on pushes to main branch only. Do not trigger on PR (for security reasons!)
+  # Trigger on pushes to main branch only. Do not trigger on PR (for security reasons)
   push:
     branches:
       - main
     paths:
       - 'packages/images/**'
       - 'packages/kettle/**'
-      - '.github/workflows/build-gcp-image.yml'
+      - '.github/workflows/build-image.yml'
 
   # Run nightly at 3am ET (8am UTC)
   schedule:
@@ -19,16 +19,6 @@ on:
     inputs:
       clean_build:
         description: 'Perform a clean build (deletes cache)'
-        required: false
-        type: boolean
-        default: false
-      upload_to_gcp:
-        description: 'Upload built image to GCP'
-        required: false
-        type: boolean
-        default: false
-      upload_to_azure:
-        description: 'Upload built image to Azure'
         required: false
         type: boolean
         default: false
@@ -499,68 +489,6 @@ jobs:
         run: |
           echo "Disk space after build:"
           df -h .
-
-      - name: Upload to GCP (optional, experimental)
-        if: ${{ github.event.inputs.upload_to_gcp == 'true' && github.event_name == 'workflow_dispatch' }}
-        env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          GCP_BUCKET: ${{ secrets.GCP_BUILD_BUCKET }}
-        run: |
-          echo "Uploading to GCP..."
-
-          # Check if GCP credentials are configured
-          if [ -z "$GCP_PROJECT_ID" ] || [ -z "$GCP_BUCKET" ]; then
-            echo "⚠ GCP credentials not configured. Skipping upload."
-            echo "Set GCP_PROJECT_ID and GCP_BUILD_BUCKET secrets to enable."
-            exit 0
-          fi
-
-          # Authenticate with GCP (assumes workload identity or service account)
-          gcloud auth configure-docker
-
-          # Upload to bucket
-          ARTIFACT_PATH="builds/${{ steps.metadata.outputs.commit_short }}/tdx-debian.tar.gz"
-          gsutil cp build/tdx-debian.tar.gz "gs://$GCP_BUCKET/$ARTIFACT_PATH"
-          gsutil cp build/metadata.json "gs://$GCP_BUCKET/builds/${{ steps.metadata.outputs.commit_short }}/metadata.json"
-
-          echo "✓ Uploaded to: gs://$GCP_BUCKET/$ARTIFACT_PATH"
-
-      - name: Upload to Azure (optional, experimental)
-        if: ${{ github.event.inputs.upload_to_azure == 'true' && github.event_name == 'workflow_dispatch' }}
-        env:
-          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-        run: |
-          echo "Uploading to Azure..."
-
-          # Check if Azure credentials are configured
-          if [ -z "$AZURE_STORAGE_ACCOUNT" ] || [ -z "$AZURE_STORAGE_CONTAINER" ]; then
-            echo "⚠ Azure credentials not configured. Skipping upload."
-            echo "Set AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_CONTAINER, and AZURE_STORAGE_KEY secrets to enable."
-            exit 0
-          fi
-
-          # Upload compressed VHD to Azure blob storage
-          ARTIFACT_PATH="builds/${{ steps.metadata.outputs.commit_short }}/tdx-debian-azure.vhd.tar.gz"
-          az storage blob upload \
-            --account-name "$AZURE_STORAGE_ACCOUNT" \
-            --container-name "$AZURE_STORAGE_CONTAINER" \
-            --name "$ARTIFACT_PATH" \
-            --file build/tdx-debian-azure.vhd.tar.gz \
-            --account-key "$AZURE_STORAGE_KEY" \
-            --overwrite
-
-          # Upload metadata
-          az storage blob upload \
-            --account-name "$AZURE_STORAGE_ACCOUNT" \
-            --container-name "$AZURE_STORAGE_CONTAINER" \
-            --name "builds/${{ steps.metadata.outputs.commit_short }}/azure_metadata.json" \
-            --file build/azure_metadata.json \
-            --account-key "$AZURE_STORAGE_KEY" \
-            --overwrite
-
-          echo "✓ Uploaded compressed VHD to Azure: $AZURE_STORAGE_ACCOUNT/$AZURE_STORAGE_CONTAINER/$ARTIFACT_PATH"
 
       - name: Cleanup old builds
         if: always()
