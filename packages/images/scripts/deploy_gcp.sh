@@ -330,7 +330,7 @@ fi
 
 # Trust Authority configuration
 echo ""
-echo "Intel Trust Authority Configuration (optional):"
+echo "Intel Trust Authority Configuration (optional, required for TDX only):"
 echo "  Configure Trust Authority for attestation services."
 read -p "  Trust Authority API Key (press Enter to skip): " TRUSTAUTHORITY_API_KEY
 

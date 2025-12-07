@@ -1,285 +1,239 @@
-# Getting Started: TDX VM on Azure
+# Getting Started
 
-This guide walks you through setting up a TDX (Trust Domain Extensions)
-VM on Azure and running your own application inside it.
+This guide walks you through setting up a Google Cloud VM using
+the @teekit kettle, and running your own application inside it.
 
-## What You Get
-
-A TDX VM provides hardware-enforced isolation for your
-application. Code running inside cannot be observed or tampered with,
-even by the cloud provider. Clients can cryptographically verify
+We use a SEV-SNP VM, which provides hardware-enforced isolation for
+your application. Code running inside cannot be observed or tampered
+with by the cloud provider. Clients can cryptographically verify
 they're talking to your exact code via remote attestation.
+
+Compared to TDX, SEV-SNP is a earlier generation technology that has
+been in general availability for longer (~3-4 years vs. ~1-2 years).
+It is available on more platforms (including Google Cloud, AWS, Azure)
+and has better support for using sealing keys to persisting data.
+
+Tradeoffs include weaker isolation at the hypervisor level, and thus,
+a lessened security posture against malicious cloud providers.
+However, given that neither Intel nor AMD consider hardware attacks on
+memory encryption to be within their security model, we consider
+SEV-SNP to be an essentially equivalent technology to Intel TDX.
 
 ## Overview
 
 1. Set up a builder machine
-2. Build the TDX VM image
-3. Write your app.ts
-4. Deploy to Azure
-5. Test your deployment
+2. Build the VM image
+3. Deploy the VM image
+4. Configure the VM image with metadata
+5. Redeploy the VM image
+6. Write your app.ts
+7. Publish your app.ts
+8. Launch your application
 
----
+## Step 0: Prerequisites
 
-## Prerequisites
+Before you begin, you should have the GCP CLI installed, and you
+should be authenticated (`gcloud auth login`). If not, use the link
+later in this step to install the CLI.
 
-- Azure CLI installed and authenticated (`az login`)
-- A GCP or Azure VM for building images (nested virtualization required)
-- Node.js 20+
+(If you get signed out, run `gcloud auth login`. By default, sessions
+will expire after 24 hours.)
 
----
+You should also have the Kettle CLI installed. Either install the
+latest version from NPM, or use a local build:
+
+```
+npm install -g @teekit/kettle
+
+# Install a local build from the workspace root:
+npm i
+npm run build
+./install.sh
+```
 
 ## Step 1: Set Up a Builder Machine
 
-The image build requires a Linux VM with nested virtualization. Create one:
+First, create a builder machine with nested virtualization turned on.
 
-```bash
-# Azure
-az vm create \
-  --resource-group tdx-group \
-  --name azure-builder \
-  --image Canonical:ubuntu-24_04-lts:server:latest \
-  --size Standard_D4s_v3 \
-  --admin-username azureuser \
-  --generate-ssh-keys \
-  --os-disk-size-gb 300
-
-# SSH in
-az ssh vm --resource-group tdx-group --name azure-builder
+```
+gcloud compute instances create gcp-builder \
+      --enable-nested-virtualization \
+      --machine-type=c3-standard-4 \
+      --zone=us-central1-a \
+      --image-family=ubuntu-2404-lts-amd64 \
+      --image-project=ubuntu-os-cloud \
+      --boot-disk-size=300GB \
+      --metadata=startup-script='#!/bin/bash
+        # Add default user to kvm group
+        usermod -aG kvm $(logname)
+      '
 ```
 
-Clone the repository and install dependencies:
+SSH into the machine:
 
-```bash
+```
+gcloud compute ssh gcp-builder
+```
+
+Install the gcloud CLI inside the builder machine, following the
+instructions at https://cloud.google.com/sdk/docs/install-sdk.
+
+```
+gcloud auth login
+```
+
+Clone the repository and install dependencies.
+
+```
 umask 0022
 git clone https://github.com/canvasxyz/teekit.git
 cd teekit
 ./scripts/setup.sh
 ```
 
----
+## Step 2: Build the VM Image
 
-## Step 2: Build the TDX VM Image
-
-```bash
+```
 cd packages/images
-npm run build:az
+npm run build:gcp:devtools
 ```
 
-This takes 20-30 minutes and produces:
-- `build/tdx-debian-azure.efi` — UEFI kernel image
-- `build/tdx-debian-azure.vhd` — Azure VHD (30GB)
+This will take 20-30 minutes and produces a GCP image at
+`build/tdx-debian-devtools.tar.gz`.
 
----
+## Step 3: Deploy the VM Image
 
-## Step 3: Write Your Application
+This will deploy your VM to Google Cloud using the smallest SEV-SNP VM
+(2 vCPUs, currently ~$66/month).
 
-Create your `app.ts` using the Hono framework. Your app runs inside
-the TDX enclave and is served via the @teekit/kettle runtime, which
-is based on V8 / workerd.
-
-### Minimal Example
-
-```typescript
-import { Hono } from "hono"
-import { cors } from "hono/cors"
-import { upgradeWebSocket } from "hono/cloudflare-workers"
-import { TunnelServer } from "@teekit/tunnel"
-import type { Env } from "@teekit/kettle/worker"
-
-const app = new Hono<{ Bindings: Env }>()
-app.use("/*", cors())
-
-// Initialize TunnelServer for remote attestation
-const { wss } = await TunnelServer.initialize(
-  app,
-  async () => {
-    // In production, this returns the real TDX quote
-    const { tappdV4Base64 } = await import("@teekit/tunnel/samples")
-    const buf = Uint8Array.from(atob(tappdV4Base64), (ch) => ch.charCodeAt(0))
-    return { quote: buf }
-  },
-  { upgradeWebSocket },
-)
-
-// Your routes
-app.get("/hello", (c) => c.json({ message: "Hello from TDX!" }))
-
-app.get("/uptime", (c) => {
-  return c.json({ uptime: process.uptime() })
-})
-
-export default app
+```
+npm run deploy:gcp:devtools --sev-snp
 ```
 
-### Key Concepts
-
-| Component | Purpose |
-|-----------|---------|
-| `Hono` | Web framework (Cloudflare Workers-compatible) |
-| `TunnelServer` | Handles remote attestation and encrypted channels |
-| `wss` | WebSocket server for real-time connections |
-| `Env` | Environment bindings (DB, quote service, etc.) |
-
-### Available Features
-
-- **HTTP routes** — Standard REST endpoints via Hono
-- **WebSockets** — Real-time bidirectional communication
-- **Database** — SQLite via libsql (`getDb(c.env)`)
-- **Attestation** — TDX quotes bound to your app's public key
-
----
-
-## Step 4: Create a Manifest
-
-The manifest tells the VM which application to run:
-
-```json
-{
-  "app": "file:///usr/lib/kettle/app.js",
-  "sha256": "<sha256-of-your-app.js>"
-}
-```
-
-Generate the SHA256:
-```bash
-sha256sum app.js | awk '{print $1}'
-```
-
-The manifest can reference:
-- `file://` — App bundled in the VM image
-- `https://` — App fetched at boot from a URL
-
----
-
-## Step 5: Deploy to Azure
-
-First, we have to deploy the VM image to Azure (before we can configure it).
-
-```bash
-cd packages/images
-npm run deploy:az
-```
-
-The deploy script handles everything: storage account, gallery, image upload, and VM creation.
-Alternatively, see [DEPLOY-AZURE.md](../DEPLOY-AZURE.md) for step-by-step commands.
+## Step 4: Configure the VM Image with Metadata
 
 Once your VM has started, configure it:
 
-- `trustauthority_api_key` should be configured with your Intel Trust Authority API key.
-- `hostname` should be configured with a host whose DNS is already pointing to your VM's public IP.
-- `manifest` should be configured with a base64 encoded copy of your manifest.
+- `hostname` should be configured with a host whose DNS points to your VM's public IP.
+- (optional) `manifest` should be configured with a base64 encoded copy of your app manifest.
+- (optional) `trustauthority_api_key` should be configured with an Intel Trust Authority API key.
 
-You must restart your VM once you've configured metadata tags.
+We provide a config script that uses dynamic DNS to assign your
+machine a hostname. Register an account with dynv6.net, and then run:
 
-```bash
+```
+npm run config:gcp
+```
+
+This will prompt you for your VM name or IP address, dynv6 API key,
+and an Intel Trust Authority key (which we do not need for SEV-SNP
+VMs; press Enter to skip).
+
+The script will configure your machine with a hostname on dynv6.net,
+and then reboot it and wait for HTTPS to come online. See Troubleshooting
+if you encounter any issues.
+
+## Step 5: Redeploy the VM Image (optional)
+
+You may wish to redeploy a different image to this VM later. You can
+use a redeploy script to do this, to avoid reconfiguring the machine:
+
+```
+# Try a dry run first
+scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/tdx-debian-devtools.tar.gz --dry-run
+
+# Actually redeploy the VM
+scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/tdx-debian-devtools.tar.gz --dry-run
+```
+
+## Step 6: Write Your Application
+
+Create your `app.ts` that will run inside the kettle VM.
+
+You can refer to `packages/kettle/app.ts` as an example. You should
+use Hono as the server, and SQLite (sqld) as the database. The
+application will run inside a Cloudflare `workerd` runtime.
+
+```
+# Run your application locally:
+kettle start-worker packages/kettle/app.ts
+```
+
+## Step 7: Publish Your Application
+
+When you're done writing your application, publish it to a Github Gist.
+This will prompt you for a Github API key (use one scoped to gist creation):
+
+```
+kettle publish packages/kettle/app.ts
+```
+
+This generates a manifest file of the format:
+
+```
+{
+  "app": "https://gist.githubusercontent.com/example/4e3442.../app.ts",
+  "sha256": "52b50d..."
+}
+```
+
+Once you have a manifest, you can try launching it locally:
+
+```
+kettle launch manifest.json
+```
+
+## Step 8: Launch Your Application
+
+Finally, we're ready to deploy your application to a production server!
+To configure your VM to run your application, provide the manifest when
+running the config script:
+
+```
+npm run config:gcp
+```
+
+Alternatively, you can also configure the metadata manually, just
+make sure to reboot the machine afterwards:
+
+```
+VM_NAME=my-kettle-vm
 MANIFEST_B64=$(base64 -w0 manifest.json)
-
-az vm update \
-  --name my-tdx-app \
-  --resource-group tdx-group \
-  --set tags.manifest="$MANIFEST_B64" \
-    tags.hostname="example.com" \
-    tags.trustauthority_api_key="djE6..." \
-
-az vm restart \
-  --name my-tdx-app \
-  --resource-group tdx-group
+gcloud compute instances add-metadata "$VM_NAME" --metadata=manifest=$MANIFEST_B64
+gcloud compute instances reset "$VM_NAME"
 ```
 
----
+Wait for the reboot to complete, and for HTTPS to come online once
+Certbot finishes. You should be able to access your application via
+its public IP, or via the hostname that we just set up.
 
-## Step 6: Test Your Deployment
-
-Get the VM's public IP:
-
-```bash
-az vm show \
-  --name my-tdx-app \
-  --resource-group tdx-group \
-  --show-details \
-  --query publicIps -o tsv
-```
-
-Test the endpoints:
-
-```bash
-# Health check
-curl http://<VM_IP>:3001/uptime
-
-# Your custom route
-curl http://<VM_IP>:3001/hello
-
-# With HTTPS (if hostname configured)
-curl https://myapp.example.com/hello
-```
-
----
-
-## Local Testing
-
-You can test your image locally, using qemu, before deploying:
-
-```bash
-cd packages/images
-npm run test:local
-```
-
-This boots the VM in QEMU with:
-- Kettle service on `http://localhost:3001`
-- Metadata service on `http://localhost:8090`
-
----
-
-## Architecture Summary
+If you're running the default application, try querying the /uptime
+endpoint using `curl`. Or, go to packages/demo/src/App.tsx and replace
+the remote server with your new hostname.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Your Client                             │
-│  1. Connect to TDX VM                                       │
-│  2. Receive attestation quote                               │
-│  3. Verify quote (proves code integrity)                    │
-│  4. Establish encrypted channel                             │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Azure Confidential VM                     │
-│                   (Standard_DC2es_v5)                       │
-├─────────────────────────────────────────────────────────────┤
-│  TDX Hardware Isolation                                     │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  kettle runtime                                       │  │
-│  │  ├── Your app.ts (port 3001)                          │  │
-│  │  ├── TunnelServer (attestation + encryption)          │  │
-│  │  └── libsql database                                  │  │
-│  └───────────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  nginx (optional, for HTTPS)                          │  │
-│  │  └── Reverse proxy with Let's Encrypt certs           │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+curl http://136.112.93.209:8080/uptime
+curl https://136-112-93-209.dynv6.net/uptime
 ```
-
----
 
 ## Troubleshooting
 
-### Check service logs
+### Check serial console
 
 ```bash
-# Via Azure serial console
-az serial-console connect --name my-tdx-app --resource-group tdx-group
-
-# Inside the VM
-journalctl -u kettle-launcher.service
-journalctl -u cloud-launcher.service
-cat /var/log/kettle.log
+gcloud compute instances add-metadata my-kettle-vm --metadata=serial-port-enable=true
+gcloud compute connect-to-serial-port my-kettle-vm
 ```
 
-### Verify manifest loaded
+### Check service logs (requires `devtools`)
 
 ```bash
-cat /etc/kettle/cloud-launcher.env
+gcloud compute ssh my-kettle-vm
+
+# Inside the VM
+cat /var/log/kettle.log
+cat /var/log/cloud-launcher.log
+cat /var/log/certbot-launcher.log
 ```
 
 ### HTTPS not working

@@ -269,7 +269,7 @@ encoded and encrypted with the XSalsa20‑Poly1305 stream cipher.
 @teekit/tunnel, @teekit/qvl, and @teekit/demo packages are made available under the
 [MIT License](https://opensource.org/license/mit).
 
-@teekit/kettle is made available under the
+@teekit/kettle and @teekit/images are made available under the
 [AGPL V3 License](https://opensource.org/license/agpl-v3).
 
 (C) 2025 Canvas Technologies, Inc.
