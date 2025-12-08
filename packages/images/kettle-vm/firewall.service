@@ -1,0 +1,15 @@
+[Unit]
+Description=Configure iptables firewall
+DefaultDependencies=no
+Before=network-setup.service cloud-launcher.service
+After=sysinit.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/setup-firewall
+RemainAfterExit=yes
+StandardOutput=append:/var/log/firewall.log
+StandardError=append:/var/log/firewall.log
+
+[Install]
+WantedBy=sysinit.target

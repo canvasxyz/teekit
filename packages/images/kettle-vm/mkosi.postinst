@@ -79,14 +79,19 @@ install -m 755 "kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launc
 # Install sealing-key (SEV-SNP key derivation)
 install -m 755 "kettle-vm/sealing-key.sh" "$BUILDROOT/usr/bin/sealing-key"
 
+# Install firewall setup script
+install -m 755 "kettle-vm/setup-firewall.sh" "$BUILDROOT/usr/bin/setup-firewall"
+
 # Install systemd services
 install -m 644 "kettle-vm/cloud-launcher.service" "$SERVICE_DIR/"
 install -m 644 "kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
 install -m 644 "kettle-vm/kettle-launcher.service" "$SERVICE_DIR/"
 install -m 644 "kettle-vm/sealing-key.service" "$SERVICE_DIR/"
+install -m 644 "kettle-vm/firewall.service" "$SERVICE_DIR/"
 
 # Enable services
 systemctl --root="$BUILDROOT" enable cloud-launcher.service
 systemctl --root="$BUILDROOT" enable certbot-launcher.service
 systemctl --root="$BUILDROOT" enable kettle-launcher.service
 systemctl --root="$BUILDROOT" enable sealing-key.service
+systemctl --root="$BUILDROOT" enable firewall.service
