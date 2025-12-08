@@ -223,6 +223,8 @@ curl https://136-112-93-209.dynv6.net/uptime
 ```bash
 VM_NAME=my-kettle-vm
 gcloud compute instances tail-serial-port-output $VM_NAME
+
+# Restart the VM to see logs from boot
 gcloud compute instances reset $VM_NAME
 ```
 
@@ -235,6 +237,18 @@ gcloud compute ssh $VM_NAME
 cat /var/log/kettle.log
 cat /var/log/cloud-launcher.log
 cat /var/log/certbot-launcher.log
+```
+
+### Rebuild and redeploy the VM
+
+```
+VM_NAME=my-kettle-vm
+
+# Redeploy witho devtools
+npm run build:gcp:devtools && scripts/redeploy_gcp.sh --sev-snp $VM_NAME build/kettle-vm-devtools.tar.gz
+
+# Redeploy without devtools
+npm run build:gcp && scripts/redeploy_gcp.sh --sev-snp $VM_NAME build/kettle-vm.tar.gz
 ```
 
 ### HTTPS not working
