@@ -216,6 +216,21 @@ if should_use_lima; then
 
         echo "Check ./build/ directory for output files"
         echo
+
+        # Display security warning for devtools builds
+        if [[ " ${cmd[*]} " == *"--profile=devtools"* ]] || [[ " ${cmd[*]} " == *"profile=devtools"* ]]; then
+            echo
+            echo -e "\033[1;31m╔══════════════════════════════════════════════════════════════════════════════╗\033[0m"
+            echo -e "\033[1;31m║                                                                              ║\033[0m"
+            echo -e "\033[1;31m║                    DEVTOOLS IMAGE - NOT FOR PRODUCTION                       ║\033[0m"
+            echo -e "\033[1;31m║                                                                              ║\033[0m"
+            echo -e "\033[1;31m║   This image contains debugging tools, SSH access, and a default password.   ║\033[0m"
+            echo -e "\033[1;31m║   It should NEVER be used in production environments.                        ║\033[0m"
+            echo -e "\033[1;31m║   You will be prompted to change the password on first boot.                 ║\033[0m"
+            echo -e "\033[1;31m║                                                                              ║\033[0m"
+            echo -e "\033[1;31m╚══════════════════════════════════════════════════════════════════════════════╝\033[0m"
+            echo
+        fi
     fi
 
     echo "Note: Lima VM is still running. To stop it, run: limactl stop $LIMA_VM"
