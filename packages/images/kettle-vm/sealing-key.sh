@@ -8,11 +8,15 @@ set -euo pipefail
 #   - Measurement (bit 3) - ensures key changes if disk image changes
 
 LOG_PREFIX="[sealing-key]"
+SERIAL_CONSOLE="/dev/ttyS0"
 KEY_DIR="/var/lib/kettle"
 KEY_FILE="$KEY_DIR/sealing-key.bin"
 SEV_GUEST_DEV="/dev/sev-guest"
 
-echo "$LOG_PREFIX Starting SEV-SNP sealing key derivation..."
+# Tee all output to serial console (with prefix) while preserving stdout/stderr for systemd
+exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+
+echo "Starting SEV-SNP sealing key derivation..."
 
 # Check if we're running on SEV-SNP hardware
 if [ ! -e "$SEV_GUEST_DEV" ]; then

@@ -11,6 +11,7 @@ Group=root
 ExecStart=/usr/bin/cloud-launcher
 RemainAfterExit=yes
 StandardOutput=append:/var/log/cloud-launcher.log
+StandardError=append:/var/log/cloud-launcher.log
 
 [Install]
 WantedBy=minimal.target

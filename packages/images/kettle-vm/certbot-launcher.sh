@@ -6,12 +6,17 @@ set -euo pipefail
 # for routing hostnames to kettle instances
 
 # Log file path is configured in the systemd service file (StandardOutput/StandardError)
+LOG_PREFIX="[certbot-launcher]"
+SERIAL_CONSOLE="/dev/ttyS0"
 NGINX_CONF_DIR="/etc/nginx"
 NGINX_SITES_AVAILABLE="${NGINX_CONF_DIR}/sites-available"
 NGINX_SITES_ENABLED="${NGINX_CONF_DIR}/sites-enabled"
 CERT_DIR="/etc/letsencrypt/live"
 ACME_WEBROOT="/var/www/letsencrypt"
 MAX_RETRIES_EXTERNAL=5
+
+# Tee all output to serial console (with prefix) while preserving stdout/stderr for systemd
+exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
 
 # Logging function - output goes to stdout, systemd handles file redirection
 log() {

@@ -8,8 +8,12 @@ set -euo pipefail
 # - A comma-separated list of base64-encoded manifest strings
 
 LOG_PREFIX="[kettle-launcher]"
+SERIAL_CONSOLE="/dev/ttyS0"
 
-echo "$LOG_PREFIX Starting kettle launcher init script..."
+# Tee all output to serial console (with prefix) while preserving stdout/stderr for systemd
+exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+
+echo "Starting kettle launcher init script..."
 
 # Track launched kettle PIDs for monitoring
 KETTLE_PIDS=()

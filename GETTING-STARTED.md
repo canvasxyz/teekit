@@ -221,14 +221,15 @@ curl https://136-112-93-209.dynv6.net/uptime
 ### Check serial console
 
 ```bash
-gcloud compute instances add-metadata my-kettle-vm --metadata=serial-port-enable=true
-gcloud compute connect-to-serial-port my-kettle-vm
+VM_NAME=my-kettle-vm
+gcloud compute instances tail-serial-port-output $VM_NAME
+gcloud compute instances reset $VM_NAME
 ```
 
 ### Check service logs (requires `devtools`)
 
 ```bash
-gcloud compute ssh my-kettle-vm
+gcloud compute ssh $VM_NAME
 
 # Inside the VM
 cat /var/log/kettle.log

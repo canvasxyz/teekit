@@ -7,8 +7,12 @@ set -euo pipefail
 LOG_PREFIX="[cloud-launcher]"
 CONFIG_DIR="/etc/kettle"
 ENV_FILE="$CONFIG_DIR/cloud-launcher.env"
+SERIAL_CONSOLE="/dev/ttyS0"
 
-echo "$LOG_PREFIX Starting cloud configuration..."
+# Tee all output to serial console (with prefix) while preserving stdout/stderr for systemd
+exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+
+echo "Starting cloud configuration..."
 
 # Create config directory
 mkdir -p "$CONFIG_DIR"
