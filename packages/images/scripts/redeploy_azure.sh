@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 # Redeploys an existing Azure VM with a new image while preserving its IP address and metadata.
-# Usage: ./redeploy_azure.sh <vm-name> <vhd-file>
+#
+# Usage: ./redeploy_azure.sh <vhd-file> [vm-name] [--dry-run]
 #
 # The script will:
 # 1. Capture the existing VM's configuration (IP, NIC, NSG, tags, size, etc.)
@@ -14,11 +15,16 @@
 # - Resource group 'tdx-group' exists
 # - The VM to redeploy exists
 #
+# Arguments:
+#   vhd-file   Path to the VHD file (or .vhd.tar.gz) to deploy (required)
+#   vm-name    Name of the existing VM to redeploy (optional, uses cache or prompts)
+#   --dry-run  Show what would be done without making changes
+#
 # Examples:
-#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd
-#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd.tar.gz
-#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd --dry-run
-#   ./redeploy_azure.sh my-vm build/kettle-vm-azure.vhd --yes
+#   ./redeploy_azure.sh build/kettle-vm-azure.vhd              # Prompts for VM name
+#   ./redeploy_azure.sh build/kettle-vm-azure.vhd my-vm
+#   ./redeploy_azure.sh build/kettle-vm-azure.vhd.tar.gz my-vm
+#   ./redeploy_azure.sh build/kettle-vm-azure.vhd --dry-run    # Uses cached VM name
 #
 
 set -euo pipefail
@@ -29,6 +35,7 @@ GALLERY_NAME="tdxGallery"
 IMAGE_DEFINITION="kettle-vm-azure"
 CONTAINER_NAME="vhds"
 VM_SIZE="Standard_DC2es_v5"
+VM_NAME_CACHE_FILE=".vm_name_azure"
 
 # Generate a random integer for image version patch number (1 to 2,000,000,000)
 IMAGE_PATCH_VERSION=$((1 + RANDOM * RANDOM % 2000000000))
@@ -85,34 +92,47 @@ cleanup_on_failure() {
     exit 1
 }
 
-# Validate arguments
-if [ $# -lt 2 ]; then
-    echo "Usage: $0 <vm-name> <vhd-file>"
+# Validate arguments - need at least the VHD file
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <vhd-file> [vm-name] [--dry-run]"
     echo ""
     echo "Arguments:"
-    echo "  vm-name    Name of the existing VM to redeploy"
-    echo "  vhd-file   Path to the VHD file (or .vhd.tar.gz) to deploy"
+    echo "  vhd-file   Path to the VHD file (or .vhd.tar.gz) to deploy (required)"
+    echo "  vm-name    Name of the existing VM to redeploy (optional, uses cache or prompts)"
     echo ""
     echo "Options:"
     echo "  --dry-run  Show what would be done without making changes"
     echo ""
     echo "Examples:"
-    echo "  $0 my-vm build/kettle-vm-azure.vhd"
-    echo "  $0 my-vm build/kettle-vm-azure.vhd.tar.gz"
-    echo "  $0 my-vm build/kettle-vm-azure.vhd --dry-run"
+    echo "  $0 build/kettle-vm-azure.vhd              # Prompts for VM name"
+    echo "  $0 build/kettle-vm-azure.vhd my-vm"
+    echo "  $0 build/kettle-vm-azure.vhd.tar.gz my-vm"
+    echo "  $0 build/kettle-vm-azure.vhd --dry-run    # Uses cached VM name"
     exit 1
 fi
 
-VM_NAME="$1"
-VHD_INPUT="$2"
+# First argument must be the VHD file
+VHD_INPUT="$1"
+shift
 
-# Parse optional arguments
+# Initialize defaults
+VM_NAME=""
 DRY_RUN=false
-shift 2
+
+# Parse remaining arguments
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
             DRY_RUN=true
+            ;;
+        *)
+            # Assume it's the VM name if not recognized as an option
+            if [ -z "$VM_NAME" ]; then
+                VM_NAME="$arg"
+            else
+                log_error "Unknown argument: $arg"
+                exit 1
+            fi
             ;;
     esac
 done
@@ -145,6 +165,23 @@ if [ ! -f "$VHD_FILE" ]; then
     echo "  npm run build:az          # For kettle-vm-azure.vhd"
     echo "  npm run build:az:devtools # For devtools VHD"
     exit 1
+fi
+
+# Handle VM name: use provided, cached, or prompt
+if [ -z "$VM_NAME" ]; then
+    # Try to read from cache
+    if [ -f "$VM_NAME_CACHE_FILE" ]; then
+        VM_NAME=$(cat "$VM_NAME_CACHE_FILE")
+        log_info "Using cached VM name: $VM_NAME"
+    else
+        # No cache, prompt for VM name
+        echo -n "Enter the VM name to redeploy: "
+        read -r VM_NAME
+        if [ -z "$VM_NAME" ]; then
+            log_error "VM name is required"
+            exit 1
+        fi
+    fi
 fi
 
 # Generate unique identifiers for this deployment
@@ -677,3 +714,7 @@ echo "Cleanup commands (for the new image resources, if needed):"
 echo "  az sig image-version delete -g $RESOURCE_GROUP -r $GALLERY_NAME -i $IMAGE_DEFINITION -e $IMAGE_VERSION"
 echo "  az storage blob delete -n $BLOB_NAME -c $CONTAINER_NAME --account-name $STORAGE_ACCT --auth-mode login"
 echo ""
+
+# Cache the VM name for future redeployments
+echo "$VM_NAME" > "$VM_NAME_CACHE_FILE"
+log_info "Cached VM name '$VM_NAME' for future redeployments"

@@ -33,3 +33,5 @@ cli.bundle.js
 .dynv6_azure_name
 .dynv6_gcp_name
 .dynv6_gcp_zone
+.vm_name_gcp
+.vm_name_azure

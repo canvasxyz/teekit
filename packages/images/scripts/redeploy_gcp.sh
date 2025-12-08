@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 # Redeploys an existing GCP VM with a new image while preserving its IP address and metadata.
-# Usage: ./redeploy_gcp.sh --tdx|--sev-snp <vm-name> <tar.gz-file>
+#
+# Usage: ./redeploy_gcp.sh <tar.gz-file> [--tdx|--sev-snp] [vm-name] [--zone=ZONE] [--dry-run]
 #
 # The script will:
 # 1. Capture the existing VM's configuration (IP, metadata, machine type, etc.)
@@ -14,11 +15,20 @@
 # - A GCP project selected (gcloud config set project <project>)
 # - The VM to redeploy exists
 #
+# Arguments:
+#   tar.gz-file    Path to the tar.gz file to deploy (required)
+#   --tdx          Deploy to Intel TDX machine (default)
+#   --sev-snp      Deploy to AMD SEV-SNP machine
+#   vm-name        Name of the VM to redeploy (optional, uses cache or prompts)
+#   --zone=ZONE    Zone where the VM is located (default: us-central1-a)
+#   --dry-run      Show what would be done without making changes
+#
 # Examples:
-#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/kettle-vm.tar.gz
-#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/kettle-vm-devtools.tar.gz
-#   ./redeploy_gcp.sh --sev-snp gcp-sev-demo build/kettle-vm.tar.gz
-#   ./redeploy_gcp.sh --tdx gcp-tdx-demo build/kettle-vm.tar.gz --dry-run
+#   ./redeploy_gcp.sh build/kettle-vm.tar.gz                    # Prompts for VM name
+#   ./redeploy_gcp.sh build/kettle-vm.tar.gz my-vm              # TDX by default
+#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --tdx my-vm
+#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --sev-snp my-vm
+#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --dry-run          # Uses cached VM name
 #
 
 set -euo pipefail
@@ -27,6 +37,7 @@ set -euo pipefail
 BUCKET_NAME=""  # Will be set based on project ID
 REGION="us-central1"
 DEFAULT_ZONE="us-central1-a"
+VM_NAME_CACHE_FILE=".vm_name_gcp"
 
 # Colors for logging
 RED='\033[0;31m'
@@ -88,70 +99,74 @@ cleanup_on_failure() {
     exit 1
 }
 
-# Validate arguments
-if [ $# -lt 3 ]; then
-    echo "Usage: $0 --tdx|--sev-snp <vm-name> <tar.gz-file> [--zone=ZONE]"
-    echo ""
-    echo "Required first argument (TEE type):"
-    echo "  --tdx        Deploy to Intel TDX machine (c3-standard-4)"
-    echo "  --sev-snp    Deploy to AMD SEV-SNP machine (n2d-standard-2)"
+# Validate arguments - need at least the tar.gz file
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <tar.gz-file> [--tdx|--sev-snp] [vm-name] [--zone=ZONE] [--dry-run]"
     echo ""
     echo "Arguments:"
-    echo "  vm-name      Name of the existing VM to redeploy"
-    echo "  tar.gz-file  Path to the tar.gz file to deploy"
+    echo "  tar.gz-file  Path to the tar.gz file to deploy (required)"
     echo ""
     echo "Options:"
+    echo "  --tdx        Deploy to Intel TDX machine (default)"
+    echo "  --sev-snp    Deploy to AMD SEV-SNP machine"
+    echo "  vm-name      Name of the existing VM to redeploy (uses cache or prompts if omitted)"
     echo "  --zone=ZONE  Zone where the VM is located (default: $DEFAULT_ZONE)"
     echo "  --dry-run    Show what would be done without making changes"
     echo ""
     echo "Examples:"
-    echo "  $0 --tdx gcp-tdx-demo build/kettle-vm.tar.gz"
-    echo "  $0 --tdx gcp-tdx-demo build/kettle-vm.tar.gz --zone=us-central1-b"
-    echo "  $0 --sev-snp gcp-sev-demo build/kettle-vm.tar.gz"
-    echo "  $0 --sev-snp gcp-sev-demo build/kettle-vm.tar.gz --dry-run"
+    echo "  $0 build/kettle-vm.tar.gz                    # Prompts for VM name"
+    echo "  $0 build/kettle-vm.tar.gz my-vm              # TDX by default"
+    echo "  $0 build/kettle-vm.tar.gz --tdx my-vm"
+    echo "  $0 build/kettle-vm.tar.gz --sev-snp my-vm"
+    echo "  $0 build/kettle-vm.tar.gz --dry-run          # Uses cached VM name"
     exit 1
 fi
 
-# Parse required TEE type argument
-TEE_TYPE=""
-case "$1" in
-    --tdx)
-        TEE_TYPE="tdx"
-        CONFIDENTIAL_TYPE="TDX"
-        NEW_MACHINE_TYPE="c3-standard-4"
-        IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE"
-        VM_TAG="tdx-vm"
-        ;;
-    --sev-snp)
-        TEE_TYPE="sev-snp"
-        CONFIDENTIAL_TYPE="SEV_SNP"
-        NEW_MACHINE_TYPE="n2d-standard-2"
-        IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,SEV_SNP_CAPABLE"
-        VM_TAG="sev-snp-vm"
-        ;;
-    *)
-        echo "Error: First argument must be --tdx or --sev-snp"
-        echo ""
-        echo "Usage: $0 --tdx|--sev-snp <vm-name> <tar.gz-file> [options]"
-        exit 1
-        ;;
-esac
+# First argument must be the tar.gz file
+TAR_FILE="$1"
 shift
 
-VM_NAME="$1"
-TAR_FILE="$2"
+# Initialize defaults
+TEE_TYPE="tdx"
+CONFIDENTIAL_TYPE="TDX"
+NEW_MACHINE_TYPE="c3-standard-4"
+IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE"
+VM_TAG="tdx-vm"
+VM_NAME=""
 VM_ZONE="$DEFAULT_ZONE"
-
-# Parse optional arguments
 DRY_RUN=false
-shift 2
+
+# Parse remaining arguments
 for arg in "$@"; do
     case "$arg" in
+        --tdx)
+            TEE_TYPE="tdx"
+            CONFIDENTIAL_TYPE="TDX"
+            NEW_MACHINE_TYPE="c3-standard-4"
+            IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE"
+            VM_TAG="tdx-vm"
+            ;;
+        --sev-snp)
+            TEE_TYPE="sev-snp"
+            CONFIDENTIAL_TYPE="SEV_SNP"
+            NEW_MACHINE_TYPE="n2d-standard-2"
+            IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,SEV_SNP_CAPABLE"
+            VM_TAG="sev-snp-vm"
+            ;;
         --zone=*)
             VM_ZONE="${arg#*=}"
             ;;
         --dry-run)
             DRY_RUN=true
+            ;;
+        *)
+            # Assume it's the VM name if not recognized as an option
+            if [ -z "$VM_NAME" ]; then
+                VM_NAME="$arg"
+            else
+                log_error "Unknown argument: $arg"
+                exit 1
+            fi
             ;;
     esac
 done
@@ -164,6 +179,23 @@ if [ ! -f "$TAR_FILE" ]; then
     echo "  npm run build:gcp          # For kettle-vm.tar.gz"
     echo "  npm run build:gcp:devtools # For devtools tar.gz"
     exit 1
+fi
+
+# Handle VM name: use provided, cached, or prompt
+if [ -z "$VM_NAME" ]; then
+    # Try to read from cache
+    if [ -f "$VM_NAME_CACHE_FILE" ]; then
+        VM_NAME=$(cat "$VM_NAME_CACHE_FILE")
+        log_info "Using cached VM name: $VM_NAME"
+    else
+        # No cache, prompt for VM name
+        echo -n "Enter the VM name to redeploy: "
+        read -r VM_NAME
+        if [ -z "$VM_NAME" ]; then
+            log_error "VM name is required"
+            exit 1
+        fi
+    fi
 fi
 
 # Generate unique identifiers for this deployment
@@ -559,3 +591,7 @@ if [ "$PROMOTED_IP" = true ] && [ -n "$STATIC_IP_NAME" ]; then
     echo "  gcloud compute addresses delete $STATIC_IP_NAME --region=$IP_REGION --quiet"
 fi
 echo ""
+
+# Cache the VM name for future redeployments
+echo "$VM_NAME" > "$VM_NAME_CACHE_FILE"
+log_info "Cached VM name '$VM_NAME' for future redeployments"
