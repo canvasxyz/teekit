@@ -26,12 +26,12 @@ launch_kettle() {
   local manifest_file="/tmp/kettle-manifest-${index}.json"
   local db_dir="/var/lib/kettle/db-${index}"
 
-  echo "$LOG_PREFIX [$index] Launching kettle on port $port..."
+  echo "[$index] Launching kettle on port $port..."
 
   # Decode base64 manifest and save to temporary file
   if echo "$manifest_b64" | base64 -d > "$manifest_file" 2>/dev/null; then
-    echo "$LOG_PREFIX [$index] Decoded manifest to $manifest_file"
-    echo "$LOG_PREFIX [$index] Manifest contents:"
+    echo "[$index] Decoded manifest to $manifest_file"
+    echo "[$index] Manifest contents:"
     cat "$manifest_file" | sed 's/^/  /'
 
     # Create database directory for this kettle
@@ -42,10 +42,10 @@ launch_kettle() {
     /usr/bin/kettle launch "$manifest_file" --port "$port" --db-dir "$db_dir" &
     local pid=$!
     KETTLE_PIDS+=("$pid")
-    echo "$LOG_PREFIX [$index] Launched kettle with PID $pid on port $port"
+    echo "[$index] Launched kettle with PID $pid on port $port"
   else
-    echo "$LOG_PREFIX [$index] ERROR: Failed to decode manifest (invalid base64)"
-    echo "$LOG_PREFIX [$index] Skipping this manifest and continuing with others..."
+    echo "[$index] ERROR: Failed to decode manifest (invalid base64)"
+    echo "[$index] Skipping this manifest and continuing with others..."
   fi
 }
 
@@ -53,11 +53,11 @@ launch_kettle() {
 if [ -n "${MANIFEST:-}" ]; then
   # Check if it's a comma-separated list (multiple manifests)
   if [[ "$MANIFEST" == *","* ]]; then
-    echo "$LOG_PREFIX MANIFEST environment variable found (comma-separated list)"
+    echo "MANIFEST environment variable found (comma-separated list)"
 
     # Split comma-separated manifests and launch each one
     IFS=',' read -ra MANIFEST_ARRAY <<< "$MANIFEST"
-    echo "$LOG_PREFIX Found ${#MANIFEST_ARRAY[@]} manifest(s) to launch"
+    echo "Found ${#MANIFEST_ARRAY[@]} manifest(s) to launch"
 
     for i in "${!MANIFEST_ARRAY[@]}"; do
       launch_kettle "${MANIFEST_ARRAY[$i]}" "$i" || true
@@ -65,51 +65,51 @@ if [ -n "${MANIFEST:-}" ]; then
 
     # Check if we successfully launched any kettles
     if [ ${#KETTLE_PIDS[@]} -eq 0 ]; then
-      echo "$LOG_PREFIX ERROR: Failed to launch any kettles!"
+      echo "ERROR: Failed to launch any kettles!"
       exit 1
     fi
 
-    echo "$LOG_PREFIX Successfully launched ${#KETTLE_PIDS[@]} kettle(s)"
-    echo "$LOG_PREFIX PIDs: ${KETTLE_PIDS[*]}"
-    echo "$LOG_PREFIX Waiting for kettles to complete..."
+    echo "Successfully launched ${#KETTLE_PIDS[@]} kettle(s)"
+    echo "PIDs: ${KETTLE_PIDS[*]}"
+    echo "Waiting for kettles to complete..."
 
     # Wait for all background kettles
     # Note: If any kettle fails, we continue running the others
     for pid in "${KETTLE_PIDS[@]}"; do
-      wait "$pid" || echo "$LOG_PREFIX Warning: Kettle process $pid exited with non-zero status"
+      wait "$pid" || echo "Warning: Kettle process $pid exited with non-zero status"
     done
 
   else
     # Single manifest (backward compatible)
-    echo "$LOG_PREFIX MANIFEST environment variable found (single manifest)"
+    echo "MANIFEST environment variable found (single manifest)"
 
     # Create temporary file for decoded manifest
     MANIFEST_FILE="/tmp/kettle-manifest.json"
 
     # Decode base64 manifest and save to temporary file
     if echo "$MANIFEST" | base64 -d > "$MANIFEST_FILE" 2>/dev/null; then
-      echo "$LOG_PREFIX Decoded manifest to $MANIFEST_FILE"
-      echo "$LOG_PREFIX Manifest contents:"
+      echo "Decoded manifest to $MANIFEST_FILE"
+      echo "Manifest contents:"
       cat "$MANIFEST_FILE"
 
       # Launch kettle with the decoded manifest
       exec /usr/bin/kettle launch "$MANIFEST_FILE" --port 3001 --db-dir /var/lib/kettle/db
     else
-      echo "$LOG_PREFIX ERROR: Failed to decode manifest (invalid base64)"
+      echo "ERROR: Failed to decode manifest (invalid base64)"
       exit 1
     fi
   fi
 
 else
-  echo "$LOG_PREFIX No MANIFEST environment variable found"
-  echo "$LOG_PREFIX Using default manifest at /usr/lib/kettle/manifest.json"
+  echo "No MANIFEST environment variable found"
+  echo "Using default manifest at /usr/lib/kettle/manifest.json"
 
   # Fall back to default manifest if it exists
   if [ -f "/usr/lib/kettle/manifest.json" ]; then
     exec /usr/bin/kettle launch /usr/lib/kettle/manifest.json --port 3001 --db-dir /var/lib/kettle/db
   else
-    echo "$LOG_PREFIX ERROR: No manifest available!"
-    echo "$LOG_PREFIX Please set MANIFEST environment variable or provide /usr/lib/kettle/manifest.json"
+    echo "ERROR: No manifest available!"
+    echo "Please set MANIFEST environment variable or provide /usr/lib/kettle/manifest.json"
     exit 1
   fi
 fi

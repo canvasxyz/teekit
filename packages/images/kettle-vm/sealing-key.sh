@@ -20,14 +20,14 @@ echo "Starting SEV-SNP sealing key derivation..."
 
 # Check if we're running on SEV-SNP hardware
 if [ ! -e "$SEV_GUEST_DEV" ]; then
-    echo "$LOG_PREFIX $SEV_GUEST_DEV not found - not running on SEV-SNP hardware"
-    echo "$LOG_PREFIX Exiting (this is expected on TDX or non-confidential VMs)"
+    echo "$SEV_GUEST_DEV not found - not running on SEV-SNP hardware"
+    echo "Exiting (this is expected on TDX or non-confidential VMs)"
     exit 0
 fi
 
 # Check if snpguest is available
 if ! command -v snpguest &> /dev/null; then
-    echo "$LOG_PREFIX ERROR: snpguest command not found"
+    echo "ERROR: snpguest command not found"
     exit 1
 fi
 
@@ -39,27 +39,27 @@ mkdir -p "$KEY_DIR"
 #   vcek - Use Versioned Chip Endorsement Key as root
 #   --vmpl 1 - VM Privilege Level 1 (default for guest kernel)
 #   --guest_field_select 9 - Bind to Policy (bit 0) + Measurement (bit 3) = 0b1001 = 9
-echo "$LOG_PREFIX Deriving sealing key from SEV-SNP hardware..."
+echo "Deriving sealing key from SEV-SNP hardware..."
 
 if ! snpguest key "$KEY_FILE" vcek --vmpl 1 --guest_field_select 9; then
-    echo "$LOG_PREFIX ERROR: Failed to derive sealing key"
+    echo "ERROR: Failed to derive sealing key"
     exit 1
 fi
 
 # Verify the key file was created and has expected size (64 bytes)
 if [ ! -f "$KEY_FILE" ]; then
-    echo "$LOG_PREFIX ERROR: Key file was not created"
+    echo "ERROR: Key file was not created"
     exit 1
 fi
 
 KEY_SIZE=$(stat -c%s "$KEY_FILE")
 if [ "$KEY_SIZE" -ne 64 ]; then
-    echo "$LOG_PREFIX WARNING: Key file size is $KEY_SIZE bytes (expected 64)"
+    echo "WARNING: Key file size is $KEY_SIZE bytes (expected 64)"
 fi
 
 # Set restrictive permissions on the key file
 chmod 600 "$KEY_FILE"
-echo "$LOG_PREFIX Sealing key derived successfully"
-echo "$LOG_PREFIX Key file: $KEY_FILE ($KEY_SIZE bytes)"
-echo "$LOG_PREFIX Key (hex): $(xxd -p -c 64 "$KEY_FILE")"
+echo "Sealing key derived successfully"
+echo "Key file: $KEY_FILE ($KEY_SIZE bytes)"
+echo "Key (hex): $(xxd -p -c 64 "$KEY_FILE")"
 
