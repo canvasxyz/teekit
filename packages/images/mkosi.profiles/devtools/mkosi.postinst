@@ -19,16 +19,6 @@ HASH=$(mkosi-chroot openssl passwd -6 -salt salt "$PASSWORD")
 mkosi-chroot passwd -u root
 mkosi-chroot usermod -p "$HASH" root
 
-# Generate SSH host keys (required for SSH daemon to start)
-echo "Generating SSH host keys..."
-mkosi-chroot ssh-keygen -A || {
-    # Fallback: generate keys manually if ssh-keygen fails
-    echo "ssh-keygen failed, generating keys manually..."
-    mkosi-chroot sh -c 'ssh-keygen -q -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N "" -C ""' || true
-    mkosi-chroot sh -c 'ssh-keygen -q -t ecdsa -b 256 -f /etc/ssh/ssh_host_ecdsa_key -N "" -C ""' || true
-    mkosi-chroot sh -c 'ssh-keygen -q -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N "" -C ""' || true
-}
-
 # Start SSH service
 if [ -f "$BUILDROOT/etc/default/dropbear" ]; then
     # Remove -s, -w, -g flags from dropbear args
@@ -42,6 +32,7 @@ else
     echo "TCPKeepAlive yes" >> "$BUILDROOT/etc/ssh/sshd_config"
     mkosi-chroot systemctl enable ssh.service
     mkosi-chroot systemctl unmask ssh.service ssh.socket
+    mkosi-chroot systemctl enable ssh-keygen.service
 fi
 
 # Create direct shell service for serial console
