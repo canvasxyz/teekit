@@ -207,6 +207,56 @@ create_zone() {
     echo "$response"
 }
 
+# Function to get zone ID by name
+get_zone_id() {
+    local fqdn="$1"
+    local response
+
+    response=$(curl -s "https://dynv6.com/api/v2/zones" \
+        -H "Authorization: Bearer $DYNV6_API_KEY")
+
+    # Extract zone ID for the matching zone name
+    echo "$response" | grep -o "{[^}]*\"name\":\"$fqdn\"[^}]*}" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1
+}
+
+# Function to create or update A record for the zone
+ensure_a_record() {
+    local zone_id="$1"
+    local ip="$2"
+
+    if [ -z "$zone_id" ]; then
+        log_warning "Cannot create A record: zone ID not found"
+        return 1
+    fi
+
+    # First, check if an A record already exists (empty name = root record)
+    local existing_records
+    existing_records=$(curl -s "https://dynv6.com/api/v2/zones/$zone_id/records" \
+        -H "Authorization: Bearer $DYNV6_API_KEY")
+
+    # Look for an existing A record with empty name (root)
+    local existing_a_id
+    existing_a_id=$(echo "$existing_records" | grep -o '{[^}]*"type":"A"[^}]*"name":""[^}]*}' | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1 || true)
+
+    if [ -n "$existing_a_id" ]; then
+        # Update existing A record
+        log_info "Updating existing A record (ID: $existing_a_id) to $ip"
+        curl -s -X PATCH "https://dynv6.com/api/v2/zones/$zone_id/records/$existing_a_id" \
+            -H "Authorization: Bearer $DYNV6_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"data\": \"$ip\"}" > /dev/null
+    else
+        # Create new A record (empty name = root record for the zone)
+        log_info "Creating A record for zone pointing to $ip"
+        curl -s -X POST "https://dynv6.com/api/v2/zones/$zone_id/records" \
+            -H "Authorization: Bearer $DYNV6_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\": \"\", \"type\": \"A\", \"data\": \"$ip\"}" > /dev/null
+    fi
+
+    return 0
+}
+
 # Function to check if zone creation succeeded
 check_zone_response() {
     local response="$1"
@@ -231,28 +281,28 @@ check_zone_response "$RESPONSE" && RESULT=0 || RESULT=$?
 
 if [ $RESULT -eq 0 ]; then
     log_success "Created zone: $HOSTNAME"
+    # Extract zone ID from response and ensure A record exists
+    ZONE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1)
+    if [ -n "$ZONE_ID" ]; then
+        ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
+    fi
 elif [ $RESULT -eq 1 ]; then
-    # Check if the existing hostname already points to our IP
-    EXISTING_IP=$(dig +short "$HOSTNAME" A 2>/dev/null | head -1 || true)
-    if [ "$EXISTING_IP" == "$PUBLIC_IP" ]; then
-        log_success "Hostname '$HOSTNAME' already exists and points to $PUBLIC_IP"
+    # Zone already exists - check if we own it (can get its ID)
+    ZONE_ID=$(get_zone_id "$HOSTNAME")
+    if [ -n "$ZONE_ID" ]; then
+        log_success "Zone '$HOSTNAME' already exists in your account (ID: $ZONE_ID)"
+        # Update the A record to point to our IP
+        ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
     else
-        log_warning "Hostname '$HOSTNAME' is already taken (points to ${EXISTING_IP:-unknown}), trying with hash suffix..."
+        # Zone exists but we don't own it - check if it already points to our IP
+        EXISTING_IP=$(dig +short "$HOSTNAME" A 2>/dev/null | head -1 || true)
+        if [ "$EXISTING_IP" == "$PUBLIC_IP" ]; then
+            log_success "Hostname '$HOSTNAME' already exists and points to $PUBLIC_IP"
+        else
+            log_warning "Hostname '$HOSTNAME' is already taken (points to ${EXISTING_IP:-unknown}), trying with hash suffix..."
 
-        # Generate a short hash and try again
-        HASH=$(openssl rand -hex 2)
-        HOSTNAME="${IP_HOSTNAME}-${HASH}.dynv6.net"
-
-        log_info "Trying: $HOSTNAME"
-
-        RESPONSE=$(create_zone "$HOSTNAME")
-        check_zone_response "$RESPONSE" && RESULT=0 || RESULT=$?
-
-        if [ $RESULT -eq 0 ]; then
-            log_success "Created zone: $HOSTNAME"
-        elif [ $RESULT -eq 1 ]; then
-            # Try one more time with a longer hash
-            HASH=$(openssl rand -hex 4)
+            # Generate a short hash and try again
+            HASH=$(openssl rand -hex 2)
             HOSTNAME="${IP_HOSTNAME}-${HASH}.dynv6.net"
 
             log_info "Trying: $HOSTNAME"
@@ -262,15 +312,36 @@ elif [ $RESULT -eq 1 ]; then
 
             if [ $RESULT -eq 0 ]; then
                 log_success "Created zone: $HOSTNAME"
+                ZONE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1)
+                if [ -n "$ZONE_ID" ]; then
+                    ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
+                fi
+            elif [ $RESULT -eq 1 ]; then
+                # Try one more time with a longer hash
+                HASH=$(openssl rand -hex 4)
+                HOSTNAME="${IP_HOSTNAME}-${HASH}.dynv6.net"
+
+                log_info "Trying: $HOSTNAME"
+
+                RESPONSE=$(create_zone "$HOSTNAME")
+                check_zone_response "$RESPONSE" && RESULT=0 || RESULT=$?
+
+                if [ $RESULT -eq 0 ]; then
+                    log_success "Created zone: $HOSTNAME"
+                    ZONE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1)
+                    if [ -n "$ZONE_ID" ]; then
+                        ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
+                    fi
+                else
+                    log_error "Failed to create zone after multiple attempts"
+                    echo "API Response: $RESPONSE"
+                    exit 1
+                fi
             else
-                log_error "Failed to create zone after multiple attempts"
+                log_error "Failed to create zone: $HOSTNAME"
                 echo "API Response: $RESPONSE"
                 exit 1
             fi
-        else
-            log_error "Failed to create zone: $HOSTNAME"
-            echo "API Response: $RESPONSE"
-            exit 1
         fi
     fi
 else
@@ -467,6 +538,11 @@ echo "Test the hostname:"
 echo "  dig $HOSTNAME"
 echo "  curl http://$HOSTNAME:3001/healthz"
 echo ""
+if [ -n "${VM_NAME:-}" ]; then
+echo "View serial console output:"
+echo "  gcloud compute instances tail-serial-port-output $VM_NAME"
+echo ""
+fi
 echo "Manage your zone at:"
 echo "  https://dynv6.com/zones"
 echo ""
