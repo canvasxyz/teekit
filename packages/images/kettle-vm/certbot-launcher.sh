@@ -14,6 +14,7 @@ NGINX_SITES_ENABLED="${NGINX_CONF_DIR}/sites-enabled"
 CERT_DIR="/etc/letsencrypt/live"
 ACME_WEBROOT="/var/www/letsencrypt"
 MAX_RETRIES_EXTERNAL=5
+CERTBOT_PERSIST="/usr/bin/certbot-persist"
 
 # Tee all output to serial console (with prefix) while preserving stdout/stderr for systemd
 exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
@@ -386,6 +387,77 @@ reload_nginx() {
     return 0
 }
 
+# Try to restore certificates from persistent storage
+# Returns 0 if successful, 1 if need fresh certs
+try_restore_certs() {
+    local hostname="$1"
+
+    log "Checking for cached certificates..."
+
+    # Check if certbot-persist utility exists
+    if [ ! -x "$CERTBOT_PERSIST" ]; then
+        log "certbot-persist utility not found, skipping cache check"
+        return 1
+    fi
+
+    # Check if sealing key is available
+    if ! "$CERTBOT_PERSIST" has-sealing-key; then
+        log "Sealing key not available (TDX or non-confidential), skipping cache"
+        return 1
+    fi
+
+    # Check if persistent storage is mounted
+    if ! "$CERTBOT_PERSIST" has-persistent-storage; then
+        log "Persistent storage not mounted, skipping cache"
+        return 1
+    fi
+
+    # Try to decrypt cached certificates
+    if ! "$CERTBOT_PERSIST" decrypt "$hostname"; then
+        log "No valid cached certificates found"
+        return 1
+    fi
+
+    # Validate the restored certificates
+    if ! "$CERTBOT_PERSIST" validate "$hostname"; then
+        log "Cached certificates invalid or expired, will obtain fresh ones"
+        rm -rf "/etc/letsencrypt"  # Clean up invalid certs
+        return 1
+    fi
+
+    log "Successfully restored certificates from cache!"
+    return 0
+}
+
+# Store certificates to persistent cache after successful ACME
+store_certs_to_cache() {
+    local hostname="$1"
+
+    # Check if we can cache
+    if [ ! -x "$CERTBOT_PERSIST" ]; then
+        return 0
+    fi
+
+    if ! "$CERTBOT_PERSIST" has-sealing-key; then
+        log "Sealing key not available, not caching certificates"
+        return 0
+    fi
+
+    if ! "$CERTBOT_PERSIST" has-persistent-storage; then
+        log "Persistent storage not available, not caching certificates"
+        return 0
+    fi
+
+    # Encrypt and store
+    if "$CERTBOT_PERSIST" encrypt "$hostname"; then
+        log "Certificates cached to persistent storage"
+    else
+        log "Warning: Failed to cache certificates (non-fatal)"
+    fi
+
+    return 0
+}
+
 # Main function
 main() {
     log "=== Starting certbot-launcher ==="
@@ -416,27 +488,40 @@ main() {
     # Create nginx directories
     mkdir -p "$NGINX_SITES_AVAILABLE" "$NGINX_SITES_ENABLED"
 
-    # Create ACME challenge nginx config
-    if ! create_acme_nginx_config "${hostnames[@]}"; then
-        error "Failed to create ACME challenge configuration"
-        exit 1
-    fi
+    # Get the first hostname for certificate naming (Let's Encrypt uses first hostname as cert dir)
+    local first_hostname="${hostnames[0]}"
 
-    # Start nginx for ACME challenge
-    if ! start_nginx; then
-        error "Failed to start nginx for ACME challenge"
-        exit 1
-    fi
+    # Try to restore cached certificates first
+    if try_restore_certs "$first_hostname"; then
+        log "Using restored certificates, skipping ACME challenge"
+    else
+        # Need to obtain fresh certificates via ACME
 
-    # Wait a bit for nginx to be ready
-    sleep 2
+        # Create ACME challenge nginx config
+        if ! create_acme_nginx_config "${hostnames[@]}"; then
+            error "Failed to create ACME challenge configuration"
+            exit 1
+        fi
 
-    # Obtain Let's Encrypt certificate
-    if ! obtain_certificate "${hostnames[@]}"; then
-        error "Failed to obtain certificate, skipping HTTPS configuration"
-        # Don't exit with error - allow kettles to run without HTTPS
-        log "Kettles will run on ports 3001+ without HTTPS proxy"
-        exit 0
+        # Start nginx for ACME challenge
+        if ! start_nginx; then
+            error "Failed to start nginx for ACME challenge"
+            exit 1
+        fi
+
+        # Wait a bit for nginx to be ready
+        sleep 2
+
+        # Obtain Let's Encrypt certificate
+        if ! obtain_certificate "${hostnames[@]}"; then
+            error "Failed to obtain certificate, skipping HTTPS configuration"
+            # Don't exit with error - allow kettles to run without HTTPS
+            log "Kettles will run on ports 3001+ without HTTPS proxy"
+            exit 0
+        fi
+
+        # Cache the new certificates for next boot
+        store_certs_to_cache "$first_hostname"
     fi
 
     # Create production nginx configuration

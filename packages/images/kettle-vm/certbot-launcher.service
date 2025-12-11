@@ -1,6 +1,6 @@
 [Unit]
 Description=Certbot Service
-After=network-setup.service cloud-launcher.service
+After=network-setup.service cloud-launcher.service sealing-key.service persistent-mount.service
 Wants=network-setup.service cloud-launcher.service
 # Optional service - don't block boot if it fails
 DefaultDependencies=no

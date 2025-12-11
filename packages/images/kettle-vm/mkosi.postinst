@@ -76,6 +76,9 @@ install -m 755 "kettle-vm/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
 # Install certbot-launcher
 install -m 755 "kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
 
+# Install certbot-persist utility (encrypts/decrypts certs with sealing key)
+install -m 755 "kettle-vm/certbot-persist.sh" "$BUILDROOT/usr/bin/certbot-persist"
+
 # Install sealing-key (SEV-SNP key derivation)
 install -m 755 "kettle-vm/sealing-key.sh" "$BUILDROOT/usr/bin/sealing-key"
 

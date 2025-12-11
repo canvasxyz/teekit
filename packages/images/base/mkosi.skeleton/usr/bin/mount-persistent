@@ -1,0 +1,186 @@
+#!/bin/bash
+set -euo pipefail
+
+# mount-persistent.sh - Mount persistent storage from the boot disk
+#
+# The VM boots from a UKI (Unified Kernel Image) that runs entirely from RAM.
+# The boot disk, typically 200GB, is mostly unused after EFI loads the UKI.
+# We use a partition on the boot disk for persistent storage.
+#
+# Strategy:
+# 1. Find the boot disk (has EFI partition)
+# 2. Look for or create a "persistent" partition (partition 2)
+# 3. Format if needed, then mount to /persistent
+
+LOG_PREFIX="[mount-persistent]"
+SERIAL_CONSOLE="/dev/ttyS0"
+MOUNT_POINT="/persistent"
+
+# Tee output to serial console for debugging
+exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
+}
+
+error() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
+}
+
+# Detect the boot disk by finding the disk with an EFI partition
+detect_boot_disk() {
+    # Check common boot disk devices
+    for disk in /dev/sda /dev/nvme0n1 /dev/vda /dev/xvda; do
+        if [ -b "$disk" ]; then
+            # Check if this disk has an EFI partition (partition 1 with EFI type)
+            local part1=""
+            if [[ "$disk" == /dev/nvme* ]]; then
+                part1="${disk}p1"
+            else
+                part1="${disk}1"
+            fi
+
+            if [ -b "$part1" ]; then
+                # Check if it's an EFI partition by looking at partition type or filesystem
+                if blkid "$part1" 2>/dev/null | grep -qiE "TYPE=\"vfat\"|PARTLABEL=\"EFI"; then
+                    echo "$disk"
+                    return 0
+                fi
+                # Also check via lsblk if blkid doesn't show it
+                if lsblk -no PARTTYPE "$part1" 2>/dev/null | grep -qi "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"; then
+                    echo "$disk"
+                    return 0
+                fi
+            fi
+        fi
+    done
+
+    # Fallback: just use the first available disk
+    for disk in /dev/sda /dev/nvme0n1 /dev/vda; do
+        if [ -b "$disk" ]; then
+            echo "$disk"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Get the partition device name for a given disk and partition number
+get_partition_device() {
+    local disk="$1"
+    local partnum="$2"
+
+    if [[ "$disk" == /dev/nvme* ]] || [[ "$disk" == /dev/loop* ]]; then
+        echo "${disk}p${partnum}"
+    else
+        echo "${disk}${partnum}"
+    fi
+}
+
+# Check if disk has a filesystem
+has_filesystem() {
+    local disk="$1"
+    blkid "$disk" 2>/dev/null | grep -q "TYPE="
+}
+
+# Create a partition on the boot disk for persistent storage
+create_persistent_partition() {
+    local disk="$1"
+    local part_device="$2"
+
+    log "Creating persistent partition on $disk..."
+
+    # Use sfdisk to add partition 2 (after EFI partition)
+    # Start at 1GB offset to leave room for EFI, use rest of disk
+    # We use a simple approach: partition 2 starting at sector 2099200 (1GB with 512-byte sectors)
+
+    # First, check current partition table
+    if sfdisk -d "$disk" 2>/dev/null | grep -q "^${part_device}"; then
+        log "Partition already exists in partition table"
+        return 0
+    fi
+
+    # Add partition 2 using sfdisk
+    # Start after 1GB, type 83 (Linux)
+    echo "2097152,,L" | sfdisk --append "$disk" 2>&1 || {
+        error "Failed to create partition with sfdisk"
+        return 1
+    }
+
+    # Wait for kernel to recognize the new partition
+    partprobe "$disk" 2>/dev/null || true
+    sleep 2
+
+    # Verify partition was created
+    if [ ! -b "$part_device" ]; then
+        error "Partition device $part_device not found after creation"
+        return 1
+    fi
+
+    log "Created partition: $part_device"
+    return 0
+}
+
+# Main
+log "Starting persistent storage mount..."
+
+# Check if already mounted
+if mount | grep -q " $MOUNT_POINT "; then
+    log "$MOUNT_POINT is already mounted"
+    exit 0
+fi
+
+# Detect boot disk
+BOOT_DISK=""
+if ! BOOT_DISK=$(detect_boot_disk); then
+    log "Could not detect boot disk, skipping persistent mount"
+    exit 0
+fi
+log "Detected boot disk: $BOOT_DISK"
+
+# Determine partition device for persistent storage (partition 2)
+PERSISTENT_PART=$(get_partition_device "$BOOT_DISK" 2)
+log "Persistent partition device: $PERSISTENT_PART"
+
+# Check if partition exists, create if not
+if [ ! -b "$PERSISTENT_PART" ]; then
+    log "Persistent partition does not exist, creating..."
+    if ! create_persistent_partition "$BOOT_DISK" "$PERSISTENT_PART"; then
+        error "Failed to create persistent partition"
+        log "Continuing without persistent storage"
+        exit 0
+    fi
+fi
+
+# Format if needed (first boot or empty partition)
+if ! has_filesystem "$PERSISTENT_PART"; then
+    log "No filesystem found on $PERSISTENT_PART, formatting with ext4..."
+    if ! mkfs.ext4 -F -L persistent "$PERSISTENT_PART" 2>&1; then
+        error "Failed to format $PERSISTENT_PART"
+        exit 1
+    fi
+    log "Formatted $PERSISTENT_PART with ext4"
+fi
+
+# Create mount point
+mkdir -p "$MOUNT_POINT"
+
+# Mount the partition
+log "Mounting $PERSISTENT_PART to $MOUNT_POINT..."
+if ! mount "$PERSISTENT_PART" "$MOUNT_POINT" 2>&1; then
+    error "Failed to mount $PERSISTENT_PART to $MOUNT_POINT"
+    exit 1
+fi
+
+# Set permissions
+chmod 755 "$MOUNT_POINT"
+
+log "Successfully mounted $PERSISTENT_PART to $MOUNT_POINT"
+
+# Show disk info
+df -h "$MOUNT_POINT" | tail -1 | while read -r line; do
+    log "Disk info: $line"
+done
+
+exit 0
