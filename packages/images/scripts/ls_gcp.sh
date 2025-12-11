@@ -87,8 +87,8 @@ else
     VM_COUNT=$(echo "$VM_LIST" | wc -l)
     log_success "Found $VM_COUNT VM(s)"
     echo ""
-    printf "${GREEN}%-30s %-20s %-12s %-18s %-25s${NC}\n" "NAME" "ZONE" "STATUS" "EXTERNAL IP" "MACHINE TYPE"
-    printf "%s\n" "$(printf '%.0s-' {1..110})"
+    printf "${GREEN}%-25s %-18s %-12s %-18s %-25s${NC}\n" "NAME" "ZONE" "STATUS" "EXTERNAL IP" "MACHINE TYPE"
+    printf "%s\n" "$(printf '%.0s-' {1..90})"
 
     echo "$VM_LIST" | while IFS=',' read -r name zone status external_ip machine_type; do
         # Handle empty external IP
@@ -111,11 +111,11 @@ else
             status_display="${RED}${status}${NC}"
         fi
 
-        printf "%-30s %-20s %-23b %-18s %-25s\n" "$name" "$zone" "$status_display" "$external_ip" "$machine_type"
+        printf "%-25s %-18s %-23b %-18s %-18s\n" "$name" "$zone" "$status_display" "$external_ip" "$machine_type"
 
-        # Show service URLs for running VMs with external IPs
-        if [[ "$status" == "RUNNING" ]] && [ "$external_ip" != "-" ]; then
-            printf "%-30s %-20s %-12s ${CYAN}http://%s:3001${NC}\n" "" "" "" "$external_ip"
+        # Show service URLs for running VMs with external IPs (only for valid TEE instances)
+        if [[ "$status" == "RUNNING" ]] && [ "$external_ip" != "-" ] && [[ "$name" =~ ^(kettle-) ]]; then
+            printf "%-25s %-18s %-12s ${CYAN}http://%s:3001${NC}\n" "" "" "" "$external_ip"
         fi
     done
 fi
@@ -133,8 +133,8 @@ else
     DISK_COUNT=$(echo "$DISK_LIST" | wc -l)
     log_success "Found $DISK_COUNT disk(s)"
     echo ""
-    printf "${GREEN}%-40s %-20s %-12s %-10s %-30s${NC}\n" "NAME" "ZONE" "SIZE (GB)" "STATUS" "ATTACHED TO"
-    printf "%s\n" "$(printf '%.0s-' {1..115})"
+    printf "${GREEN}%-25s %-20s %-12s %-10s %-20s${NC}\n" "NAME" "ZONE" "SIZE (GB)" "STATUS" "ATTACHED TO"
+    printf "%s\n" "$(printf '%.0s-' {1..90})"
 
     echo "$DISK_LIST" | while IFS=',' read -r name zone size status users; do
         # Extract just the zone name
@@ -147,7 +147,7 @@ else
             attached_to=$(basename "$users" 2>/dev/null || echo "$users")
         fi
 
-        printf "%-40s %-20s %-12s %-10s %-30s\n" "$name" "$zone" "$size" "$status" "$attached_to"
+        printf "%-25s %-20s %-12s %-10s %-20s\n" "$name" "$zone" "$size" "$status" "$attached_to"
     done
 fi
 
@@ -195,8 +195,8 @@ else
         BLOB_COUNT=$(echo "$BLOB_LIST" | wc -l)
         log_success "Found $BLOB_COUNT tar.gz blob(s)"
         echo ""
-        printf "${GREEN}%-60s %-15s %-25s${NC}\n" "BLOB NAME" "SIZE" "CREATED"
-        printf "%s\n" "$(printf '%.0s-' {1..100})"
+        printf "${GREEN}%-50s %-15s %-25s${NC}\n" "BLOB NAME" "SIZE" "CREATED"
+        printf "%s\n" "$(printf '%.0s-' {1..90})"
 
         echo "$BLOB_LIST" | while read -r size created blob_path; do
             # Extract just the blob name
@@ -212,7 +212,7 @@ else
             # Truncate timestamp
             created="${created:0:19}"
 
-            printf "%-60s %-15s %-25s\n" "$blob_name" "$size_hr" "$created"
+            printf "%-50s %-15s %-25s\n" "$blob_name" "$size_hr" "$created"
         done
     fi
 fi
@@ -223,7 +223,7 @@ fi
 log_section "FIREWALL RULES (TDX)"
 
 # List firewall rules related to TDX
-FIREWALL_LIST=$(gcloud compute firewall-rules list --filter="name~'tdx' OR targetTags~'tdx'" --format="csv[no-heading](name,direction,allowed,targetTags)" 2>/dev/null || echo "")
+FIREWALL_LIST=$(gcloud compute firewall-rules list --filter="name~'tdx' OR targetTags~'tdx'" --format="csv[no-heading](name,direction,targetTags,allowed)" 2>/dev/null || echo "")
 
 if [ -z "$FIREWALL_LIST" ]; then
     log_warning "No TDX-related firewall rules found"
@@ -231,14 +231,30 @@ else
     FIREWALL_COUNT=$(echo "$FIREWALL_LIST" | wc -l)
     log_success "Found $FIREWALL_COUNT firewall rule(s)"
     echo ""
-    printf "${GREEN}%-30s %-12s %-40s %-20s${NC}\n" "NAME" "DIRECTION" "ALLOWED" "TARGET TAGS"
-    printf "%s\n" "$(printf '%.0s-' {1..105})"
+    printf "${GREEN}%-20s %-10s %-12s %-10s %-10s${NC}\n" "NAME" "DIRECTION" "TARGET" "PROTOCOL" "PORTS"
+    printf "%s\n" "$(printf '%.0s-' {1..90})"
 
-    echo "$FIREWALL_LIST" | while IFS=',' read -r name direction allowed tags; do
-        # Clean up allowed rules format
-        allowed=$(echo "$allowed" | tr "'" '"' | sed 's/\[//g' | sed 's/\]//g')
+    echo "$FIREWALL_LIST" | while IFS=',' read -r name direction tags allowed; do
+        # The allowed field may contain multiple rules separated by semicolons
+        # Each rule is like: {'IPProtocol': 'tcp', 'ports': ['80']}
+        # Convert to JSON array and parse
 
-        printf "%-30s %-12s %-40s %-20s\n" "$name" "$direction" "$allowed" "$tags"
+        # Remove quotes around each object, replace semicolon separators with commas, convert single to double quotes
+        allowed_clean=$(echo "$allowed" | sed 's/";"/,/g; s/^"//; s/"$//' | tr "'" '"')
+
+        # Build a JSON array
+        allowed_array="[$allowed_clean]"
+
+        # Extract protocols and ports
+        protocol=$(echo "$allowed_array" | jq -r '[.[].IPProtocol] | unique | join(",")' 2>/dev/null || echo "-")
+        ports=$(echo "$allowed_array" | jq -r '[.[].ports[]?] | unique | join(",")' 2>/dev/null || echo "-")
+
+        # Handle empty values
+        [ -z "$protocol" ] && protocol="-"
+        [ -z "$ports" ] && ports="-"
+        [ -z "$tags" ] && tags="-"
+
+        printf "%-20s %-10s %-12s %-10s %-10s\n" "$name" "$direction" "$tags" "$protocol" "$ports"
     done
 fi
 
