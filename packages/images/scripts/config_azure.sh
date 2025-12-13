@@ -1,17 +1,16 @@
 #!/bin/bash
 #
-# Configures a dynv6 dynamic DNS zone for an Azure VM.
+# Configures a hostname for an Azure VM for TLS certificate acquisition.
 # Usage: ./config_azure.sh
 #
 # The script will:
-# 1. Prompt for a dynv6 API key (saved to .dynv6_api_key)
-# 2. Prompt for an Azure VM name or IP address
-# 3. Create a dynv6 zone with a hostname based on the IP
-# 4. Wait for DNS propagation
+# 1. Prompt for an Azure VM name or IP address
+# 2. Let user choose between sslip.io (automatic) or a custom domain
+# 3. Set the hostname metadata on the VM
+# 4. Optionally restart the VM to acquire TLS certificates
 #
 # Prerequisites:
 # - Azure CLI installed and logged in (if using VM name)
-# - curl installed
 #
 
 set -euo pipefail
@@ -48,41 +47,17 @@ log_step() {
 
 # Default resource group (same as deploy_azure.sh)
 RESOURCE_GROUP="tdx-group"
-DYNV6_API_KEY_FILE=".dynv6_api_key"
-DYNV6_AZURE_NAME_FILE=".dynv6_azure_name"
+AZURE_NAME_FILE=".vm_name_azure"
 
 # ============================================================================
-# STEP 1: Get dynv6 API key
-# ============================================================================
-log_step "Configuring dynv6 API key"
-
-if [ -f "$DYNV6_API_KEY_FILE" ]; then
-    DYNV6_API_KEY=$(cat "$DYNV6_API_KEY_FILE")
-    log_success "Using existing API key from $DYNV6_API_KEY_FILE"
-else
-    echo ""
-    log_info "You can find your dynv6 API key under 'HTTP Tokens' at: https://dynv6.com/keys"
-    read -p "Enter your dynv6 API key: " DYNV6_API_KEY
-
-    if [ -z "$DYNV6_API_KEY" ]; then
-        log_error "API key is required"
-        exit 1
-    fi
-
-    echo "$DYNV6_API_KEY" > "$DYNV6_API_KEY_FILE"
-    chmod 600 "$DYNV6_API_KEY_FILE"
-    log_success "Saved API key to $DYNV6_API_KEY_FILE"
-fi
-
-# ============================================================================
-# STEP 2: Get VM IP address
+# STEP 1: Get VM IP address
 # ============================================================================
 log_step "Getting VM IP address"
 
 # Check for cached VM name/IP
 CACHED_VM_INPUT=""
-if [ -f "$DYNV6_AZURE_NAME_FILE" ]; then
-    CACHED_VM_INPUT=$(cat "$DYNV6_AZURE_NAME_FILE")
+if [ -f "$AZURE_NAME_FILE" ]; then
+    CACHED_VM_INPUT=$(cat "$AZURE_NAME_FILE")
 fi
 
 echo ""
@@ -103,7 +78,7 @@ if [ -z "$VM_INPUT" ]; then
 fi
 
 # Save for next time
-echo "$VM_INPUT" > "$DYNV6_AZURE_NAME_FILE"
+echo "$VM_INPUT" > "$AZURE_NAME_FILE"
 
 # Check if input looks like an IP address
 if [[ "$VM_INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -140,236 +115,80 @@ else
 fi
 
 # ============================================================================
-# STEP 3: Generate hostname and create dynv6 zone
+# STEP 2: Choose hostname type
 # ============================================================================
-log_step "Creating dynv6 zone"
+log_step "Configuring hostname"
 
-# Convert IP to hostname format (dots to dashes)
-IP_HOSTNAME=$(echo "$PUBLIC_IP" | tr '.' '-')
-DEFAULT_HOSTNAME="${IP_HOSTNAME}.dynv6.net"
+# Default sslip.io hostname
+DEFAULT_HOSTNAME="${PUBLIC_IP}.sslip.io"
 
 echo ""
-log_info "Default hostname: $DEFAULT_HOSTNAME"
-read -p "Enter hostname (or press Enter for default): " USER_HOSTNAME
+log_info "Choose how to configure the hostname for TLS certificates:"
+echo ""
+echo "  1) Use sslip.io (automatic DNS based on IP address)"
+echo "     Hostname will be: $DEFAULT_HOSTNAME"
+echo ""
+echo "  2) Use a custom domain (you manage DNS)"
+echo "     You'll need to configure DNS to point to: $PUBLIC_IP"
+echo ""
+read -p "Enter choice [1]: " HOSTNAME_CHOICE
 
-if [ -z "$USER_HOSTNAME" ]; then
+if [ -z "$HOSTNAME_CHOICE" ] || [ "$HOSTNAME_CHOICE" == "1" ]; then
     HOSTNAME="$DEFAULT_HOSTNAME"
+    log_success "Using sslip.io hostname: $HOSTNAME"
+elif [ "$HOSTNAME_CHOICE" == "2" ]; then
+    echo ""
+    log_info "Enter your custom domain (e.g., myvm.example.com)"
+    log_info "Make sure DNS is configured to point this domain to: $PUBLIC_IP"
+    read -p "Custom domain: " CUSTOM_HOSTNAME
+
+    if [ -z "$CUSTOM_HOSTNAME" ]; then
+        log_error "Custom domain is required"
+        exit 1
+    fi
+
+    # Basic validation - must look like a hostname
+    if [[ ! "$CUSTOM_HOSTNAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$ ]]; then
+        log_error "Invalid hostname format: $CUSTOM_HOSTNAME"
+        exit 1
+    fi
+
+    HOSTNAME="$CUSTOM_HOSTNAME"
+    log_success "Using custom hostname: $HOSTNAME"
+    echo ""
+    log_warning "Remember to configure DNS for '$HOSTNAME' to point to $PUBLIC_IP"
 else
-    # Ensure it ends with .dynv6.net
-    if [[ ! "$USER_HOSTNAME" =~ \.dynv6\.net$ ]]; then
-        HOSTNAME="${USER_HOSTNAME}.dynv6.net"
-    else
-        HOSTNAME="$USER_HOSTNAME"
-    fi
-fi
-
-# Extract zone name (without .dynv6.net)
-ZONE_NAME="${HOSTNAME%.dynv6.net}"
-
-log_info "Creating zone: $HOSTNAME"
-
-# Function to create zone (expects fully qualified name like "foo.dynv6.net")
-create_zone() {
-    local fqdn="$1"
-    local response
-
-    response=$(curl -s -X POST "https://dynv6.com/api/v2/zones" \
-        -H "Authorization: Bearer $DYNV6_API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "{\"name\": \"$fqdn\", \"ipv4address\": \"$PUBLIC_IP\"}")
-
-    echo "$response"
-}
-
-# Function to get zone ID by name
-get_zone_id() {
-    local fqdn="$1"
-    local response
-
-    response=$(curl -s "https://dynv6.com/api/v2/zones" \
-        -H "Authorization: Bearer $DYNV6_API_KEY")
-
-    # Extract zone ID for the matching zone name
-    echo "$response" | grep -o "{[^}]*\"name\":\"$fqdn\"[^}]*}" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1
-}
-
-# Function to create or update A record for the zone
-ensure_a_record() {
-    local zone_id="$1"
-    local ip="$2"
-
-    if [ -z "$zone_id" ]; then
-        log_warning "Cannot create A record: zone ID not found"
-        return 1
-    fi
-
-    # First, check if an A record already exists (empty name = root record)
-    local existing_records
-    existing_records=$(curl -s "https://dynv6.com/api/v2/zones/$zone_id/records" \
-        -H "Authorization: Bearer $DYNV6_API_KEY")
-
-    # Look for an existing A record with empty name (root)
-    local existing_a_id
-    existing_a_id=$(echo "$existing_records" | grep -o '{[^}]*"type":"A"[^}]*"name":""[^}]*}' | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1 || true)
-
-    if [ -n "$existing_a_id" ]; then
-        # Update existing A record
-        log_info "Updating existing A record (ID: $existing_a_id) to $ip"
-        curl -s -X PATCH "https://dynv6.com/api/v2/zones/$zone_id/records/$existing_a_id" \
-            -H "Authorization: Bearer $DYNV6_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"data\": \"$ip\"}" > /dev/null
-    else
-        # Create new A record (empty name = root record for the zone)
-        log_info "Creating A record for zone pointing to $ip"
-        curl -s -X POST "https://dynv6.com/api/v2/zones/$zone_id/records" \
-            -H "Authorization: Bearer $DYNV6_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"name\": \"\", \"type\": \"A\", \"data\": \"$ip\"}" > /dev/null
-    fi
-
-    return 0
-}
-
-# Function to check if zone creation succeeded
-check_zone_response() {
-    local response="$1"
-
-    # Check for success (response contains zone ID)
-    if echo "$response" | grep -q '"id"'; then
-        return 0
-    fi
-
-    # Check for "already taken" error
-    if echo "$response" | grep -qi "already taken\|already exists\|already in use"; then
-        return 1
-    fi
-
-    # Other error
-    return 2
-}
-
-# Try to create the zone
-RESPONSE=$(create_zone "$HOSTNAME")
-check_zone_response "$RESPONSE" && RESULT=0 || RESULT=$?
-
-if [ $RESULT -eq 0 ]; then
-    log_success "Created zone: $HOSTNAME"
-    # Extract zone ID from response and ensure A record exists
-    ZONE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1)
-    if [ -n "$ZONE_ID" ]; then
-        ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
-    fi
-elif [ $RESULT -eq 1 ]; then
-    # Zone already exists - check if we own it (can get its ID)
-    ZONE_ID=$(get_zone_id "$HOSTNAME")
-    if [ -n "$ZONE_ID" ]; then
-        log_success "Zone '$HOSTNAME' already exists in your account (ID: $ZONE_ID)"
-        # Update the A record to point to our IP
-        ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
-    else
-        # Zone exists but we don't own it - check if it already points to our IP
-        EXISTING_IP=$(dig +short "$HOSTNAME" A 2>/dev/null | head -1 || true)
-        if [ "$EXISTING_IP" == "$PUBLIC_IP" ]; then
-            log_success "Hostname '$HOSTNAME' already exists and points to $PUBLIC_IP"
-        else
-            log_warning "Hostname '$HOSTNAME' is already taken (points to ${EXISTING_IP:-unknown}), trying with hash suffix..."
-
-            # Generate a short hash and try again
-            HASH=$(openssl rand -hex 2)
-            HOSTNAME="${IP_HOSTNAME}-${HASH}.dynv6.net"
-
-            log_info "Trying: $HOSTNAME"
-
-            RESPONSE=$(create_zone "$HOSTNAME")
-            check_zone_response "$RESPONSE" && RESULT=0 || RESULT=$?
-
-            if [ $RESULT -eq 0 ]; then
-                log_success "Created zone: $HOSTNAME"
-                ZONE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1)
-                if [ -n "$ZONE_ID" ]; then
-                    ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
-                fi
-            elif [ $RESULT -eq 1 ]; then
-                # Try one more time with a longer hash
-                HASH=$(openssl rand -hex 4)
-                HOSTNAME="${IP_HOSTNAME}-${HASH}.dynv6.net"
-
-                log_info "Trying: $HOSTNAME"
-
-                RESPONSE=$(create_zone "$HOSTNAME")
-                check_zone_response "$RESPONSE" && RESULT=0 || RESULT=$?
-
-                if [ $RESULT -eq 0 ]; then
-                    log_success "Created zone: $HOSTNAME"
-                    ZONE_ID=$(echo "$RESPONSE" | grep -o '"id":[0-9]*' | grep -o '[0-9]*' | head -1)
-                    if [ -n "$ZONE_ID" ]; then
-                        ensure_a_record "$ZONE_ID" "$PUBLIC_IP"
-                    fi
-                else
-                    log_error "Failed to create zone after multiple attempts"
-                    echo "API Response: $RESPONSE"
-                    exit 1
-                fi
-            else
-                log_error "Failed to create zone: $HOSTNAME"
-                echo "API Response: $RESPONSE"
-                exit 1
-            fi
-        fi
-    fi
-else
-    log_error "Failed to create zone: $HOSTNAME"
-    echo "API Response: $RESPONSE"
+    log_error "Invalid choice: $HOSTNAME_CHOICE"
     exit 1
 fi
 
 # ============================================================================
-# STEP 4: Wait for DNS propagation
+# STEP 3: Verify DNS resolution (quick check)
 # ============================================================================
-log_step "Waiting for DNS propagation"
+log_step "Verifying DNS resolution"
 
 echo ""
-log_info "Checking DNS resolution for: $HOSTNAME"
-log_info "Expected IP: $PUBLIC_IP"
-log_info "You can press Ctrl+C to exit at any time once we're waiting."
-echo ""
+log_info "Checking if $HOSTNAME resolves to $PUBLIC_IP..."
 
-MAX_ATTEMPTS=60
-ATTEMPT=0
-SLEEP_SECONDS=10
+RESOLVED_IP=$(dig +short "$HOSTNAME" A 2>/dev/null | head -1 || true)
 
-while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-    ATTEMPT=$((ATTEMPT + 1))
-
-    # Try to resolve the hostname
-    RESOLVED_IP=$(dig +short "$HOSTNAME" A 2>/dev/null | head -1 || true)
-
-    if [ "$RESOLVED_IP" == "$PUBLIC_IP" ]; then
-        echo ""
-        log_success "DNS propagation complete!"
-        log_success "$HOSTNAME -> $PUBLIC_IP"
-        break
-    fi
-
-    if [ -n "$RESOLVED_IP" ]; then
-        echo -ne "\r${YELLOW}[WAITING]${NC} Attempt $ATTEMPT/$MAX_ATTEMPTS: Resolved to '$RESOLVED_IP' (expected: $PUBLIC_IP)    "
+if [ "$RESOLVED_IP" == "$PUBLIC_IP" ]; then
+    log_success "DNS verified: $HOSTNAME -> $PUBLIC_IP"
+elif [ -n "$RESOLVED_IP" ]; then
+    log_warning "DNS resolves to $RESOLVED_IP instead of $PUBLIC_IP"
+    log_info "Proceeding anyway - make sure DNS is configured correctly."
+else
+    if [[ "$HOSTNAME" == *".sslip.io" ]]; then
+        log_warning "Could not verify DNS (sslip.io may be temporarily unavailable)"
+        log_info "sslip.io should resolve automatically - proceeding."
     else
-        echo -ne "\r${YELLOW}[WAITING]${NC} Attempt $ATTEMPT/$MAX_ATTEMPTS: No DNS response yet...                              "
+        log_warning "DNS does not resolve yet for $HOSTNAME"
+        log_info "Make sure to configure DNS before the VM tries to get certificates."
     fi
-
-    sleep $SLEEP_SECONDS
-done
-
-if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
-    echo ""
-    log_warning "DNS propagation check timed out after $((MAX_ATTEMPTS * SLEEP_SECONDS)) seconds"
-    log_info "The zone was created successfully. DNS may still propagate later."
-    log_info "You can check manually with: dig $HOSTNAME"
 fi
 
 # ============================================================================
-# STEP 5: Update Azure VM metadata (if VM name was provided)
+# STEP 4: Update Azure VM metadata
 # ============================================================================
 log_step "Updating Azure VM metadata"
 
@@ -420,7 +239,7 @@ else
 fi
 
 # ============================================================================
-# STEP 6: Reboot VM (if hostname was set)
+# STEP 5: Reboot VM (if hostname was set)
 # ============================================================================
 if [ "$HOSTNAME_TAG_SET" = true ]; then
     echo ""
@@ -505,6 +324,3 @@ echo "View serial console output:"
 echo "  az serial-console connect --name $VM_NAME --resource-group $RESOURCE_GROUP"
 echo ""
 fi
-echo "Manage your zone at:"
-echo "  https://dynv6.com/zones"
-echo ""
