@@ -2,7 +2,7 @@
 #
 # Redeploys an existing GCP VM with a new image while preserving its IP address and metadata.
 #
-# Usage: ./redeploy_gcp.sh <tar.gz-file> [--tdx|--sev-snp] [vm-name] [--zone=ZONE] [--dry-run]
+# Usage: ./redeploy_gcp.sh <tar.gz-file> <--tdx|--sev-snp> [vm-name] [--zone=ZONE] [--dry-run]
 #
 # The script will:
 # 1. Capture the existing VM's configuration (IP, metadata, machine type, etc.)
@@ -17,18 +17,17 @@
 #
 # Arguments:
 #   tar.gz-file    Path to the tar.gz file to deploy (required)
-#   --tdx          Deploy to Intel TDX machine (default)
-#   --sev-snp      Deploy to AMD SEV-SNP machine
+#   --tdx          Deploy to Intel TDX machine (required: must specify --tdx or --sev-snp)
+#   --sev-snp      Deploy to AMD SEV-SNP machine (required: must specify --tdx or --sev-snp)
 #   vm-name        Name of the VM to redeploy (optional, uses cache or prompts)
 #   --zone=ZONE    Zone where the VM is located (default: us-central1-a)
 #   --dry-run      Show what would be done without making changes
 #
 # Examples:
-#   ./redeploy_gcp.sh build/kettle-vm.tar.gz                    # Prompts for VM name
-#   ./redeploy_gcp.sh build/kettle-vm.tar.gz my-vm              # TDX by default
+#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --tdx              # Prompts for VM name
 #   ./redeploy_gcp.sh build/kettle-vm.tar.gz --tdx my-vm
 #   ./redeploy_gcp.sh build/kettle-vm.tar.gz --sev-snp my-vm
-#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --dry-run          # Uses cached VM name
+#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --tdx --dry-run    # Uses cached VM name
 #
 
 set -euo pipefail
@@ -101,24 +100,23 @@ cleanup_on_failure() {
 
 # Validate arguments - need at least the tar.gz file
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <tar.gz-file> [--tdx|--sev-snp] [vm-name] [--zone=ZONE] [--dry-run]"
+    echo "Usage: $0 <tar.gz-file> <--tdx|--sev-snp> [vm-name] [--zone=ZONE] [--dry-run]"
     echo ""
     echo "Arguments:"
     echo "  tar.gz-file  Path to the tar.gz file to deploy (required)"
     echo ""
     echo "Options:"
-    echo "  --tdx        Deploy to Intel TDX machine (default)"
-    echo "  --sev-snp    Deploy to AMD SEV-SNP machine"
+    echo "  --tdx        Deploy to Intel TDX machine (required: must specify --tdx or --sev-snp)"
+    echo "  --sev-snp    Deploy to AMD SEV-SNP machine (required: must specify --tdx or --sev-snp)"
     echo "  vm-name      Name of the existing VM to redeploy (uses cache or prompts if omitted)"
     echo "  --zone=ZONE  Zone where the VM is located (default: $DEFAULT_ZONE)"
     echo "  --dry-run    Show what would be done without making changes"
     echo ""
     echo "Examples:"
-    echo "  $0 build/kettle-vm.tar.gz                    # Prompts for VM name"
-    echo "  $0 build/kettle-vm.tar.gz my-vm              # TDX by default"
+    echo "  $0 build/kettle-vm.tar.gz --tdx              # Prompts for VM name"
     echo "  $0 build/kettle-vm.tar.gz --tdx my-vm"
     echo "  $0 build/kettle-vm.tar.gz --sev-snp my-vm"
-    echo "  $0 build/kettle-vm.tar.gz --dry-run          # Uses cached VM name"
+    echo "  $0 build/kettle-vm.tar.gz --tdx --dry-run    # Uses cached VM name"
     exit 1
 fi
 
@@ -127,11 +125,11 @@ TAR_FILE="$1"
 shift
 
 # Initialize defaults
-TEE_TYPE="tdx"
-CONFIDENTIAL_TYPE="TDX"
-NEW_MACHINE_TYPE="c3-standard-4"
-IMAGE_OS_FEATURES="UEFI_COMPATIBLE,VIRTIO_SCSI_MULTIQUEUE,GVNIC,TDX_CAPABLE"
-VM_TAG="tdx-vm"
+TEE_TYPE=""
+CONFIDENTIAL_TYPE=""
+NEW_MACHINE_TYPE=""
+IMAGE_OS_FEATURES=""
+VM_TAG=""
 VM_NAME=""
 VM_ZONE="$DEFAULT_ZONE"
 DRY_RUN=false
@@ -170,6 +168,18 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Validate that TEE type was specified
+if [ -z "$TEE_TYPE" ]; then
+    log_error "Must specify either --tdx or --sev-snp"
+    echo ""
+    echo "Usage: $0 <tar.gz-file> <--tdx|--sev-snp> [vm-name] [--zone=ZONE] [--dry-run]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 build/kettle-vm.tar.gz --tdx my-vm"
+    echo "  $0 build/kettle-vm.tar.gz --sev-snp my-vm"
+    exit 1
+fi
 
 # Validate tar.gz file exists
 if [ ! -f "$TAR_FILE" ]; then
