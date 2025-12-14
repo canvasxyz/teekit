@@ -1,6 +1,6 @@
 {
 	"name": "@teekit/demo",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -14,8 +14,8 @@
 	"dependencies": {
 		"@hono/node-server": "^1.14.3",
 		"@scure/base": "^2.0.0",
-		"@teekit/qvl": "0.0.4",
-		"@teekit/tunnel": "0.0.4",
+		"@teekit/qvl": "0.0.5",
+		"@teekit/tunnel": "0.0.5",
 		"cors": "^2.8.5",
 		"hono": "^4.7.5",
 		"isomorphic-ws": "^5.0.0",

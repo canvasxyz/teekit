@@ -1,6 +1,6 @@
 {
 	"name": "@teekit/kettle",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"type": "module",
 	"bin": {
 		"kettle": "services/lib/cli.js"
@@ -24,8 +24,8 @@
 	"dependencies": {
 		"@libsql/client": "^0.15.15",
 		"@scure/base": "^2.0.0",
-		"@teekit/qvl": "0.0.4",
-		"@teekit/tunnel": "0.0.4",
+		"@teekit/qvl": "0.0.5",
+		"@teekit/tunnel": "0.0.5",
 		"cbor-x": "^1.6.0",
 		"colorette": "^2.0.20",
 		"hono": "^4.7.5",
@@ -70,6 +70,8 @@
 		"files": [
 			"test/**/*.test.ts"
 		],
-		"environmentVariables": ["KETTLE_TESTING=1"]
+		"environmentVariables": [
+			"KETTLE_TESTING=1"
+		]
 	}
 }
