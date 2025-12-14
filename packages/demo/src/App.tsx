@@ -19,7 +19,7 @@ import type {
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
 
-const REMOTE = "https://136-112-93-209.dynv6.net"
+const REMOTE = "https://136.112.93.209.nip.io"
 export const baseUrl = document.location.search.includes("remote=1")
   ? REMOTE
   : document.location.hostname === "localhost"
