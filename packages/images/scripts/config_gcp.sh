@@ -144,24 +144,31 @@ fi
 # ============================================================================
 log_step "Configuring hostname"
 
-# Default sslip.io hostname
-DEFAULT_HOSTNAME="${PUBLIC_IP}.sslip.io"
+# Default hostnames
+SSLIP_HOSTNAME="${PUBLIC_IP}.sslip.io"
+NIP_HOSTNAME="${PUBLIC_IP}.nip.io"
 
 echo ""
 log_info "Choose how to configure the hostname for TLS certificates:"
 echo ""
 echo "  1) Use sslip.io (automatic DNS based on IP address)"
-echo "     Hostname will be: $DEFAULT_HOSTNAME"
+echo "     Hostname will be: $SSLIP_HOSTNAME"
 echo ""
-echo "  2) Use a custom domain (you manage DNS)"
+echo "  2) Use nip.io (automatic DNS based on IP address)"
+echo "     Hostname will be: $NIP_HOSTNAME"
+echo ""
+echo "  3) Use a custom domain (you manage DNS)"
 echo "     You'll need to configure DNS to point to: $PUBLIC_IP"
 echo ""
 read -p "Enter choice [1]: " HOSTNAME_CHOICE
 
 if [ -z "$HOSTNAME_CHOICE" ] || [ "$HOSTNAME_CHOICE" == "1" ]; then
-    HOSTNAME="$DEFAULT_HOSTNAME"
+    HOSTNAME="$SSLIP_HOSTNAME"
     log_success "Using sslip.io hostname: $HOSTNAME"
 elif [ "$HOSTNAME_CHOICE" == "2" ]; then
+    HOSTNAME="$NIP_HOSTNAME"
+    log_success "Using nip.io hostname: $HOSTNAME"
+elif [ "$HOSTNAME_CHOICE" == "3" ]; then
     echo ""
     log_info "Enter your custom domain (e.g., myvm.example.com)"
     log_info "Make sure DNS is configured to point this domain to: $PUBLIC_IP"
@@ -206,6 +213,9 @@ else
     if [[ "$HOSTNAME" == *".sslip.io" ]]; then
         log_warning "Could not verify DNS (sslip.io may be temporarily unavailable)"
         log_info "sslip.io should resolve automatically - proceeding."
+    elif [[ "$HOSTNAME" == *".nip.io" ]]; then
+        log_warning "Could not verify DNS (nip.io may be temporarily unavailable)"
+        log_info "nip.io should resolve automatically - proceeding."
     else
         log_warning "DNS does not resolve yet for $HOSTNAME"
         log_info "Make sure to configure DNS before the VM tries to get certificates."
