@@ -669,6 +669,39 @@ VM_STATE=$(az vm show \
     --query "powerState" -o tsv)
 log_info "VM Power State: $VM_STATE"
 
+# Wait for server to become available on port 3001
+echo ""
+log_info "Waiting for server to become available at http://${NEW_PUBLIC_IP}:3001 ..."
+log_info "You can press Ctrl+C to exit at any time."
+echo ""
+
+SERVER_URL="http://${NEW_PUBLIC_IP}:3001/uptime"
+MAX_ATTEMPTS=40  # 10 minutes max (40 * 15s)
+ATTEMPT=0
+SLEEP_INTERVAL=15
+
+while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+    ATTEMPT=$((ATTEMPT + 1))
+
+    # Try to connect - any HTTP response means the server is up
+    if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$SERVER_URL" 2>/dev/null | grep -qE "^[2345]"; then
+        echo ""
+        log_success "Server is up!"
+        log_success "http://${NEW_PUBLIC_IP}:3001 is now accessible"
+        break
+    fi
+
+    echo -ne "\r${YELLOW}[WAITING]${NC} Attempt $ATTEMPT: Waiting for server... (${SLEEP_INTERVAL}s intervals)    "
+    sleep $SLEEP_INTERVAL
+done
+
+if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+    echo ""
+    log_warning "Server check timed out after $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
+    log_info "The VM may still be starting up. Check manually:"
+    log_info "  curl -v http://${NEW_PUBLIC_IP}:3001/uptime"
+fi
+
 # ============================================================================
 # Redeployment Complete
 # ============================================================================
