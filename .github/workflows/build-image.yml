@@ -307,7 +307,7 @@ jobs:
             packages/images/build/tdx_measurements.json
             packages/images/build/pcr_measurements.json
             packages/images/build/measurements/
-          retention-days: 30
+          retention-days: 7
           compression-level: 0  # Already compressed
 
       # ============================================
@@ -481,7 +481,7 @@ jobs:
             packages/images/build/azure_metadata.json
             packages/images/build/azure_tdx_measurements.json
             packages/images/build/azure_pcr_measurements.json
-          retention-days: 30
+          retention-days: 7
           compression-level: 0  # Already compressed
 
       - name: Disk space after build

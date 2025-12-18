@@ -1,0 +1,310 @@
+name: Build workerd
+
+on:
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      workerd_version:
+        description: 'Workerd version/tag to build (e.g., v1.20241230.0)'
+        required: false
+        type: string
+        default: 'v1.20251218.0'
+      clean_build:
+        description: 'Perform a clean build (deletes bazel cache)'
+        required: false
+        type: boolean
+        default: false
+
+  # Run on pushes to main when workflow changes, never run on PR for security reasons
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-workerd.yml'
+
+jobs:
+  build-workerd:
+    name: Build Workerd for x86_64 Linux (No TCMalloc)
+    # Run on same self-hosted runner as build-image.yml
+    runs-on: [self-hosted, Linux, X64]
+
+    # Timeout after 180 minutes (workerd builds can take a while)
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup build environment
+        run: |
+          echo "Setting up build environment..."
+
+          # Check for required build tools
+          echo "Checking for required tools:"
+          command -v clang && clang --version | head -1 || echo "⚠ clang not found"
+          command -v bazel && bazel --version || command -v bazelisk && bazelisk --version || echo "⚠ bazel/bazelisk not found"
+
+          # Verify we're on x86_64
+          ARCH=$(uname -m)
+          if [ "$ARCH" != "x86_64" ]; then
+            echo "✗ This workflow requires x86_64 architecture, got: $ARCH"
+            exit 1
+          fi
+          echo "✓ Architecture: $ARCH"
+
+      - name: Check disk space
+        run: |
+          echo "Disk space before build:"
+          df -h .
+
+          # Require at least 30GB free for workerd build
+          FREE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
+          if [ "$FREE_SPACE" -lt 30 ]; then
+            echo "✗ Insufficient disk space: ${FREE_SPACE}GB free (need 30GB+)"
+            exit 1
+          fi
+          echo "✓ Sufficient disk space: ${FREE_SPACE}GB free"
+
+      - name: Clone workerd repository
+        run: |
+          echo "Cloning workerd repository..."
+
+          # Remove existing workerd directory if it exists
+          rm -rf workerd-build
+
+          # Determine version to build
+          if [ -n "${{ github.event.inputs.workerd_version }}" ]; then
+            VERSION="${{ github.event.inputs.workerd_version }}"
+            echo "Building specified version: $VERSION"
+            git clone --depth 1 --branch "$VERSION" https://github.com/cloudflare/workerd.git workerd-build
+          else
+            echo "Building latest main branch"
+            git clone --depth 1 https://github.com/cloudflare/workerd.git workerd-build
+          fi
+
+          cd workerd-build
+          echo "Workerd commit: $(git rev-parse HEAD)"
+          echo "Workerd short commit: $(git rev-parse --short HEAD)"
+
+      - name: Install build dependencies
+        run: |
+          echo "Installing build dependencies..."
+
+          # workerd requires clang 19+ for C23 #embed support (--embed-dir flag)
+          CLANG_VERSION=19
+
+          echo "Adding LLVM apt repository for clang-${CLANG_VERSION}..."
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-${CLANG_VERSION} main" | sudo tee /etc/apt/sources.list.d/llvm.list
+
+          echo "Installing clang-${CLANG_VERSION} and build tools..."
+          sudo apt-get update
+          # Full list of workerd build dependencies from:
+          # https://github.com/cloudflare/workerd#building-workerd
+          sudo apt-get install -y \
+            clang-${CLANG_VERSION} \
+            libc++-${CLANG_VERSION}-dev \
+            libc++abi-${CLANG_VERSION}-dev \
+            lld-${CLANG_VERSION} \
+            build-essential \
+            python3 \
+            python3-setuptools \
+            tcl
+
+          # Set up alternatives so 'clang' points to clang-19
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${CLANG_VERSION} 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${CLANG_VERSION} 100
+          sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-${CLANG_VERSION} 100
+
+          # Verify clang is available and correct version
+          echo "Clang version:"
+          clang --version
+          clang++ --version
+
+          # Install bazelisk if not present
+          if ! command -v bazelisk &> /dev/null && ! command -v bazel &> /dev/null; then
+            echo "Installing bazelisk..."
+            curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 -o /tmp/bazelisk
+            chmod +x /tmp/bazelisk
+            sudo mv /tmp/bazelisk /usr/local/bin/bazelisk
+            sudo ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
+          fi
+
+          # Verify bazel is available
+          bazel --version
+
+      - name: Clean build cache (if requested)
+        if: ${{ github.event.inputs.clean_build == 'true' }}
+        working-directory: workerd-build
+        run: |
+          echo "Cleaning bazel cache..."
+          bazel clean --expunge || true
+
+      - name: Build workerd without tcmalloc
+        working-directory: workerd-build
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          echo "Building workerd without tcmalloc..."
+          echo "This build is intended for SGX environments which don't support"
+          echo "the 48-bit address space that tcmalloc requires."
+          echo ""
+          echo "Build started at: $(date)"
+
+          # Build workerd with tcmalloc disabled
+          # --@workerd//src/workerd/server:use_tcmalloc=False disables tcmalloc for both workerd and V8
+          # --config=thin-lto enables link-time optimization for better performance
+          # --repo_env passes CC/CXX to Bazel's repository rules for toolchain detection
+          # --linkopt=-static enables static linking to avoid glibc version mismatches
+          bazel build \
+            --repo_env=CC=clang \
+            --repo_env=CXX=clang++ \
+            --@workerd//src/workerd/server:use_tcmalloc=False \
+            --config=thin-lto \
+            --linkopt=-static \
+            //src/workerd/server:workerd
+
+          echo ""
+          echo "Build completed at: $(date)"
+
+      - name: Verify build output
+        working-directory: workerd-build
+        run: |
+          echo "Verifying build output..."
+
+          WORKERD_BIN="bazel-bin/src/workerd/server/workerd"
+
+          if [ ! -f "$WORKERD_BIN" ]; then
+            echo "✗ Build artifact not found: $WORKERD_BIN"
+            exit 1
+          fi
+
+          echo "✓ Build artifact found"
+          ls -lh "$WORKERD_BIN"
+
+          # Show file info
+          file "$WORKERD_BIN"
+
+          # Check binary size (should be substantial, typically 80MB+)
+          SIZE=$(stat -c%s "$WORKERD_BIN" 2>/dev/null || stat -f%z "$WORKERD_BIN")
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Binary size: ${SIZE_MB}MB"
+
+          if [ "$SIZE_MB" -lt 10 ]; then
+            echo "✗ Binary seems too small: ${SIZE_MB}MB"
+            exit 1
+          fi
+
+          # Verify it's a proper executable
+          echo ""
+          echo "Testing workerd --version:"
+          "$WORKERD_BIN" --version || echo "Note: workerd may not support --version flag"
+
+          # Verify tcmalloc is NOT linked
+          echo ""
+          echo "Checking for tcmalloc symbols (should be empty or minimal):"
+          if nm "$WORKERD_BIN" 2>/dev/null | grep -i tcmalloc | head -5; then
+            echo "⚠ Found tcmalloc symbols - checking if statically linked..."
+          else
+            echo "✓ No tcmalloc symbols found in binary"
+          fi
+
+      - name: Prepare artifact
+        id: prepare
+        working-directory: workerd-build
+        run: |
+          echo "Preparing artifact..."
+
+          # Get version info
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Create output directory
+          mkdir -p ../workerd-artifact
+
+          # Copy the binary
+          cp bazel-bin/src/workerd/server/workerd ../workerd-artifact/workerd
+
+          # Strip debug symbols to reduce size (optional, creates smaller binary)
+          strip ../workerd-artifact/workerd || true
+
+          # Generate checksum
+          cd ../workerd-artifact
+          sha256sum workerd > workerd.sha256
+
+          # Create metadata
+          cat > metadata.json <<EOF
+          {
+            "build_date": "$BUILD_DATE",
+            "workerd_commit": "$COMMIT_SHA",
+            "workerd_commit_short": "$COMMIT_SHORT",
+            "version": "${{ github.event.inputs.workerd_version || 'main' }}",
+            "architecture": "x86_64",
+            "platform": "linux",
+            "tcmalloc": false,
+            "static_linking": true,
+            "build_config": "thin-lto",
+            "builder": "github-actions",
+            "workflow_run_id": "${{ github.run_id }}"
+          }
+          EOF
+
+          echo "Artifact contents:"
+          ls -lh .
+
+          echo ""
+          echo "Metadata:"
+          cat metadata.json
+
+          echo ""
+          echo "Checksum:"
+          cat workerd.sha256
+
+          # Set outputs
+          echo "artifact_name=workerd-linux-x64-no-tcmalloc-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "commit_short=$COMMIT_SHORT" >> $GITHUB_OUTPUT
+
+          # Get final binary size
+          SIZE=$(stat -c%s "workerd" 2>/dev/null || stat -f%z "workerd")
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "stripped_size_mb=$SIZE_MB" >> $GITHUB_OUTPUT
+
+      - name: Upload workerd artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare.outputs.artifact_name }}
+          path: |
+            workerd-artifact/workerd
+            workerd-artifact/workerd.sha256
+            workerd-artifact/metadata.json
+          retention-days: 7
+          compression-level: 6
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up..."
+          rm -rf workerd-build || true
+          rm -rf workerd-artifact || true
+          echo "Cleanup complete"
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Workerd Build Summary (No TCMalloc)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workerd Commit**: \`${{ steps.prepare.outputs.commit_short }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: \`${{ github.event.inputs.workerd_version || 'main' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Architecture**: x86_64 Linux" >> $GITHUB_STEP_SUMMARY
+          echo "- **TCMalloc**: Disabled (for SGX compatibility)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Static Linking**: Enabled (for glibc compatibility)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Config**: thin-lto" >> $GITHUB_STEP_SUMMARY
+          echo "- **Binary Size**: ${{ steps.prepare.outputs.stripped_size_mb }}MB (stripped)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifact**: \`${{ steps.prepare.outputs.artifact_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Notes" >> $GITHUB_STEP_SUMMARY
+          echo "This build disables tcmalloc to support SGX environments which" >> $GITHUB_STEP_SUMMARY
+          echo "don't support the 48-bit address space that tcmalloc requires." >> $GITHUB_STEP_SUMMARY
