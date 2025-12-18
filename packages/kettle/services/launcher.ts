@@ -1,7 +1,6 @@
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs"
+import { readFileSync, existsSync, writeFileSync, mkdtempSync } from "fs"
 import { join, basename } from "path"
 import { fileURLToPath } from "url"
-import { mkdtempSync } from "fs"
 import { tmpdir } from "os"
 import { createHash } from "crypto"
 import * as chalk from "colorette"
@@ -187,7 +186,6 @@ async function parseManifest(
 export interface LauncherArgs {
   manifest: string
   port?: number
-  "db-dir"?: string
   verbose?: boolean
 }
 
@@ -245,21 +243,11 @@ export async function launcherCommand(argv: LauncherArgs) {
     })
   }
 
-  // Set up database directory
-  const baseDir =
-    argv["db-dir"] ?? mkdtempSync(join(tmpdir(), "kettle-launcher-db-"))
-  if (!existsSync(baseDir)) {
-    mkdirSync(baseDir, { recursive: true })
-  }
-  const dbPath = join(baseDir, "app.sqlite")
-
   if (argv.verbose) {
     console.log(chalk.yellowBright("[launcher] Starting worker..."))
   }
   const { stop } = await startWorker({
-    dbPath,
     workerPort: argv.port ?? 3001,
-    sqldPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
     bundleDir: bundleDir,
   })

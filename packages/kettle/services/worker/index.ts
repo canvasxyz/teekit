@@ -1,4 +1,7 @@
 export { getDb } from "./db.js"
+export type { SqliteClient, ResultSet, Row, DbBindings } from "./db.js"
+export { DurableObjectSqliteClient } from "./do-db.js"
+export type { DurableObjectStorage, SqlStorage, SqlStorageCursor } from "./do-db.js"
 export { serveStatic } from "./static.js"
 export type { Env } from "./worker.js"
 

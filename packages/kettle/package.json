@@ -22,7 +22,6 @@
 		"./worker": "./services/lib/worker/index.js"
 	},
 	"dependencies": {
-		"@libsql/client": "^0.15.15",
 		"@scure/base": "^2.0.0",
 		"@teekit/qvl": "0.0.5",
 		"@teekit/tunnel": "0.0.5",
@@ -56,7 +55,6 @@
 	},
 	"optionalDependencies": {
 		"@esbuild/linux-x64": "^0.25.12",
-		"@libsql/linux-x64-gnu": "^0.5.22",
 		"@rollup/rollup-linux-x64-gnu": "^4.50.1"
 	},
 	"ava": {

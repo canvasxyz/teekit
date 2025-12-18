@@ -5,7 +5,6 @@ export {
   waitForPortOpen,
   waitForPortClosed,
   resolveWorkerdBinary,
-  resolveSqldBinary,
 } from "./utils.js"
 
 export { startQuoteService } from "./startQuoteService.js"

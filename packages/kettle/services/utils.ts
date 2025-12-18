@@ -118,38 +118,21 @@ export function shutdown(child: ChildProcess, timeoutMs = 3000): Promise<void> {
   })
 }
 
-export function resolveSqldBinary(): string {
-  const candidates = [
-    process.env.SQLD_BIN,
-    "sqld",
-    "/home/linuxbrew/.linuxbrew/bin/sqld",
-    "/opt/homebrew/bin/sqld",
-    "/usr/local/bin/sqld",
-    "/usr/bin/sqld",
-  ].filter(Boolean) as string[]
-  for (const bin of candidates) {
-    try {
-      if (existsSync(bin)) return bin
-    } catch {}
-  }
-  return candidates[0]!
-}
-
 export function resolveWorkerdBinary(): string {
   const cwd = process.cwd()
   const candidates = [
     process.env.WORKERD_BIN,
-    // Global PATH resolution (check this first for system installs)
-    "workerd",
-    // System-wide installations
-    "/usr/local/bin/workerd",
-    "/usr/bin/workerd",
-    // Prefer local project bin if available
+    // Prefer local project bin first (more likely to be compatible)
     `${cwd}/node_modules/.bin/workerd`,
     // Monorepo root fallback
     `${cwd}/../node_modules/.bin/workerd`,
     `${cwd}/../../node_modules/.bin/workerd`,
     `/workspace/node_modules/.bin/workerd`,
+    // System-wide installations (last resort)
+    "/usr/local/bin/workerd",
+    "/usr/bin/workerd",
+    // Global PATH resolution
+    "workerd",
   ].filter(Boolean) as string[]
   for (const bin of candidates) {
     try {
@@ -159,21 +142,3 @@ export function resolveWorkerdBinary(): string {
   return candidates[0]!
 }
 
-export function isSuppressedSqldLogs(msg: string) {
-  if (
-    msg.includes(
-      "INFO restore: libsql_server::namespace::meta_store: restoring meta store",
-    ) ||
-    msg.includes(
-      "INFO restore: libsql_server::namespace::meta_store: meta store restore completed",
-    ) ||
-    msg.includes(
-      "INFO libsql_server: Server sending heartbeat to URL <not supplied> every 30s",
-    ) ||
-    msg.includes(
-      "INFO create:try_new_primary:make_primary_connection_maker: libsql_server::replication::primary::logger: SQLite autocheckpoint: 1000",
-    )
-  ) {
-    return true
-  }
-}

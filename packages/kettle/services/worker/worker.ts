@@ -22,6 +22,20 @@ interface DurableObjectState {
   abort(reason?: string): void
 }
 
+interface SqlStorageCursor {
+  toArray(): Record<string, unknown>[]
+  one(): Record<string, unknown>
+  raw(): Iterator<unknown[]>
+  readonly columnNames: string[]
+  readonly rowsRead: number
+  readonly rowsWritten: number
+}
+
+interface SqlStorage {
+  exec(query: string, ...bindings: unknown[]): SqlStorageCursor
+  readonly databaseSize: number
+}
+
 interface DurableObjectStorage {
   get(key: string): Promise<any>
   get(keys: string[]): Promise<Map<string, any>>
@@ -30,13 +44,17 @@ interface DurableObjectStorage {
   delete(key: string): Promise<boolean>
   delete(keys: string[]): Promise<number>
   list(options?: any): Promise<Map<string, any>>
+  // SQL storage API (available when enableSql = true in config)
+  sql?: SqlStorage
+  transactionSync?<T>(fn: () => T): T
 }
 
 // Base class from cloudflare:workers (runtime-only, imported at runtime)
+// Modern workerd uses 'ctx' instead of 'state' for the DurableObjectState
 declare class DurableObject<Env = unknown> {
-  protected state: DurableObjectState
+  protected ctx: DurableObjectState
   protected env: Env
-  constructor(state: DurableObjectState, env: Env)
+  constructor(ctx: DurableObjectState, env: Env)
 }
 
 interface FetcherLike {
@@ -50,6 +68,8 @@ export interface Env {
   DB_HTTP?: FetcherLike
   QUOTE_SERVICE: FetcherLike
   STATIC_FILES?: FetcherLike
+  // DO storage is injected by HonoDurableObject when SQL is enabled
+  DO_STORAGE?: DurableObjectStorage
 }
 
 // Import DurableObject base class from workerd (runtime-only module)
@@ -59,9 +79,10 @@ import { DurableObject } from "cloudflare:workers"
 // wrapper durable object that forwards all requests to the application
 export class HonoDurableObject extends DurableObject<Env> {
   private appPromise: Promise<any> | null = null
+  private sqlAvailable: boolean | null = null
 
-  constructor(state: DurableObjectState, env: Env) {
-    super(state, env)
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
   }
 
   // dynamically import and cache the user-provided hono application
@@ -80,11 +101,40 @@ export class HonoDurableObject extends DurableObject<Env> {
     return this.appPromise
   }
 
+  // Check if SQL storage is actually available and functional (cached)
+  private isSqlAvailable(): boolean {
+    if (this.sqlAvailable !== null) {
+      return this.sqlAvailable
+    }
+    try {
+      // Check if sql property exists and has exec method
+      const storage = this.ctx.storage as DurableObjectStorage
+      if (!storage.sql || typeof storage.sql.exec !== "function") {
+        this.sqlAvailable = false
+        return false
+      }
+      // Try a simple query to verify SQL is functional
+      // This will throw if SQL isn't actually enabled
+      storage.sql.exec("SELECT 1")
+      this.sqlAvailable = true
+      return true
+    } catch {
+      this.sqlAvailable = false
+      return false
+    }
+  }
+
   // hono on workerd supports app.fetch(req, env[, ctx])
   async fetch(request: Request): Promise<Response> {
     const app = await this.getApp()
     try {
-      return await app.fetch(request, this.env)
+      // Only inject DO storage if SQL API is actually available and functional
+      // This allows the app to use getDb() with DO storage transparently
+      const enhancedEnv: Env = { ...this.env }
+      if (this.isSqlAvailable()) {
+        enhancedEnv.DO_STORAGE = this.ctx.storage as DurableObjectStorage
+      }
+      return await app.fetch(request, enhancedEnv)
     } catch (err: any) {
       console.error("[worker] DO fetch error:", err)
       return new Response(String(err?.message || err), { status: 500 })

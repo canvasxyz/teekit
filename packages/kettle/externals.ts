@@ -5,9 +5,6 @@ export { type WSEvents } from "hono/ws"
 export { upgradeWebSocket } from "hono/cloudflare-workers"
 export { type ContentfulStatusCode } from "hono/utils/http-status"
 
-// Re-export @libsql/client
-export * from "@libsql/client"
-
 // Re-export @teekit packages
 export * from "@teekit/kettle/worker"
 export * from "@teekit/tunnel"

@@ -58,10 +58,6 @@ async function main() {
             description: "Port for the worker HTTP server",
             default: 3001,
           })
-          .option("db-dir", {
-            type: "string",
-            description: "Directory to store the database",
-          })
           .option("verbose", {
             type: "boolean",
             description: "Include verbose logging",
@@ -71,7 +67,7 @@ async function main() {
     )
     .command(
       "start-worker [file]",
-      "[Internal] Start app runtime with workerd/sqld directly",
+      "[Internal] Start app runtime with workerd directly",
       (yargs: Argv) => {
         return yargs
           .positional("file", {
@@ -84,10 +80,6 @@ async function main() {
             type: "number",
             description: "Port for the worker HTTP server",
             default: 3001,
-          })
-          .option("db-dir", {
-            type: "string",
-            description: "Directory to store the database",
           })
       },
       startWorkerCommand,

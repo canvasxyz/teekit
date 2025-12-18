@@ -1,0 +1,131 @@
+# This manifest configures workerd (Cloudflare's JavaScript runtime) to run
+# inside an Intel SGX enclave via Gramine. workerd is based on V8 and requires
+# significant memory for the JavaScript heap and pointer compression cage.
+# The workerd binary must be statically linked to avoid GLIBC version issues.
+
+################################################################################
+# Gramine configuration
+################################################################################
+
+libos.entrypoint = "/usr/local/bin/workerd"
+
+loader.log_level = "{{ log_level }}"
+
+# Disable rseq (restartable sequences) - not supported by Gramine
+loader.env.GLIBC_TUNABLES = "glibc.pthread.rseq=0"
+loader.env.KETTLE_SGX = "1"
+
+loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}"
+loader.env.HOME = "/root"
+loader.env.PATH = "/usr/bin:/bin"
+
+loader.argv = [
+  "/usr/local/bin/workerd",
+  "serve",
+  "--experimental",
+  "--verbose",
+  "/opt/kettle/workerd.config.capnp",
+]
+
+################################################################################
+# SGX-specific configuration
+################################################################################
+
+sgx.enclave_size = "128G"
+sgx.edmm_enable = true
+
+# Thread count: workerd uses many threads for V8 isolates and async I/O
+# The statically linked binary requires more threads than dynamically linked
+sgx.max_threads = 256
+
+# Enable EXINFO for EDMM memory management (required for MAP_NORESERVE)
+sgx.use_exinfo = true
+
+# Enable remote attestation via /dev/attestation pseudo-filesystem
+# Note: DCAP requires Azure DCAP client to be installed and configured
+sgx.remote_attestation = "dcap"
+
+# ISV configuration for attestation
+sgx.isvprodid = 1
+sgx.isvsvn = 1
+
+# Debug mode (set to false for production)
+sgx.debug = false
+
+################################################################################
+# File system mounts
+################################################################################
+
+fs.mounts = [
+  # Gramine runtime libraries
+  { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+  { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
+
+  # workerd binary (statically linked)
+  { path = "/usr/local/bin/workerd", uri = "file:{{ workerd_bin }}" },
+
+  # Kettle bundle directory (contains worker.js, app.js, externals.js, config)
+  { path = "/opt/kettle", uri = "file:{{ kettle_bundle_dir }}" },
+
+  # Encrypted persistent storage (uses MRENCLAVE-based sealing key)
+  # All files stored here are automatically encrypted/decrypted by Gramine.
+  # Only the same enclave (same MRENCLAVE) on the same platform can decrypt.
+  # Used for: DO SQLite database, cached certificates, any persistent app data.
+  { path = "/var/lib/kettle", uri = "file:/var/lib/kettle", type = "encrypted", key_name = "_sgx_mrenclave" },
+
+  # Temporary directory (in-memory, enclave-only, not visible to host)
+  # Used for: workerd scratch files, V8 JIT cache, build artifacts
+  { path = "/tmp", type = "tmpfs" },
+
+  # /etc for configuration files
+  { path = "/etc", uri = "file:/etc" },
+
+  # /dev for attestation pseudo-filesystem (provided by Gramine)
+  # Note: /dev/attestation is automatically available when sgx.remote_attestation is set
+]
+
+################################################################################
+# System configuration
+################################################################################
+
+sys.enable_sigterm_injection = true
+sys.insecure__allow_eventfd = true
+sys.stack.size = "2M"
+sys.brk.max_size = "256M"
+
+################################################################################
+# Trusted files (integrity-protected, measured into MRENCLAVE)
+################################################################################
+
+sgx.trusted_files = [
+  # Gramine runtime
+  "file:{{ gramine.libos }}",
+  "file:{{ gramine.runtimedir() }}/",
+
+  # System libraries
+  "file:{{ arch_libdir }}/",
+  "file:/usr/{{ arch_libdir }}/",
+
+  # workerd binary
+  "file:{{ workerd_bin }}",
+
+  # Kettle JavaScript bundles (measured for integrity)
+  "file:{{ kettle_bundle_dir }}/worker.js",
+  "file:{{ kettle_bundle_dir }}/app.js",
+  "file:{{ kettle_bundle_dir }}/externals.js",
+  "file:{{ kettle_bundle_dir }}/workerd.config.capnp",
+
+  # Static files for serving (HTML, CSS, JS assets)
+  # TODO: bundle static files into REPORT_DATA, or otherwise enforce pinning
+  "file:{{ kettle_bundle_dir }}/static/",
+]
+
+################################################################################
+# Allowed files (not integrity-protected, for runtime data)
+################################################################################
+
+sgx.allowed_files = [
+  # Runtime configuration (manifest, hostname, etc.)
+  # TODO: Host can modify these
+  "file:/etc/kettle/",
+]

@@ -57,7 +57,7 @@ export async function startKettleWithTunnel(teeType: TeeType = "tdx") {
   const dbPath = join(baseDir, "app.sqlite")
   const kettle = await startWorker({
     dbPath,
-    sqldPort: await findFreePort(),
+    dbPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
     bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),

@@ -1,186 +1,34 @@
 import test from "ava"
-import { mkdtempSync } from "fs"
-import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker } from "../services/startWorker.js"
 import { findFreePort, waitForPortOpen } from "../services/utils.js"
-import { createClient } from "@libsql/client"
 import { fileURLToPath } from "url"
 
-test.serial("replicated data persists between runs", async (t) => {
+/**
+ * Tests for Durable Objects SQLite storage.
+ *
+ * Note: DO SQLite uses local disk storage but with a fresh temp directory
+ * per worker instance, so data does NOT persist between restarts.
+ * These tests verify basic database CRUD operations work correctly.
+ */
+
+test.serial("database operations work via DO SQLite", async (t) => {
   t.timeout(60000)
-  let demo1: { stop: () => Promise<void>; workerPort: number } | null = null
-  let demo2: { stop: () => Promise<void>; workerPort: number } | null = null
+  let worker: { stop: () => Promise<void>; workerPort: number } | null = null
 
   t.teardown(async () => {
-    if (demo1) await demo1.stop()
-    if (demo2) await demo2.stop()
+    if (worker) await worker.stop()
     await new Promise((resolve) => setTimeout(resolve, 500))
   })
 
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-test-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const replicaDbPath = join(baseDir, "app.replica.db")
-
-  // First run: create, update, and replicate
-  const kettle1 = await startWorker({
-    dbPath,
-    replicaDbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-    quoteServicePort: await findFreePort(),
-    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
-  })
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-  demo1 = { stop: kettle1.stop, workerPort: kettle1.workerPort }
-  const port = kettle1.workerPort
-  await waitForPortOpen(port)
-
-  // Probe readiness of worker + DB
-  for (let i = 0; i < 10; i++) {
-    const r = await fetch(`http://localhost:${port}/healthz`)
-    if (r.ok) break
-    await new Promise((r) => setTimeout(r, 100))
-  }
-
-  // Test increment endpoint
-  let resp = await fetch(`http://localhost:${port}/increment`, {
-    method: "POST",
-  })
-  t.is(resp.status, 200)
-
-  // Initialize the database table
-  resp = await fetch(`http://localhost:${port}/db/init`, {
-    method: "POST",
-  })
-  t.is(resp.status, 200)
-
-  // Write data to primary via the API
-  resp = await fetch(`http://localhost:${port}/db/put`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key: "foo", value: "bar" }),
-  })
-  t.is(resp.status, 200)
-
-  // Verify data can be read from primary via API
-  resp = await fetch(`http://localhost:${port}/db/get?key=foo`)
-  t.is(resp.status, 200)
-  let data = await resp.json()
-  t.is(data.value, "bar")
-
-  // Give replication time to sync
-  await new Promise((resolve) => setTimeout(resolve, 2000))
-
-  // Now examine the replica database via HTTP
-  t.truthy(kettle1.replicaDbUrl, "replica DB URL should be available")
-  const replicaClient1 = createClient({
-    url: kettle1.replicaDbUrl!,
-    authToken: kettle1.dbToken,
-  })
-
-  // Verify the table exists in the replica
-  const tables = await replicaClient1.execute(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='kv'",
-  )
-  t.truthy(tables.rows.length > 0, "kv table should exist in replica")
-
-  // Verify the data exists in the replica
-  const result1 = await replicaClient1.execute({
-    sql: "SELECT value FROM kv WHERE key = ?1",
-    args: ["foo"],
-  })
-
-  t.truthy(result1.rows.length > 0, "replica should contain the written data")
-  const replicaValue1 =
-    result1.rows[0].value ?? Object.values(result1.rows[0])[0]
-  t.is(replicaValue1, "bar", "replica should contain the correct value")
-
-  // Stop the first worker
-  if (demo1) await demo1.stop()
-  demo1 = null
-
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-
-  // Second run: verify persistence and replication of previous data
-  const kettle2 = await startWorker({
-    dbPath,
-    replicaDbPath,
-    sqldPort: await findFreePort(),
-    workerPort: await findFreePort(),
-    quoteServicePort: await findFreePort(),
-    bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
-  })
-  demo2 = { stop: kettle2.stop, workerPort: kettle2.workerPort }
-  const port2 = kettle2.workerPort
-  await waitForPortOpen(port2)
-  for (let i = 0; i < 10; i++) {
-    const r = await fetch(`http://localhost:${port2}/healthz`)
-    if (r.ok) break
-    await new Promise((r) => setTimeout(r, 100))
-  }
-
-  // Verify the table still exists (no need to init again)
-  resp = await fetch(`http://localhost:${port2}/db/init`, {
-    method: "POST",
-  })
-  t.is(resp.status, 200)
-
-  // Verify persisted data from first run
-  resp = await fetch(`http://localhost:${port2}/db/get?key=foo`)
-  t.is(resp.status, 200)
-  data = await resp.json()
-  t.is(data.value, "bar", "data from first run should persist")
-
-  // Give replication time to sync
-  await new Promise((resolve) => setTimeout(resolve, 2000))
-
-  // Verify the persisted data exists in the replica after restart
-  t.truthy(kettle2.replicaDbUrl, "replica DB URL should be available")
-  const replicaClient2 = createClient({
-    url: kettle2.replicaDbUrl!,
-    authToken: kettle2.dbToken,
-  })
-
-  const result2 = await replicaClient2.execute({
-    sql: "SELECT value FROM kv WHERE key = ?1",
-    args: ["foo"],
-  })
-
-  t.truthy(
-    result2.rows.length > 0,
-    "replica should still contain data after restart",
-  )
-  const replicaValue2 =
-    result2.rows[0].value ?? Object.values(result2.rows[0])[0]
-  t.is(
-    replicaValue2,
-    "bar",
-    "replica should contain the persisted value after restart",
-  )
-})
-
-test.skip("replicated data persists with encryption", async (t) => {
-  const baseDir = mkdtempSync(join(tmpdir(), "kettle-replication-encrypted-"))
-  const dbPath = join(baseDir, "app.sqlite")
-  const replicaDbPath = join(baseDir, "app.replica.db")
-  const encryptionKey = "test-encryption-key"
-
+  // Start worker with DO SQLite storage
   const kettle = await startWorker({
-    dbPath,
-    replicaDbPath,
-    sqldPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
-    encryptionKey,
     bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
   })
-
-  t.teardown(async () => {
-    await kettle.stop()
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  })
-
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  worker = { stop: kettle.stop, workerPort: kettle.workerPort }
   const port = kettle.workerPort
   await waitForPortOpen(port)
 
@@ -191,50 +39,61 @@ test.skip("replicated data persists with encryption", async (t) => {
     await new Promise((r) => setTimeout(r, 100))
   }
 
+  // Test increment endpoint (uses in-memory counter)
+  let resp = await fetch(`http://localhost:${port}/increment`, {
+    method: "POST",
+  })
+  t.is(resp.status, 200)
+
   // Initialize the database table
-  let resp = await fetch(`http://localhost:${port}/db/init`, {
+  resp = await fetch(`http://localhost:${port}/db/init`, {
     method: "POST",
   })
   t.is(resp.status, 200, "db/init should succeed")
 
-  // Write data to primary via the API
+  // Write data to database via the API
   resp = await fetch(`http://localhost:${port}/db/put`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key: "test-key", value: "test-value" }),
+    body: JSON.stringify({ key: "foo", value: "bar" }),
   })
   t.is(resp.status, 200, "db/put should succeed")
 
-  // Verify data can be read from primary via API
-  resp = await fetch(`http://localhost:${port}/db/get?key=test-key`)
+  // Verify data can be read via API
+  resp = await fetch(`http://localhost:${port}/db/get?key=foo`)
   t.is(resp.status, 200, "db/get should succeed")
   const data = await resp.json()
-  t.is(data.value, "test-value", "value should match what was written")
+  t.is(data.value, "bar", "retrieved value should match")
 
-  // Give replication time to sync
-  await new Promise((resolve) => setTimeout(resolve, 2000))
-
-  // Now examine the replica database via HTTP
-  t.truthy(kettle.replicaDbUrl, "replica DB URL should be available")
-  const replicaClient = createClient({
-    url: kettle.replicaDbUrl!,
-    authToken: kettle.dbToken,
-    encryptionKey,
+  // Write another value
+  resp = await fetch(`http://localhost:${port}/db/put`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key: "baz", value: "qux" }),
   })
+  t.is(resp.status, 200)
 
-  // Verify the table exists in the replica
-  const tables = await replicaClient.execute(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='kv'",
-  )
-  t.truthy(tables.rows.length > 0, "kv table should exist in replica")
+  // Verify both values exist
+  resp = await fetch(`http://localhost:${port}/db/get?key=baz`)
+  t.is(resp.status, 200)
+  const data2 = await resp.json()
+  t.is(data2.value, "qux")
 
-  // Verify the data exists in the replica
-  const result = await replicaClient.execute({
-    sql: "SELECT value FROM kv WHERE key = ?1",
-    args: ["test-key"],
+  // Update existing value
+  resp = await fetch(`http://localhost:${port}/db/put`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key: "foo", value: "updated" }),
   })
+  t.is(resp.status, 200)
 
-  t.truthy(result.rows.length > 0, "replica should contain the written data")
-  const replicaValue = result.rows[0].value ?? Object.values(result.rows[0])[0]
-  t.is(replicaValue, "test-value", "replica should contain the correct value")
+  // Verify updated value
+  resp = await fetch(`http://localhost:${port}/db/get?key=foo`)
+  t.is(resp.status, 200)
+  const data3 = await resp.json()
+  t.is(data3.value, "updated", "value should be updated")
+
+  // Test non-existent key
+  resp = await fetch(`http://localhost:${port}/db/get?key=nonexistent`)
+  t.is(resp.status, 404, "should return 404 for non-existent key")
 })

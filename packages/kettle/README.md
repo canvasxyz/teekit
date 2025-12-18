@@ -1,9 +1,18 @@
 # @teekit/kettle
 
 @teekit/kettle is a simple workerd-based JS runtime for confidential
-workers. It provides to JS dependencies required for @teekit/tunnel,
-quote generation, and sqlite (via libsql/sqld, optionally encrypted).
+workers. It provides JS dependencies required for @teekit/tunnel,
+quote generation, and SQLite storage (via Durable Objects SQL API).
 
+The kettle now uses workerd's built-in Durable Objects SQLite storage
+instead of external SQLCipher:
+
+- Created `services/worker/do-db.ts` - DO SQL adapter implementing SqliteClient interface
+- Modified `services/worker/db.ts` - Added DO storage detection in getDb()
+- Modified `services/worker/worker.ts` - Exposed ctx.storage to app via env
+- Modified `services/startWorker.ts` - Uses DO SQLite with localDisk storage
+- Updated workerd capnp config to use `enableSql = true` and `localDisk` storage
+  
 ## Usage
 
 ```
@@ -22,7 +31,7 @@ Follow the instructions when you run `npm run start:launcher:remote`.
 ## API
 
 If you would like to use your own launcher, **startWorker** will start
-the quote generation service, sqld, and a single-process JS VM.
+the quote generation service and a single-process JS VM with Durable Objects SQLite storage.
 
 The command expects app.js, externals.js, and worker.js to be in the
 bundle directory. To build the bundle, follow these steps:
@@ -40,9 +49,7 @@ await buildKettleExternals({
 
 const { stop } = await startWorker({
     bundleDir: '/home/build',
-    dbPath: '/tmp/myapp.sqlite',
     quoteServicePort: await findFreePort(),
-    sqldPort: await findFreePort(),
     workerPort: 8000,
 })
 ```

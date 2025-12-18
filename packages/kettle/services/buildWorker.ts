@@ -52,7 +52,6 @@ export async function buildKettleApp(options: BuildConfig) {
       "hono/ws",
       "hono/cloudflare-workers",
       "hono/utils/http-status",
-      "@libsql/client",
       "@teekit/kettle/worker",
       "@teekit/tunnel",
       "@teekit/tunnel/samples",

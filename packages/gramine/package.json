@@ -1,0 +1,46 @@
+{
+  "name": "@teekit/gramine",
+  "version": "0.0.1",
+  "private": true,
+  "description": "SGX deployment for Kettle using Gramine",
+  "type": "module",
+  "scripts": {
+    "setup": "sudo ./scripts/setup-azure-sgx.sh",
+    "build:bundle": "./scripts/build-kettle-bundle.sh",
+    "build:enclave": "make SGX=1",
+    "build:enclave:debug": "make SGX=1 DEBUG=1 LOG_LEVEL=debug",
+    "build:direct": "make SGX=0",
+    "start": "./scripts/start-kettle-sgx.sh",
+    "start:direct": "./scripts/start-kettle-sgx.sh --direct",
+    "measurements": "make measurements",
+    "check-sgx": "make check-sgx",
+    "clean": "make clean",
+    "test": "GRAMINE_MODE=sgx ava --serial",
+    "test:direct": "GRAMINE_MODE=direct ava --serial"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.7.0",
+    "@scure/base": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "@types/ws": "^8.18.1",
+    "ava": "^6.2.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "ws": "^8.18.3"
+  },
+  "ava": {
+    "concurrency": 1,
+    "extensions": [
+      "ts"
+    ],
+    "nodeArguments": [
+      "--import=tsx"
+    ],
+    "files": [
+      "test/**/*.test.ts"
+    ],
+    "timeout": "120s"
+  }
+}
