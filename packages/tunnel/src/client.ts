@@ -75,6 +75,12 @@ type SgxClientConfig = TunnelClientConfigBase & {
   measurements?: SgxMeasurementConfig
   /** Custom quote verifier (optional if measurements is provided) */
   customVerifyQuote?: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
+  /**
+   * Allow connecting to debug enclaves (default: false).
+   * Debug enclaves have sgx.debug = true in their manifest and can be
+   * inspected by the host. This should only be enabled for development.
+   */
+  allowDebugEnclaves?: boolean
 }
 
 /** SEV-SNP attestation config */
@@ -412,6 +418,15 @@ export class TunnelClient {
             } else if (this.config.sgx) {
               await verifySgx(quote)
               validQuote = parseSgxQuote(quote)
+
+              // Reject debug enclaves by default
+              const attributes = validQuote.body.attributes
+              const isDebugEnclave = (attributes[0] & 0x02) !== 0
+              if (isDebugEnclave && !this.config.allowDebugEnclaves) {
+                throw new Error(
+                  "Error opening channel: refusing to connect to debug enclave",
+                )
+              }
             } else {
               // TDX (default)
               await verifyTdx(quote)
