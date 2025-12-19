@@ -37,8 +37,14 @@ MANIFEST = workerd.manifest
 SGX_MANIFEST = workerd.manifest.sgx
 SGX_SIG = workerd.sig
 SGX_TOKEN = workerd.token
+MRENCLAVE_FILE = .mrenclave
 
-.PHONY: all clean distclean check-gramine check-workerd run sgx-run direct-run
+# Data directories
+KETTLE_DATA_DIR ?= /var/lib/kettle
+DO_STORAGE_DIR = $(KETTLE_DATA_DIR)/do-storage
+MRENCLAVE_MARKER = $(DO_STORAGE_DIR)/.mrenclave
+
+.PHONY: all clean distclean check-gramine check-workerd run sgx-run direct-run check-mrenclave
 
 all: $(SGX_MANIFEST) $(SGX_SIG)
 ifeq ($(SGX),1)
@@ -96,10 +102,14 @@ ifeq ($(SGX),1)
 	@echo ""
 	@echo "Enclave measurements:"
 	@gramine-sgx-sigstruct-view $(SGX_SIG) | grep -E "(mr_enclave|mr_signer|isv_prod_id|isv_svn)"
+	@# Save MRENCLAVE to file for later comparison
+	@gramine-sgx-sigstruct-view $(SGX_SIG) | grep "mr_enclave" | awk '{print $$2}' > $(MRENCLAVE_FILE)
+	@echo "MRENCLAVE saved to $(MRENCLAVE_FILE)"
 else
 	@echo "SGX disabled, skipping signing"
 	@cp $(MANIFEST) $(SGX_MANIFEST)
 	@touch $(SGX_SIG)
+	@echo "direct" > $(MRENCLAVE_FILE)
 endif
 
 # Generate token for enclave (optional, for some configurations)
@@ -116,8 +126,42 @@ else
 	@$(MAKE) direct-run
 endif
 
+# Check MRENCLAVE compatibility with existing storage
+# If do-storage has data from a different MRENCLAVE, abort with helpful error
+check-mrenclave: $(MRENCLAVE_FILE)
+	@if [ -f "$(MRENCLAVE_MARKER)" ]; then \
+		CURRENT=$$(cat $(MRENCLAVE_FILE)); \
+		STORED=$$(cat $(MRENCLAVE_MARKER)); \
+		if [ "$$CURRENT" != "$$STORED" ]; then \
+			echo ""; \
+			echo "================================================================================"; \
+			echo "MRENCLAVE mismatch detected!"; \
+			echo "================================================================================"; \
+			echo ""; \
+			echo "The enclave has been rebuilt with a different measurement:"; \
+			echo "  Current MRENCLAVE: $$CURRENT"; \
+			echo "  Storage MRENCLAVE: $$STORED"; \
+			echo ""; \
+			echo "The encrypted data in $(DO_STORAGE_DIR)"; \
+			echo "cannot be decrypted with the current enclave."; \
+			echo ""; \
+			echo "To fix this, clear the old storage data (destructive):"; \
+			echo "  rm -rf $(DO_STORAGE_DIR)/*"; \
+			echo ""; \
+			echo "================================================================================"; \
+			echo ""; \
+			exit 1; \
+		fi; \
+	fi
+	@# Create storage directory and marker if needed
+	@mkdir -p $(DO_STORAGE_DIR)
+	@if [ ! -f "$(MRENCLAVE_MARKER)" ]; then \
+		cp $(MRENCLAVE_FILE) $(MRENCLAVE_MARKER); \
+		echo "Created MRENCLAVE marker in $(MRENCLAVE_MARKER)"; \
+	fi
+
 # Run in SGX mode
-sgx-run: $(SGX_MANIFEST) $(SGX_SIG)
+sgx-run: $(SGX_MANIFEST) $(SGX_SIG) check-mrenclave
 	@echo "Starting kettle in SGX enclave..."
 	@echo "  Serving on http://localhost:3001"
 	$(GRAMINE) workerd
@@ -141,7 +185,7 @@ check-sgx:
 
 # Clean build artifacts
 clean:
-	rm -f $(MANIFEST) $(SGX_MANIFEST) $(SGX_SIG) $(SGX_TOKEN)
+	rm -f $(MANIFEST) $(SGX_MANIFEST) $(SGX_SIG) $(SGX_TOKEN) $(MRENCLAVE_FILE)
 	rm -rf __pycache__
 
 # Clean everything including keys and decompressed binary

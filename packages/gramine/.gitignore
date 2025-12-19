@@ -3,6 +3,7 @@
 *.manifest.sgx
 *.sig
 *.token
+.mrenclave
 
 # Uncompressed workerd binary (decompressed from workerd.zst at build time)
 workerd
