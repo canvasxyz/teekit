@@ -16,8 +16,36 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 export const PACKAGE_DIR = resolve(__dirname, "..")
 
-// Track spawned processes
+// Track spawned processes and their state
 let gramineProcess: ChildProcess | null = null
+let gramineExitCode: number | null = null
+let gramineExitSignal: string | null = null
+let gramineStderr: string[] = []
+
+/**
+ * Check if the gramine process exited early (before server was ready)
+ * Returns an error message if it did, null otherwise
+ */
+function checkGramineEarlyExit(): string | null {
+  if (gramineExitCode !== null || gramineExitSignal !== null) {
+    const exitInfo = gramineExitCode !== null
+      ? `exit code ${gramineExitCode}`
+      : `signal ${gramineExitSignal}`
+
+    // Check for MRENCLAVE mismatch in stderr
+    const stderrText = gramineStderr.join("\n")
+    if (stderrText.includes("MRENCLAVE mismatch")) {
+      return `Gramine process failed (${exitInfo}): MRENCLAVE mismatch detected.\n` +
+        `The enclave was rebuilt with a different measurement.\n` +
+        `To fix: rm -rf /var/lib/kettle/do-storage/*\n\n` +
+        `Captured output:\n${gramineStderr.slice(-20).join("\n")}`
+    }
+
+    return `Gramine process exited early (${exitInfo}).\n` +
+      `Captured output:\n${gramineStderr.slice(-20).join("\n")}`
+  }
+  return null
+}
 
 export async function waitForServer(
   baseUrl: string = BASE_URL,
@@ -25,6 +53,12 @@ export async function waitForServer(
   intervalMs: number = 1000
 ): Promise<void> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Check if gramine process exited early
+    const earlyExitError = checkGramineEarlyExit()
+    if (earlyExitError) {
+      throw new Error(earlyExitError)
+    }
+
     try {
       const response = await fetch(`${baseUrl}/healthz`, {
         signal: AbortSignal.timeout(2000),
@@ -124,8 +158,12 @@ export async function startGramine(mode: "sgx" | "direct"): Promise<boolean> {
     return false
   }
 
+  // Reset state tracking
+  gramineExitCode = null
+  gramineExitSignal = null
+  gramineStderr = []
+
   const target = mode === "sgx" ? "sgx-run" : "direct-run"
-  console.log(`[gramine] Starting gramine in ${mode} mode...`)
 
   // Use detached: true to create a new process group, so we can kill the entire tree
   gramineProcess = spawn("make", [target], {
@@ -134,11 +172,13 @@ export async function startGramine(mode: "sgx" | "direct"): Promise<boolean> {
     detached: true,
   })
 
-  // Log output for debugging
+  // Log output for debugging and capture stderr for error detection
   gramineProcess.stdout?.on("data", (data) => {
     const lines = data.toString().trim().split("\n")
     for (const line of lines) {
       console.log(`[gramine:stdout] ${line}`)
+      // Also capture stdout as some errors may go there (make output)
+      gramineStderr.push(line)
     }
   })
 
@@ -146,15 +186,19 @@ export async function startGramine(mode: "sgx" | "direct"): Promise<boolean> {
     const lines = data.toString().trim().split("\n")
     for (const line of lines) {
       console.log(`[gramine:stderr] ${line}`)
+      gramineStderr.push(line)
     }
   })
 
   gramineProcess.on("error", (err) => {
     console.error(`[gramine] Process error: ${err.message}`)
+    gramineStderr.push(`Process error: ${err.message}`)
   })
 
   gramineProcess.on("exit", (code, signal) => {
     console.log(`[gramine] Process exited with code ${code}, signal ${signal}`)
+    gramineExitCode = code
+    gramineExitSignal = signal
     gramineProcess = null
   })
 
@@ -165,6 +209,11 @@ export async function startGramine(mode: "sgx" | "direct"): Promise<boolean> {
  * Stop the gramine process if we started it
  */
 export async function stopGramine(): Promise<void> {
+  // Reset state tracking
+  gramineExitCode = null
+  gramineExitSignal = null
+  gramineStderr = []
+
   if (!gramineProcess) {
     console.log("[gramine] No process to stop")
     return
@@ -229,7 +278,6 @@ export async function setupGramine(): Promise<void> {
   // Start gramine (workerd with DO SQLite storage)
   await startGramine(GRAMINE_MODE)
   await waitForServer(BASE_URL, 60, 1000)
-  console.log("[gramine] Server is ready")
 }
 
 /**
