@@ -1,0 +1,69 @@
+#!/bin/bash
+set -euo pipefail
+
+# GCP-specific cloud configuration script for Gramine SGX
+# This script runs on GCP VMs to fetch the manifest from instance metadata
+
+LOG_PREFIX="[config_gcp]"
+CONFIG_DIR="/etc/kettle"
+ENV_FILE="$CONFIG_DIR/cloud-launcher.env"
+
+echo "$LOG_PREFIX Fetching manifest from GCP metadata service..."
+
+# Fetch manifest from GCP instance metadata
+# The manifest should be set as a custom metadata attribute named "manifest"
+MANIFEST=$(curl -s -f -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/manifest" || echo "")
+
+# Fetch hostname configuration (optional)
+HOSTNAME_CONFIG=$(curl -s -f -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/hostname" 2>/dev/null || echo "")
+
+if [ -n "$HOSTNAME_CONFIG" ]; then
+  echo "$LOG_PREFIX Successfully fetched hostname configuration: $HOSTNAME_CONFIG"
+else
+  echo "$LOG_PREFIX No hostname configuration found (this is optional)"
+fi
+
+if [ -z "$MANIFEST" ]; then
+  echo "$LOG_PREFIX No manifest found in GCP metadata"
+  echo "$LOG_PREFIX Kettle will use default manifest if available"
+  echo "$LOG_PREFIX To provide a manifest: --metadata=manifest=\$(base64 -w0 manifest.json)"
+  # Write env file with cloud provider and hostname (if present)
+  echo "CLOUD_PROVIDER=gcp" > "$ENV_FILE"
+  if [ -n "$HOSTNAME_CONFIG" ]; then
+    echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
+  fi
+  exit 0
+fi
+
+echo "$LOG_PREFIX Successfully fetched manifest from GCP metadata"
+
+# Print the manifest(s) to the log
+if [[ "$MANIFEST" == *","* ]]; then
+  IFS=',' read -ra MANIFEST_ARRAY <<< "$MANIFEST"
+  for i in "${!MANIFEST_ARRAY[@]}"; do
+    if echo "${MANIFEST_ARRAY[$i]}" | base64 -d &>/dev/null; then
+      echo "$LOG_PREFIX Manifest $i (decoded):"
+      echo "${MANIFEST_ARRAY[$i]}" | base64 -d | sed 's/^/  /'
+    else
+      echo "$LOG_PREFIX Manifest $i does not appear to be base64-encoded"
+    fi
+  done
+else
+  if echo "$MANIFEST" | base64 -d &>/dev/null; then
+    echo "$LOG_PREFIX Manifest (decoded):"
+    echo "$MANIFEST" | base64 -d | sed 's/^/  /'
+  else
+    echo "$LOG_PREFIX Manifest does not appear to be base64-encoded"
+  fi
+fi
+
+# Write environment file for kettle-launcher
+echo "MANIFEST=$MANIFEST" > "$ENV_FILE"
+echo "CLOUD_PROVIDER=gcp" >> "$ENV_FILE"
+if [ -n "$HOSTNAME_CONFIG" ]; then
+  echo "HOSTNAME_CONFIG=$HOSTNAME_CONFIG" >> "$ENV_FILE"
+fi
+
+echo "$LOG_PREFIX Configuration complete"
