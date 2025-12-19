@@ -77,8 +77,8 @@ fs.mounts = [
   # Used for: workerd scratch files, V8 JIT cache, build artifacts
   { path = "/tmp", type = "tmpfs" },
 
-  # /etc for configuration files
-  { path = "/etc", uri = "file:/etc" },
+  # /etc/kettle for configuration files
+  { path = "/etc/kettle", uri = "file:/etc/kettle" },
 
   # /dev for attestation pseudo-filesystem (provided by Gramine)
   # Note: /dev/attestation is automatically available when sgx.remote_attestation is set

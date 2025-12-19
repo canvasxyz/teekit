@@ -42,7 +42,7 @@ MRENCLAVE_FILE = .mrenclave
 # Data directories
 KETTLE_DATA_DIR ?= /var/lib/kettle
 DO_STORAGE_DIR = $(KETTLE_DATA_DIR)/do-storage
-MRENCLAVE_MARKER = $(DO_STORAGE_DIR)/.mrenclave
+MRENCLAVE_MARKER = $(DO_STORAGE_DIR)/mrenclave
 
 .PHONY: all clean distclean check-gramine check-workerd run sgx-run direct-run check-mrenclave
 
