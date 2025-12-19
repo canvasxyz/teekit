@@ -22,6 +22,55 @@ const ATTESTATION_USER_REPORT_DATA = "/dev/attestation/user_report_data"
 const ATTESTATION_QUOTE = "/dev/attestation/quote"
 const ATTESTATION_TYPE = "/dev/attestation/attestation_type"
 
+// Rate limiting configuration
+const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute window
+const RATE_LIMIT_MAX_REQUESTS = 10 // max 10 quote requests per minute per IP
+const RATE_LIMIT_CLEANUP_INTERVAL_MS = 300_000 // cleanup old entries every 5 minutes
+
+interface RateLimitEntry {
+  count: number
+  windowStart: number
+}
+
+const rateLimitMap = new Map<string, RateLimitEntry>()
+
+/**
+ * Check if a request should be rate limited
+ * @returns true if the request should be blocked
+ */
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(ip)
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    // New window
+    rateLimitMap.set(ip, { count: 1, windowStart: now })
+    return false
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true
+  }
+
+  entry.count++
+  return false
+}
+
+/**
+ * Clean up expired rate limit entries
+ */
+function cleanupRateLimitEntries(): void {
+  const now = Date.now()
+  for (const [ip, entry] of rateLimitMap) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+      rateLimitMap.delete(ip)
+    }
+  }
+}
+
+// Periodic cleanup of rate limit entries
+setInterval(cleanupRateLimitEntries, RATE_LIMIT_CLEANUP_INTERVAL_MS).unref()
+
 /**
  * Check if we're running inside a Gramine SGX enclave
  */
@@ -133,6 +182,19 @@ export function startSgxQuoteService(port: number = DEFAULT_PORT) {
     }
 
     if (req.url === "/quote" && (req.method === "GET" || req.method === "POST")) {
+      // Rate limiting for quote generation (CPU-intensive operation)
+      const clientIp = req.socket.remoteAddress || "unknown"
+      if (isRateLimited(clientIp)) {
+        res.writeHead(429, { "Content-Type": "application/json", "Retry-After": "60" })
+        res.end(
+          JSON.stringify({
+            error: "rate limit exceeded",
+            message: `Maximum ${RATE_LIMIT_MAX_REQUESTS} quote requests per minute`,
+          }),
+        )
+        return
+      }
+
       try {
         let publicKey: Uint8Array = new Uint8Array()
 

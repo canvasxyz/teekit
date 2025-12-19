@@ -54,24 +54,51 @@ $IP6TABLES -A INPUT -i lo -j ACCEPT 2>/dev/null || true
 $IPTABLES -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 $IP6TABLES -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
 
+# Drop invalid packets (malformed, out-of-state)
+$IPTABLES -A INPUT -m conntrack --ctstate INVALID -j DROP
+$IP6TABLES -A INPUT -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
+echo "$LOG_PREFIX   Dropping invalid packets"
+
 # Allow ICMP (ping) - useful for health checks
 $IPTABLES -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
 $IP6TABLES -A INPUT -p ipv6-icmp -j ACCEPT 2>/dev/null || true
 
 # HTTP (80) - ACME challenges and redirect to HTTPS
+# Rate limit: 50 new connections per second per IP (ACME doesn't need high throughput)
+$IPTABLES -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -m hashlimit \
+    --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip \
+    --hashlimit-name http_conn_limit -j DROP
+$IP6TABLES -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -m hashlimit \
+    --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip \
+    --hashlimit-name http_conn_limit6 -j DROP 2>/dev/null || true
 $IPTABLES -A INPUT -p tcp --dport 80 -j ACCEPT
 $IP6TABLES -A INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
-echo "$LOG_PREFIX   Allowed: TCP/80 (HTTP)"
+echo "$LOG_PREFIX   Allowed: TCP/80 (HTTP, rate limited: 50/s per IP)"
 
 # HTTPS (443-$MAX_HTTPS_PORT) - nginx proxy to kettles
+# Rate limit: 200 new connections per second per IP (main traffic path)
+$IPTABLES -A INPUT -p tcp --dport 443:$MAX_HTTPS_PORT -m conntrack --ctstate NEW -m hashlimit \
+    --hashlimit-above 200/sec --hashlimit-burst 400 --hashlimit-mode srcip \
+    --hashlimit-name https_conn_limit -j DROP
+$IP6TABLES -A INPUT -p tcp --dport 443:$MAX_HTTPS_PORT -m conntrack --ctstate NEW -m hashlimit \
+    --hashlimit-above 200/sec --hashlimit-burst 400 --hashlimit-mode srcip \
+    --hashlimit-name https_conn_limit6 -j DROP 2>/dev/null || true
 $IPTABLES -A INPUT -p tcp --dport 443:$MAX_HTTPS_PORT -j ACCEPT
 $IP6TABLES -A INPUT -p tcp --dport 443:$MAX_HTTPS_PORT -j ACCEPT 2>/dev/null || true
-echo "$LOG_PREFIX   Allowed: TCP/443-$MAX_HTTPS_PORT (HTTPS)"
+echo "$LOG_PREFIX   Allowed: TCP/443-$MAX_HTTPS_PORT (HTTPS, rate limited: 200/s per IP)"
 
-# Kettle ports (workerd and quote services) - allow external access
+# Kettle ports (workerd and quote services) - allow external access with rate limiting
+# Rate limit: 100 new connections per second per source IP, burst of 200
+# This protects against connection flooding while allowing legitimate traffic
+$IPTABLES -A INPUT -p tcp --dport 3001:$MAX_KETTLE_PORT -m conntrack --ctstate NEW -m hashlimit \
+    --hashlimit-above 100/sec --hashlimit-burst 200 --hashlimit-mode srcip \
+    --hashlimit-name kettle_conn_limit -j DROP
+$IP6TABLES -A INPUT -p tcp --dport 3001:$MAX_KETTLE_PORT -m conntrack --ctstate NEW -m hashlimit \
+    --hashlimit-above 100/sec --hashlimit-burst 200 --hashlimit-mode srcip \
+    --hashlimit-name kettle_conn_limit6 -j DROP 2>/dev/null || true
 $IPTABLES -A INPUT -p tcp --dport 3001:$MAX_KETTLE_PORT -j ACCEPT
 $IP6TABLES -A INPUT -p tcp --dport 3001:$MAX_KETTLE_PORT -j ACCEPT 2>/dev/null || true
-echo "$LOG_PREFIX   Allowed: TCP/3001-$MAX_KETTLE_PORT (Kettle HTTP)"
+echo "$LOG_PREFIX   Allowed: TCP/3001-$MAX_KETTLE_PORT (Kettle HTTP, rate limited: 100/s per IP)"
 
 # SSH (22) - only in devtools mode
 if [ "$IS_DEVTOOLS" = "true" ]; then
