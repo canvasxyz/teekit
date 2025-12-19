@@ -26,6 +26,12 @@ export { getTcbStatus, isTcbInfoFresh, verifyTcb } from "./tcb.js"
 
 export * from "./verifyTdx.js"
 export * from "./verifySgx.js"
+export type {
+  SgxMeasurements,
+  SgxMeasurementConfig,
+  SgxMeasurementHexString,
+  SgxMeasurementVerifier,
+} from "./verifySgx.js"
 export * from "./verifySev.js"
 export {
   DEFAULT_AMD_ARK_CERTS,

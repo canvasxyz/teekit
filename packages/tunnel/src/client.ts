@@ -8,7 +8,9 @@ import {
   getExpectedReportDataFromUserdata,
   isUserdataBound,
   verifyTdxMeasurements,
+  verifySgxMeasurements,
   type MeasurementConfig,
+  type SgxMeasurementConfig,
   // SEV-SNP imports
   parseSevSnpReport,
   verifySevSnp,
@@ -65,12 +67,14 @@ type TdxClientConfig = TunnelClientConfigBase & {
   customVerifyQuote?: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
 }
 
-/** SGX attestation config (requires customVerifyQuote) */
+/** SGX attestation config - requires measurements or customVerifyQuote */
 type SgxClientConfig = TunnelClientConfigBase & {
   sgx: true
   sevsnp?: false
-  measurements?: MeasurementConfig
-  customVerifyQuote: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
+  /** SGX measurement configuration (mr_enclave, mr_signer, etc.) */
+  measurements?: SgxMeasurementConfig
+  /** Custom quote verifier (optional if measurements is provided) */
+  customVerifyQuote?: (quote: TdxQuote | SgxQuote) => Awaitable<boolean>
 }
 
 /** SEV-SNP attestation config */
@@ -440,7 +444,7 @@ export class TunnelClient {
                 )
               }
 
-              // Verify measurements config (TDX only)
+              // Verify measurements config (TDX or SGX)
               if (!this.config.sgx && this.config.measurements !== undefined) {
                 if (
                   !(await verifyTdxMeasurements(
@@ -449,14 +453,22 @@ export class TunnelClient {
                   ))
                 ) {
                   throw new Error(
-                    "Error opening channel: measurement verification failed",
+                    "Error opening channel: TDX measurement verification failed",
                   )
                 }
               }
-              if (this.config.sgx && !this.config.customVerifyQuote) {
-                throw new Error(
-                  "Error opening channel: SGX channel must use customVerifyQuote",
-                )
+              // Verify SGX measurements if configured
+              if (this.config.sgx && this.config.measurements !== undefined) {
+                if (
+                  !(await verifySgxMeasurements(
+                    validQuote as SgxQuote,
+                    this.config.measurements as SgxMeasurementConfig,
+                  ))
+                ) {
+                  throw new Error(
+                    "Error opening channel: SGX measurement verification failed",
+                  )
+                }
               }
             }
 
@@ -467,6 +479,13 @@ export class TunnelClient {
                 if (!(await this.isSevSnpX25519Bound(validSevSnpReport!))) {
                   throw new Error(
                     "Error opening channel: SEV-SNP binding failed - report_data did not match sha512(nonce || x25519key)",
+                  )
+                }
+              } else if (this.config.sgx) {
+                // SGX: verify SHA256(x25519key) matches report_data[0:32]
+                if (!(await this.isSgxX25519Bound(validQuote as SgxQuote))) {
+                  throw new Error(
+                    "Error opening channel: SGX binding failed - report_data did not match sha256(x25519key)",
                   )
                 }
               } else {
@@ -896,6 +915,39 @@ export class TunnelClient {
     if (!x25519key) throw new Error("missing x25519 key")
 
     return await isUserdataBound(quote, nonce, issuedAt, x25519key)
+  }
+
+  /**
+   * Check whether an SGX quote attests to this tunnel's server's X25519 key.
+   * SGX uses a simpler binding: report_data[0:32] = SHA256(x25519_public_key)
+   * The second 32 bytes of report_data are reserved (zeros).
+   */
+  async isSgxX25519Bound(quote: SgxQuote): Promise<boolean> {
+    const x25519key = this.serverX25519PublicKey
+
+    if (!x25519key) throw new Error("missing x25519 key")
+
+    // Compute expected: SHA256(x25519_public_key)
+    // Create a copy to ensure we have a proper ArrayBuffer (not SharedArrayBuffer)
+    const keyBytes = new Uint8Array(x25519key)
+    const expectedHash = await crypto.subtle.digest("SHA-256", keyBytes)
+    const expectedBytes = new Uint8Array(expectedHash)
+
+    // SGX report_data is 64 bytes, first 32 = SHA256(key), rest = zeros
+    const reportData = quote.body.report_data
+    const reportDataFirst32 = reportData.subarray(0, 32)
+
+    // Compare first 32 bytes
+    if (expectedBytes.length !== reportDataFirst32.length) {
+      return false
+    }
+    for (let i = 0; i < expectedBytes.length; i++) {
+      if (expectedBytes[i] !== reportDataFirst32[i]) {
+        return false
+      }
+    }
+
+    return true
   }
 
   /**

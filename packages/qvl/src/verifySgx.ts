@@ -4,6 +4,8 @@ import {
   computeCertSha256Hex,
   extractPemCertificates,
   toBase64Url,
+  hex,
+  type Awaitable,
 } from "./utils.js"
 import {
   DEFAULT_PINNED_ROOT_CERTS,
@@ -13,6 +15,131 @@ import {
 } from "./verifyTdx.js"
 import { concatBytes, bytesEqual } from "./utils.js"
 import { base64 as scureBase64 } from "@scure/base"
+
+export type SgxMeasurementHexString = string
+
+/**
+ * Configuration for verifying SGX measurements. All specified fields must match (AND).
+ * Fields set to undefined are not verified.
+ */
+export interface SgxMeasurements {
+  /** MRENCLAVE - 32 bytes hex - measurement of enclave code and data */
+  mr_enclave?: SgxMeasurementHexString
+  /** MRSIGNER - 32 bytes hex - measurement of signing key */
+  mr_signer?: SgxMeasurementHexString
+  /** ISV Product ID - 16-bit integer */
+  isv_prod_id?: number
+  /** ISV Security Version Number - 16-bit integer */
+  isv_svn?: number
+  /** Report Data - 64 bytes hex - user-defined data in the quote */
+  report_data?: SgxMeasurementHexString
+}
+
+export type SgxMeasurementVerifier = (quote: SgxQuote) => Awaitable<boolean>
+
+/**
+ * Measurement verification configuration.
+ * - Single SgxMeasurements: all specified fields must match
+ * - Array of SgxMeasurements: ANY set can match (useful for multiple valid builds)
+ * - SgxMeasurementVerifier: custom callback
+ * - Array mixing both: ANY can match
+ */
+export type SgxMeasurementConfig =
+  | SgxMeasurements
+  | SgxMeasurements[]
+  | SgxMeasurementVerifier
+  | (SgxMeasurements | SgxMeasurementVerifier)[]
+
+/**
+ * Check if a measurement config item is a function (SgxMeasurementVerifier).
+ */
+function isSgxMeasurementVerifier(
+  item: SgxMeasurements | SgxMeasurementVerifier,
+): item is SgxMeasurementVerifier {
+  return typeof item === "function"
+}
+
+/**
+ * Verify that a single SgxMeasurements config matches the quote.
+ * Returns true if all specified (non-undefined) fields match.
+ */
+function matchesSgxMeasurements(
+  quote: SgxQuote,
+  config: SgxMeasurements,
+): boolean {
+  const body = quote.body
+
+  if (config.mr_enclave !== undefined) {
+    if (hex(body.mr_enclave) !== config.mr_enclave.toLowerCase()) return false
+  }
+  if (config.mr_signer !== undefined) {
+    if (hex(body.mr_signer) !== config.mr_signer.toLowerCase()) return false
+  }
+  if (config.isv_prod_id !== undefined) {
+    if (body.isv_prod_id !== config.isv_prod_id) return false
+  }
+  if (config.isv_svn !== undefined) {
+    if (body.isv_svn !== config.isv_svn) return false
+  }
+  if (config.report_data !== undefined) {
+    if (hex(body.report_data) !== config.report_data.toLowerCase()) return false
+  }
+
+  return true
+}
+
+/**
+ * Verify SGX measurements according to the provided configuration.
+ *
+ * @param quote - Parsed SGX quote
+ * @param config - Measurement verification configuration
+ * @returns true if measurements match the configuration
+ *
+ * @example
+ * // Verify MRENCLAVE only
+ * await verifySgxMeasurements(quote, { mr_enclave: 'abcd1234...' })
+ *
+ * @example
+ * // Verify both MRENCLAVE and MRSIGNER
+ * await verifySgxMeasurements(quote, {
+ *   mr_enclave: 'abcd1234...',
+ *   mr_signer: '5678efgh...'
+ * })
+ *
+ * @example
+ * // Accept multiple valid builds (OR logic)
+ * await verifySgxMeasurements(quote, [
+ *   { mr_enclave: 'build-v1' },
+ *   { mr_enclave: 'build-v2' }
+ * ])
+ *
+ * @example
+ * // Custom verifier
+ * await verifySgxMeasurements(quote, (q) => isKnownGoodEnclave(q))
+ */
+export async function verifySgxMeasurements(
+  quote: SgxQuote,
+  config: SgxMeasurementConfig,
+): Promise<boolean> {
+  // Handle single object or function
+  if (!Array.isArray(config)) {
+    if (isSgxMeasurementVerifier(config)) {
+      return await config(quote)
+    }
+    return matchesSgxMeasurements(quote, config)
+  }
+
+  // Handle array: OR logic - any must match
+  for (const item of config) {
+    if (isSgxMeasurementVerifier(item)) {
+      if (await item(quote)) return true
+    } else {
+      if (matchesSgxMeasurements(quote, item)) return true
+    }
+  }
+
+  return false
+}
 
 /**
  * Verify that the cert chain appropriately signed the quoting enclave report.
@@ -294,6 +421,15 @@ export async function verifySgx(quote: Uint8Array, config?: VerifyConfig) {
     // throw new Error("verifySgx: TCB invalid fmspc")
     return false
   }
+
+  // Verify measurements if configured
+  if (config?.verifyMeasurements !== undefined) {
+    const measurementConfig = config.verifyMeasurements as SgxMeasurementConfig
+    if (!(await verifySgxMeasurements(parsedQuote, measurementConfig))) {
+      throw new Error("verifySgx: measurement verification failed")
+    }
+  }
+
   return true
 }
 
