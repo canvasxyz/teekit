@@ -3,6 +3,7 @@ import { spawn, ChildProcess } from "child_process"
 import { fileURLToPath } from "url"
 import { dirname, resolve } from "path"
 import { existsSync, readFileSync } from "fs"
+import * as chalk from "colorette"
 
 export const BASE_URL = process.env.KETTLE_URL || "http://localhost:3001"
 export const WS_URL = BASE_URL.replace(/^http/, "ws")
@@ -154,7 +155,7 @@ export async function isServerRunning(baseUrl: string = BASE_URL): Promise<boole
 export async function startGramine(mode: "sgx" | "direct"): Promise<boolean> {
   // Check for preexisting instance
   if (await isServerRunning()) {
-    console.log(`[gramine] Server already running at ${BASE_URL}, skipping spawn`)
+    console.log(chalk.yellowBright(`[gramine] Server already running at ${BASE_URL}, skipping spawn`))
     return false
   }
 
@@ -176,7 +177,7 @@ export async function startGramine(mode: "sgx" | "direct"): Promise<boolean> {
   gramineProcess.stdout?.on("data", (data) => {
     const lines = data.toString().trim().split("\n")
     for (const line of lines) {
-      console.log(`[gramine:stdout] ${line}`)
+      console.log(chalk.greenBright(`${line}`))
       // Also capture stdout as some errors may go there (make output)
       gramineStderr.push(line)
     }
@@ -185,18 +186,18 @@ export async function startGramine(mode: "sgx" | "direct"): Promise<boolean> {
   gramineProcess.stderr?.on("data", (data) => {
     const lines = data.toString().trim().split("\n")
     for (const line of lines) {
-      console.log(`[gramine:stderr] ${line}`)
+      console.log(chalk.yellowBright(`${line}`))
       gramineStderr.push(line)
     }
   })
 
   gramineProcess.on("error", (err) => {
-    console.error(`[gramine] Process error: ${err.message}`)
+    console.error(chalk.yellowBright(`[gramine] Process error: ${err.message}`))
     gramineStderr.push(`Process error: ${err.message}`)
   })
 
   gramineProcess.on("exit", (code, signal) => {
-    console.log(`[gramine] Process exited with code ${code}, signal ${signal}`)
+    console.log(chalk.yellowBright(`[gramine] Process exited with code ${code}, signal ${signal}`))
     gramineExitCode = code
     gramineExitSignal = signal
     gramineProcess = null
@@ -215,12 +216,12 @@ export async function stopGramine(): Promise<void> {
   gramineStderr = []
 
   if (!gramineProcess) {
-    console.log("[gramine] No process to stop")
+    console.log(chalk.yellowBright("[gramine] No process to stop"))
     return
   }
 
   const pid = gramineProcess.pid
-  console.log(`[gramine] Stopping gramine process group (PID: ${pid})...`)
+  console.log(chalk.yellowBright(`[gramine] Stopping gramine process group (PID: ${pid})...`))
 
   return new Promise((resolve) => {
     if (!gramineProcess || !pid) {
@@ -230,7 +231,7 @@ export async function stopGramine(): Promise<void> {
 
     // Set a timeout for force kill
     const forceKillTimeout = setTimeout(() => {
-      console.log("[gramine] Force killing process group...")
+      console.log(chalk.yellowBright("[gramine] Force killing process group..."))
       try {
         // Kill the entire process group with SIGKILL
         process.kill(-pid, "SIGKILL")
@@ -244,7 +245,7 @@ export async function stopGramine(): Promise<void> {
     // Set up exit handler
     gramineProcess.once("exit", () => {
       clearTimeout(forceKillTimeout)
-      console.log("[gramine] Process stopped")
+      console.log(chalk.yellowBright("[gramine] Process stopped"))
       gramineProcess = null
       resolve()
     })
@@ -254,7 +255,7 @@ export async function stopGramine(): Promise<void> {
       process.kill(-pid, "SIGTERM")
     } catch (err) {
       clearTimeout(forceKillTimeout)
-      console.log(`[gramine] Error killing process group: ${err}`)
+      console.log(chalk.yellowBright(`[gramine] Error killing process group: ${err}`))
       gramineProcess = null
       resolve()
     }
@@ -266,7 +267,7 @@ export async function stopGramine(): Promise<void> {
  */
 export async function setupGramine(): Promise<void> {
   if (GRAMINE_MODE === "none") {
-    console.log("[gramine] GRAMINE_MODE=none, expecting server to be already running")
+    console.log(chalk.yellowBright("[gramine] GRAMINE_MODE=none, expecting server to be already running"))
     await waitForServer(BASE_URL, 60, 1000)
     return
   }
