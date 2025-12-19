@@ -78,7 +78,7 @@ fs.mounts = [
   { path = "/tmp", type = "tmpfs" },
 
   # /etc/kettle for configuration files
-  { path = "/etc/kettle", uri = "file:/etc/kettle" },
+  { path = "/etc/kettle", type = "tmpfs" },
 
   # /dev for attestation pseudo-filesystem (provided by Gramine)
   # Note: /dev/attestation is automatically available when sgx.remote_attestation is set
@@ -126,5 +126,5 @@ sgx.trusted_files = [
 sgx.allowed_files = [
   # Runtime configuration (manifest, hostname, etc.)
   # TODO: Host can modify these
-  "file:/etc/kettle/",
+  # "file:/etc/kettle/",
 ]
