@@ -1,5 +1,7 @@
 services/lib/
 workerd.config.tmp.capnp
-data.sqld/
 manifest.json
 app-remote.tmp.ts
+
+# Unused
+data.sqld/

@@ -79,10 +79,6 @@ jobs:
             ~/.cache/Homebrew
             ~/Library/Caches/Homebrew
           key: ${{ runner.os }}-homebrew-${{ hashFiles('package-lock.json') }}
-      - name: Install sqld
-        run: |
-          brew tap libsql/sqld
-          brew install sqld
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

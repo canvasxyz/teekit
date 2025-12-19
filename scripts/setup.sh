@@ -22,10 +22,6 @@ echo 'Installed nvm and homebrew, use `source ~/.bashrc` to update your command 
 # Install lima
 brew install lima
 
-# Install sqld
-brew tap libsql/sqld
-brew install sqld
-
 # Install dependencies
 npm install
 

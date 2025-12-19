@@ -151,8 +151,8 @@ scripts/redeploy_gcp.sh --sev-snp my-kettle-vm build/kettle-vm-devtools.tar.gz
 Create your `app.ts` that will run inside the kettle VM.
 
 You can refer to `packages/kettle/app.ts` as an example. You should
-use Hono as the server, and SQLite (sqld) as the database. The
-application will run inside a Cloudflare `workerd` runtime.
+use Hono as the server, Cloudflare `workerd` as the runtime, and
+workerd's built-in SQLite as the database.
 
 ```
 # Run your application locally:

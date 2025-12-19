@@ -129,10 +129,6 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
 echo 'Installed nvm and homebrew, use `source ~/.bashrc` to update your command line.'
 
-# Install sqld
-brew tap libsql/sqld
-brew install sqld
-
 # Install dependencies
 npm install
 

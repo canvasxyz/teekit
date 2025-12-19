@@ -64,7 +64,7 @@ cd teekit
 
 Use the setup script to install required packages. You can also follow
 the script to install each dependency separately. The packages include
-build tools, qemu, nvm, node, homebrew, lima, and sqld.
+build tools, qemu, nvm, node, homebrew, and lima.
 
 ```
 ./scripts/setup.sh

@@ -43,7 +43,7 @@ git clone https://github.com/canvasxyz/teekit.git
 
 cd teekit
 
-# Run the base setup script to install build tools, nvm, brew, lima, sqld.
+# Run the base setup script to install build tools, nvm, brew, lima.
 ./scripts/setup.sh
 
 # Run the image builder setup script to check for dependencies, systemd, and to install nix.
