@@ -1,5 +1,3 @@
-import { mkdtempSync } from "fs"
-import { tmpdir } from "os"
 import { join } from "path"
 import { startWorker, WorkerResult } from "../services/startWorker.js"
 import {
@@ -53,11 +51,7 @@ export async function startKettleWithTunnel(teeType: TeeType = "tdx") {
     delete process.env.TEE_TYPE
   }
 
-  const baseDir = mkdtempSync(join(tmpdir(), `kettle-tunnel-${teeType}-test-`))
-  const dbPath = join(baseDir, "app.sqlite")
   const kettle = await startWorker({
-    dbPath,
-    dbPort: await findFreePort(),
     workerPort: await findFreePort(),
     quoteServicePort: await findFreePort(),
     bundleDir: join(fileURLToPath(new URL("..", import.meta.url)), "dist"),
