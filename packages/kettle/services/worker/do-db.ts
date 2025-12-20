@@ -21,8 +21,8 @@ export interface SqlStorage {
 }
 
 export interface DurableObjectStorage {
-  sql: SqlStorage
-  transactionSync<T>(fn: () => T): T
+  sql?: SqlStorage
+  transactionSync?<T>(fn: () => T): T
 }
 
 /**
@@ -38,7 +38,19 @@ function normalizeParams(sql: string): string {
  * Provides the same interface as the HTTP-based SimpleSqliteClient.
  */
 export class DurableObjectSqliteClient implements SqliteClient {
-  constructor(private storage: DurableObjectStorage) {}
+  private sql: SqlStorage
+  private transactionSync: <T>(fn: () => T) => T
+
+  constructor(storage: DurableObjectStorage) {
+    if (!storage.sql) {
+      throw new Error("DurableObjectStorage.sql is not available")
+    }
+    if (!storage.transactionSync) {
+      throw new Error("DurableObjectStorage.transactionSync is not available")
+    }
+    this.sql = storage.sql
+    this.transactionSync = storage.transactionSync.bind(storage)
+  }
 
   async execute(
     sqlOrStatement: string | { sql: string; args?: unknown[] },
@@ -53,17 +65,17 @@ export class DurableObjectSqliteClient implements SqliteClient {
     // Normalize undefined to null for SQLite compatibility
     const normalizedArgs = args.map((arg) => (arg === undefined ? null : arg))
 
-    const cursor = this.storage.sql.exec(normalizedSql, ...normalizedArgs)
+    const cursor = this.sql.exec(normalizedSql, ...normalizedArgs)
     const rows = cursor.toArray() as Row[]
 
     // Get lastInsertRowid and changes via SQLite functions
     // These must be called immediately after the statement
-    const lastRowIdCursor = this.storage.sql.exec(
+    const lastRowIdCursor = this.sql.exec(
       "SELECT last_insert_rowid() as id",
     )
     const lastRowId = lastRowIdCursor.one()
 
-    const changesCursor = this.storage.sql.exec("SELECT changes() as c")
+    const changesCursor = this.sql.exec("SELECT changes() as c")
     const changesResult = changesCursor.one()
 
     return {
@@ -80,7 +92,7 @@ export class DurableObjectSqliteClient implements SqliteClient {
     const results: ResultSet[] = []
 
     // Execute all statements within a transaction for atomicity
-    this.storage.transactionSync(() => {
+    this.transactionSync(() => {
       for (const stmt of statements) {
         const sql = typeof stmt === "string" ? stmt : stmt.sql
         const args = typeof stmt === "string" ? [] : (stmt.args ?? [])
@@ -90,15 +102,15 @@ export class DurableObjectSqliteClient implements SqliteClient {
           arg === undefined ? null : arg,
         )
 
-        const cursor = this.storage.sql.exec(normalizedSql, ...normalizedArgs)
+        const cursor = this.sql.exec(normalizedSql, ...normalizedArgs)
         const rows = cursor.toArray() as Row[]
 
-        const lastRowIdCursor = this.storage.sql.exec(
+        const lastRowIdCursor = this.sql.exec(
           "SELECT last_insert_rowid() as id",
         )
         const lastRowId = lastRowIdCursor.one()
 
-        const changesCursor = this.storage.sql.exec("SELECT changes() as c")
+        const changesCursor = this.sql.exec("SELECT changes() as c")
         const changesResult = changesCursor.one()
 
         results.push({
@@ -122,6 +134,6 @@ export class DurableObjectSqliteClient implements SqliteClient {
    * Only available with DO storage.
    */
   getDatabaseSize(): number {
-    return this.storage.sql.databaseSize
+    return this.sql.databaseSize
   }
 }
