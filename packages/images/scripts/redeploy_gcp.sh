@@ -557,7 +557,7 @@ log_info "You can press Ctrl+C to exit at any time."
 echo ""
 
 SERVER_URL="http://${NEW_EXTERNAL_IP}:3001/uptime"
-MAX_ATTEMPTS=40  # 10 minutes max (40 * 15s)
+MAX_ATTEMPTS=10  # Max 10 retries
 ATTEMPT=0
 SLEEP_INTERVAL=15
 
@@ -578,7 +578,7 @@ done
 
 if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
     echo ""
-    log_warning "Server check timed out after $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
+    log_warning "Server check timed out after $MAX_ATTEMPTS attempts"
     log_info "The VM may still be starting up. Check manually:"
     log_info "  curl -v http://${NEW_EXTERNAL_IP}:3001/uptime"
 fi
