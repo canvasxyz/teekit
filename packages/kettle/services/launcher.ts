@@ -187,6 +187,7 @@ export interface LauncherArgs {
   manifest: string
   port?: number
   verbose?: boolean
+  dbDir?: string
 }
 
 export async function launcherCommand(argv: LauncherArgs) {
@@ -250,6 +251,7 @@ export async function launcherCommand(argv: LauncherArgs) {
     workerPort: argv.port ?? 3001,
     quoteServicePort: await findFreePort(),
     bundleDir: bundleDir,
+    dbDir: argv.dbDir,
   })
 
   // Handle graceful shutdown

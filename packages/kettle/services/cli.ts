@@ -62,6 +62,10 @@ async function main() {
             type: "boolean",
             description: "Include verbose logging",
           })
+          .option("db-dir", {
+            type: "string",
+            description: "Directory for SQLite storage (default: random temp directory)",
+          })
       },
       launcherCommand,
     )
@@ -80,6 +84,10 @@ async function main() {
             type: "number",
             description: "Port for the worker HTTP server",
             default: 3001,
+          })
+          .option("db-dir", {
+            type: "string",
+            description: "Directory for SQLite storage (default: random temp directory)",
           })
       },
       startWorkerCommand,

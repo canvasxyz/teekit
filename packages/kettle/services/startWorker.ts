@@ -22,6 +22,7 @@ export interface WorkerConfig {
   workerPort: number
   quoteServicePort: number
   bundleDir: string
+  dbDir?: string
 }
 
 export interface WorkerResult {
@@ -34,7 +35,7 @@ export interface WorkerResult {
 export async function startWorker(
   options: WorkerConfig,
 ): Promise<WorkerResult> {
-  const { workerPort, quoteServicePort, bundleDir } = options
+  const { workerPort, quoteServicePort, bundleDir, dbDir } = options
   const quoteServiceUrl = `http://127.0.0.1:${quoteServicePort}`
 
   const WORKER_JS = "worker.js"
@@ -54,8 +55,16 @@ export async function startWorker(
     mkdirSync(staticDir, { recursive: true })
   }
 
-  // Create temp directory for Durable Object SQLite storage
-  const doStorageDir = mkdtempSync(join(tmpdir(), "kettle-do-storage-"))
+  // Use provided db directory or create temp directory for Durable Object SQLite storage
+  let doStorageDir: string
+  if (dbDir) {
+    doStorageDir = dbDir
+    if (!existsSync(doStorageDir)) {
+      mkdirSync(doStorageDir, { recursive: true })
+    }
+  } else {
+    doStorageDir = mkdtempSync(join(tmpdir(), "kettle-do-storage-"))
+  }
 
   // Start quote service
   const quoteService = startQuoteService(quoteServicePort)
@@ -297,6 +306,7 @@ const config :Workerd.Config = (
 export interface StartWorkerArgs {
   file?: string
   port?: number
+  dbDir?: string
 }
 
 export async function startWorkerCommand(argv: StartWorkerArgs) {
@@ -323,6 +333,7 @@ export async function startWorkerCommand(argv: StartWorkerArgs) {
     workerPort: port,
     quoteServicePort: await findFreePort(),
     bundleDir: join(projectDir, "dist"),
+    dbDir: argv.dbDir,
   })
 
   process.on("SIGINT", () => stop())
