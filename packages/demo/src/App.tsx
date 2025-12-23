@@ -107,57 +107,19 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 768px)")
-    const handleChange = (event: MediaQueryListEvent) => {
-      setIsMobile(event.matches)
-    }
-
-    setIsMobile(mediaQuery.matches)
-
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener("change", handleChange)
-    } else {
-      mediaQuery.addListener(handleChange)
-    }
-
-    return () => {
-      if (mediaQuery.removeEventListener) {
-        mediaQuery.removeEventListener("change", handleChange)
-      } else {
-        mediaQuery.removeListener(handleChange)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchUptime()
-    const interval = setInterval(fetchUptime, UPTIME_REFRESH_MS) // Update every 10 seconds
-
-    if (!initializedRef.current) {
-      initializedRef.current = true
-      enc
-        .fetch(baseUrl + "/increment", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: "{}",
-        })
-        .then(async (response) => {
-          const data = await response.json()
-          setSwCounter(data?.counter || 0)
-        })
-    }
-
-    return () => clearInterval(interval)
-  }, [fetchUptime])
-
-  useEffect(() => {
-    if (
-      wsRef.current &&
-      (wsRef.current.readyState === WebSocket.CONNECTING ||
-        wsRef.current.readyState === WebSocket.OPEN)
-    ) {
-      return
+  // Setup or reconnect the chat WebSocket
+  const setupChatWebSocket = useCallback(() => {
+    // Close any existing WebSocket that's not already closed
+    if (wsRef.current) {
+      try {
+        if (
+          wsRef.current.readyState === WebSocket.CONNECTING ||
+          wsRef.current.readyState === WebSocket.OPEN
+        ) {
+          wsRef.current.close()
+        }
+      } catch {}
+      wsRef.current = null
     }
 
     const wsUrl = baseUrl
@@ -228,6 +190,57 @@ function App() {
       setConnected(false)
     }
 
+    return ws
+  }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px)")
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches)
+    }
+
+    setIsMobile(mediaQuery.matches)
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", handleChange)
+    } else {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else {
+        mediaQuery.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchUptime()
+    const interval = setInterval(fetchUptime, UPTIME_REFRESH_MS) // Update every 10 seconds
+
+    if (!initializedRef.current) {
+      initializedRef.current = true
+      enc
+        .fetch(baseUrl + "/increment", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        })
+        .then(async (response) => {
+          const data = await response.json()
+          setSwCounter(data?.counter || 0)
+        })
+    }
+
+    return () => clearInterval(interval)
+  }, [fetchUptime])
+
+  // Setup WebSocket on mount
+  useEffect(() => {
+    const ws = setupChatWebSocket()
+
     return () => {
       try {
         ws.close()
@@ -235,7 +248,7 @@ function App() {
         if (wsRef.current === ws) wsRef.current = null
       }
     }
-  }, [])
+  }, [setupChatWebSocket])
 
   const sendMessage = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -290,8 +303,9 @@ function App() {
                 if (connected) {
                   disconnectRA()
                 } else {
+                  // Reconnect both the tunnel and the chat WebSocket
                   await enc.ensureConnection()
-                  setConnected(true)
+                  setupChatWebSocket()
                 }
               }}
               style={{
