@@ -1,0 +1,343 @@
+#!/bin/bash
+set -euxo pipefail
+
+EFI_FILE="${OUTPUTDIR}/${IMAGE_ID}.efi"
+VHD_FILE="${OUTPUTDIR}/${IMAGE_ID}.vhd"
+WORK_DIR="${OUTPUTDIR}/azure-tmp"
+
+if [ ! -f "$EFI_FILE" ]; then
+    echo "Error: EFI file not found at $EFI_FILE"
+    exit 1
+fi
+
+echo "Converting $EFI_FILE to VHD format for Azure..."
+
+# Create working directory
+mkdir -p "$WORK_DIR"
+
+# Azure Confidential VMs disk configuration
+# The ESP only needs to hold the UKI file (~50-100MB), but we size it to 1GB for safety
+ESP_SIZE_MB=1024
+
+# Azure doesn't document a minimum for Gen2 VHDs, use 30GB to match Ubuntu images
+DISK_SIZE_MB=${AZURE_DISK_SIZE_MB:-30720}
+
+# Ensure disk is at least as large as ESP + GPT overhead
+MIN_DISK_SIZE_MB=$((ESP_SIZE_MB + 2))
+if [ "$DISK_SIZE_MB" -lt "$MIN_DISK_SIZE_MB" ]; then
+    echo "WARNING: AZURE_DISK_SIZE_MB ($DISK_SIZE_MB) is less than minimum ($MIN_DISK_SIZE_MB), using minimum"
+    DISK_SIZE_MB=$MIN_DISK_SIZE_MB
+fi
+ESP_IMAGE="$WORK_DIR/esp.img"
+
+echo "EFI file size: $(stat -c%s "$EFI_FILE") bytes"
+echo "Creating ${ESP_SIZE_MB}MB ESP partition in ${DISK_SIZE_MB}MB disk..."
+
+# Create empty ESP image and format it as FAT32
+dd if=/dev/zero of="$ESP_IMAGE" bs=1M count=$ESP_SIZE_MB status=progress
+mformat -i "$ESP_IMAGE" -F -v "ESP" ::
+
+# Create EFI directory structure and copy the UKI file using mtools
+mmd -i "$ESP_IMAGE" ::EFI
+mmd -i "$ESP_IMAGE" ::EFI/BOOT
+mcopy -i "$ESP_IMAGE" "$EFI_FILE" ::EFI/BOOT/BOOTX64.EFI
+
+# Verify the EFI file was copied correctly
+echo "Verifying ESP contents..."
+mdir -i "$ESP_IMAGE" ::EFI/BOOT/
+
+# Create the final disk image with GPT
+DISK_IMAGE="$WORK_DIR/azure_image.raw"
+
+# Create empty disk using truncate for speed (creates sparse file)
+truncate -s "${DISK_SIZE_MB}M" "$DISK_IMAGE"
+
+# Calculate partition boundaries
+# Sector size: 512 bytes
+# 1 MiB = 2048 sectors
+# Start ESP at 1MiB (sector 2048) for alignment
+# End ESP at start + ESP_SIZE_MB - 1 sector
+ESP_START_SECTOR=2048
+ESP_SIZE_SECTORS=$((ESP_SIZE_MB * 2048))
+ESP_END_SECTOR=$((ESP_START_SECTOR + ESP_SIZE_SECTORS - 1))
+
+echo "Creating GPT partition table..."
+echo "  ESP start: sector $ESP_START_SECTOR ($(($ESP_START_SECTOR * 512 / 1024 / 1024)) MiB)"
+echo "  ESP end: sector $ESP_END_SECTOR"
+echo "  ESP size: $ESP_SIZE_SECTORS sectors ($ESP_SIZE_MB MiB)"
+
+# Use sfdisk for better control over partition type GUIDs
+# EFI System Partition GUID: C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+sfdisk "$DISK_IMAGE" << EOF
+label: gpt
+first-lba: 34
+sector-size: 512
+
+start=$ESP_START_SECTOR, size=$ESP_SIZE_SECTORS, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="EFI System Partition"
+EOF
+
+# Verify partition table was created correctly
+echo "Verifying GPT partition table..."
+sfdisk -l "$DISK_IMAGE"
+
+# Additional verification: Check partition type GUID is correct for EFI System Partition
+echo "Verifying EFI System Partition type GUID..."
+PART_TYPE=$(sfdisk --dump "$DISK_IMAGE" | grep 'type=' | head -1 | sed 's/.*type=\([A-F0-9-]*\).*/\1/')
+if [ "$PART_TYPE" != "C12A7328-F81F-11D2-BA4B-00A0C93EC93B" ]; then
+    echo "ERROR: Partition type GUID is '$PART_TYPE', expected 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B'"
+    exit 1
+fi
+echo "  ✓ EFI System Partition type GUID verified: $PART_TYPE"
+
+# Copy the ESP filesystem into the partition
+echo "Copying ESP filesystem to partition..."
+dd if="$ESP_IMAGE" of="$DISK_IMAGE" bs=1M seek=1 conv=notrunc,sparse status=progress
+
+# Verify the disk image structure before creating VHD
+echo ""
+echo "Disk image structure verification:"
+echo "  Total size: $(stat -c%s "$DISK_IMAGE") bytes"
+echo "  ESP at offset 1MiB, size ${ESP_SIZE_MB}MiB"
+
+# Azure requirements:
+# 1. Virtual size must be whole MiB (1,048,576 bytes) - Azure calls this "MB" but means MiB
+# 2. Virtual size must be divisible by 512 (page blob alignment)
+# 3. Virtual size must equal (File size - 512)
+# 4. VHD must have proper footer structure
+#
+# Since 1 MiB = 1,048,576 = 2048 × 512, requirement #2 is automatically satisfied
+# qemu-img rounds virtual size to cylinder boundaries, which breaks these requirements
+# So we'll create the VHD footer manually
+
+CURRENT_SIZE=$(stat -c%s "$DISK_IMAGE")
+MiB=$((1024 * 1024))
+
+# Round raw disk up to nearest MiB
+VIRTUAL_SIZE_MiB=$(( ((CURRENT_SIZE + MiB - 1) / MiB) ))
+VIRTUAL_SIZE=$((VIRTUAL_SIZE_MiB * MiB))
+truncate -s "$VIRTUAL_SIZE" "$DISK_IMAGE"
+
+echo "Raw disk (virtual size): $VIRTUAL_SIZE bytes ($VIRTUAL_SIZE_MiB MiB)"
+
+# Create VHD by appending a manually-crafted 512-byte footer to the raw disk
+# The disk image may be sparse (mostly zeros), which is fine - Azure page blob
+# uploads handle sparse files correctly by filling unallocated space with zeros
+mv "$DISK_IMAGE" "$VHD_FILE"
+
+echo "Creating VHD footer manually..."
+python3 << EOF
+import struct
+import uuid
+import time
+
+vhd_path = "$VHD_FILE"
+virtual_size = $VIRTUAL_SIZE
+
+# Calculate CHS geometry (using standard VHD algorithm)
+total_sectors = virtual_size // 512
+if total_sectors > 65535 * 16 * 255:
+    total_sectors = 65535 * 16 * 255
+
+if total_sectors >= 65535 * 16 * 63:
+    sectors_per_track = 255
+    heads = 16
+    cylinder_times_heads = total_sectors // sectors_per_track
+else:
+    sectors_per_track = 17
+    cylinder_times_heads = total_sectors // sectors_per_track
+    heads = (cylinder_times_heads + 1023) // 1024
+    if heads < 4:
+        heads = 4
+    if cylinder_times_heads >= (heads * 1024) or heads > 16:
+        sectors_per_track = 31
+        heads = 16
+        cylinder_times_heads = total_sectors // sectors_per_track
+    if cylinder_times_heads >= (heads * 1024):
+        sectors_per_track = 63
+        heads = 16
+        cylinder_times_heads = total_sectors // sectors_per_track
+
+cylinders = cylinder_times_heads // heads
+
+# Build the 512-byte footer
+footer = bytearray(512)
+
+# Cookie (offset 0): "conectix"
+footer[0:8] = b'conectix'
+
+# Features (offset 8): 0x00000002 (reserved)
+struct.pack_into('>I', footer, 8, 0x00000002)
+
+# File Format Version (offset 12): 0x00010000
+struct.pack_into('>I', footer, 12, 0x00010000)
+
+# Data Offset (offset 16): 0xFFFFFFFFFFFFFFFF for fixed disk
+struct.pack_into('>Q', footer, 16, 0xFFFFFFFFFFFFFFFF)
+
+# Timestamp (offset 24): seconds since 2000-01-01 00:00:00 UTC
+epoch_2000 = 946684800  # Unix timestamp for 2000-01-01
+current_time = int(time.time())
+vhd_timestamp = current_time - epoch_2000
+struct.pack_into('>I', footer, 24, vhd_timestamp)
+
+# Creator Application (offset 28): "qemu" (pretend to be qemu)
+footer[28:32] = b'qemu'
+
+# Creator Version (offset 32): 0x00060100 (qemu 6.1)
+struct.pack_into('>I', footer, 32, 0x00060100)
+
+# Creator Host OS (offset 36): 0x5769326B ("Wi2k" - Windows)
+footer[36:40] = b'Wi2k'
+
+# Original Size (offset 40): same as current size
+struct.pack_into('>Q', footer, 40, virtual_size)
+
+# Current Size (offset 48): the virtual disk size
+struct.pack_into('>Q', footer, 48, virtual_size)
+
+# Disk Geometry (offset 56): C/H/S
+struct.pack_into('>H', footer, 56, cylinders)
+footer[58] = heads
+footer[59] = sectors_per_track
+
+# Disk Type (offset 60): 0x00000002 (fixed hard disk)
+struct.pack_into('>I', footer, 60, 0x00000002)
+
+# Unique ID (offset 68): random UUID
+footer[68:84] = uuid.uuid4().bytes
+
+# Saved State (offset 84): 0x00 (not in saved state)
+footer[84] = 0x00
+
+# Reserved (offset 85-511): zeros (already initialized)
+
+# Checksum (offset 64): one's complement of sum of all bytes (with checksum field = 0)
+# IMPORTANT: Calculate this LAST after all other fields are set
+struct.pack_into('>I', footer, 64, 0)  # Zero it first
+# Calculate checksum as one's complement
+footer_sum = 0
+for byte in footer:
+    footer_sum = (footer_sum + byte) & 0xFFFFFFFF
+checksum = (~footer_sum) & 0xFFFFFFFF
+struct.pack_into('>I', footer, 64, checksum)
+
+# Append footer to VHD file
+with open(vhd_path, 'ab') as f:
+    f.write(footer)
+
+print(f"Created VHD footer:")
+print(f"  Virtual size: {virtual_size} bytes ({virtual_size // 1048576} MiB)")
+print(f"  Geometry: C={cylinders} H={heads} S={sectors_per_track}")
+print(f"  Checksum: 0x{checksum:08x}")
+EOF
+
+VHD_SIZE=$(stat -c%s "$VHD_FILE")
+echo "VHD created: $VHD_SIZE bytes"
+
+# Verify Azure requirements
+echo ""
+echo "Verifying VHD meets Azure requirements..."
+python3 << EOF
+import struct
+
+vhd_path = "$VHD_FILE"
+expected_virtual = $VIRTUAL_SIZE
+expected_file = $VHD_SIZE
+
+with open(vhd_path, 'rb') as f:
+    # Read footer
+    f.seek(-512, 2)
+    footer = f.read(512)
+
+    # Check cookie
+    cookie = footer[0:8]
+    if cookie != b'conectix':
+        print(f"  ✗ ERROR: Invalid cookie: {cookie}")
+        exit(1)
+    print(f"  ✓ Cookie: 'conectix'")
+
+    # Check virtual size
+    current_size = struct.unpack('>Q', footer[48:56])[0]
+    if current_size != expected_virtual:
+        print(f"  ✗ ERROR: Virtual size mismatch: {current_size} != {expected_virtual}")
+        exit(1)
+    print(f"  ✓ Virtual size: {current_size} bytes ({current_size // 1048576} MiB)")
+
+    # Check if whole MiB (Azure requirement - they call it "MB" but mean MiB)
+    if current_size % 1048576 != 0:
+        print(f"  ✗ ERROR: Virtual size not whole MiB: {current_size % 1048576} remainder")
+        exit(1)
+    print(f"  ✓ Virtual size is whole MiB (what Azure calls 'MB')")
+
+    # Check if divisible by 512 (Azure page blob requirement - automatically satisfied by MiB)
+    if current_size % 512 != 0:
+        print(f"  ✗ ERROR: Virtual size not divisible by 512: {current_size % 512} remainder")
+        exit(1)
+    print(f"  ✓ Virtual size is divisible by 512 (page blob aligned)")
+
+    # Check file size
+    f.seek(0, 2)
+    file_size = f.tell()
+    if file_size != expected_file:
+        print(f"  ✗ ERROR: File size mismatch: {file_size} != {expected_file}")
+        exit(1)
+    print(f"  ✓ File size: {file_size} bytes")
+
+    # Check if file size is divisible by 512 (Azure page blob requirement)
+    if file_size % 512 != 0:
+        print(f"  ✗ ERROR: File size not divisible by 512: {file_size % 512} remainder")
+        exit(1)
+    print(f"  ✓ File size is divisible by 512 (page blob aligned)")
+
+    # Check formula
+    if file_size != current_size + 512:
+        print(f"  ✗ ERROR: File size != Virtual + 512 ({file_size} != {current_size + 512})")
+        exit(1)
+    print(f"  ✓ File size = Virtual size + 512")
+
+    # Verify checksum
+    checksum_in_footer = struct.unpack('>I', footer[64:68])[0]
+    # To verify: zero out the checksum field and recalculate
+    footer_for_check = bytearray(footer)
+    struct.pack_into('>I', footer_for_check, 64, 0)
+    # Calculate sum the same way we did when creating
+    footer_sum = 0
+    for byte in footer_for_check:
+        footer_sum = (footer_sum + byte) & 0xFFFFFFFF
+    calculated_checksum = (~footer_sum) & 0xFFFFFFFF
+
+    if checksum_in_footer != calculated_checksum:
+        print(f"  ✗ ERROR: Checksum mismatch: 0x{checksum_in_footer:08x} != 0x{calculated_checksum:08x}")
+        exit(1)
+    print(f"  ✓ Checksum valid: 0x{checksum_in_footer:08x}")
+
+print("")
+print("✓ VHD meets all Azure requirements!")
+EOF
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "ERROR: VHD verification failed"
+    exit 1
+fi
+
+echo ""
+echo "VHD Summary:"
+echo "  File: $VHD_FILE"
+echo "  Virtual size: $VIRTUAL_SIZE bytes ($VIRTUAL_SIZE_MiB MiB)"
+echo "  File size: $VHD_SIZE bytes"
+
+# Clean up
+rm -rf "$WORK_DIR"
+
+echo "Successfully created VHD: $VHD_FILE"
+
+# Create compressed version of the VHD
+VHD_TAR_GZ="${VHD_FILE}.tar.gz"
+echo ""
+echo "Creating compressed version: $VHD_TAR_GZ"
+tar -czf "$VHD_TAR_GZ" -C "$OUTPUTDIR" "$(basename "$VHD_FILE")"
+
+TAR_SIZE=$(stat -c%s "$VHD_TAR_GZ")
+echo "Compressed VHD created: $TAR_SIZE bytes"
+echo "Compression ratio: $(awk "BEGIN {printf \"%.1f%%\", ($VHD_SIZE - $TAR_SIZE) * 100.0 / $VHD_SIZE}")"

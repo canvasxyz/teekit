@@ -42,14 +42,14 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
    ```
 
 4. Now that dependencies are installed, start a build using `env_wrapper.sh`,
-   optionally using the Azure, GCP, or devtools profile.
+   optionally using the Azure, GCP, Azure devtools, or GCP devtools profile.
 
    ```
    scripts/check_perms.sh
    scripts/setup_deps.sh
    scripts/prep_kettle.sh
 
-   scripts/env_wrapper.sh mkosi --force --profile=gcp -I kettle-vm.conf
+   scripts/env_wrapper.sh mkosi --force --profile=gcp-devtools -I kettle-vm.conf
    ```
 
 5. Export measurements:
@@ -64,14 +64,17 @@ After building, artifacts are located in the `build/` directory:
 
 ```
 build/
-├── kettle-vm.efi           # Base UKI image (no profile)
-├── kettle-vm.tar.gz         # GCP disk image (gcp profile)
-├── kettle-vm-azure.efi      # Azure UKI image (azure profile)
-├── kettle-vm-azure.vhd      # Azure VHD image (azure profile)
-└── kettle-vm-devtools.efi   # Development UKI image (devtools profile)
+├── kettle-vm.efi                     # Base UKI image  (no profile)
+├── kettle-vm-devtools.efi            # Base UKI image  (devtools profile)
+├── kettle-vm-gcp.efi                 # GCP UKI image   (gcp base profile)
+├── kettle-vm-gcp.tar.gz              # GCP disk image  (gcp base profile)
+├── kettle-vm-gcp-devtools.efi        # GCP UKI image   (gcp-devtools profile)
+├── kettle-vm-gcp-devtools.tar.gz     # GCP disk image  (gcp-devtools profile)
+├── kettle-vm-azure.efi               # Azure UKI image (azure base profile)
+├── kettle-vm-azure.vhd               # Azure VHD image (azure base profile)
+├── kettle-vm-azure-devtools.efi      # Azure UKI image (azure-devtools profile)
+└── kettle-vm-azure-devtools.vhd      # Azure VHD image (azure-devtools profile)
 ```
-
-The different ImageId values ensure that building multiple profiles (via `npm run build:all`) won't overwrite each other's EFI artifacts.
 
 ## Testing Locally
 
@@ -86,8 +89,8 @@ This will boot the image with the kettle service on port 3001
 
 ## Deploying
 
-You can deploy the image to Azure (recommended) or GCP TDX machines,
-depending on which profile you built the image with.
+You can deploy the image to Azure or GCP machines, depending on which
+profile you built the image with.
 
 Follow the instructions in DEPLOY-AZURE.md or DEPLOY-GCP.md for
 reference.

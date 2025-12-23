@@ -24,10 +24,10 @@
 #   --dry-run      Show what would be done without making changes
 #
 # Examples:
-#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --tdx              # Prompts for VM name
-#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --tdx my-vm
-#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --sev-snp my-vm
-#   ./redeploy_gcp.sh build/kettle-vm.tar.gz --tdx --dry-run    # Uses cached VM name
+#   ./redeploy_gcp.sh build/kettle-vm-gcp.tar.gz --tdx              # Prompts for VM name
+#   ./redeploy_gcp.sh build/kettle-vm-gcp.tar.gz --tdx my-vm
+#   ./redeploy_gcp.sh build/kettle-vm-gcp.tar.gz --sev-snp my-vm
+#   ./redeploy_gcp.sh build/kettle-vm-gcp.tar.gz --tdx --dry-run    # Uses cached VM name
 #
 
 set -euo pipefail
@@ -113,10 +113,10 @@ if [ $# -lt 1 ]; then
     echo "  --dry-run    Show what would be done without making changes"
     echo ""
     echo "Examples:"
-    echo "  $0 build/kettle-vm.tar.gz --tdx              # Prompts for VM name"
-    echo "  $0 build/kettle-vm.tar.gz --tdx my-vm"
-    echo "  $0 build/kettle-vm.tar.gz --sev-snp my-vm"
-    echo "  $0 build/kettle-vm.tar.gz --tdx --dry-run    # Uses cached VM name"
+    echo "  $0 build/kettle-vm-gcp.tar.gz --tdx              # Prompts for VM name"
+    echo "  $0 build/kettle-vm-gcp.tar.gz --tdx my-vm"
+    echo "  $0 build/kettle-vm-gcp.tar.gz --sev-snp my-vm"
+    echo "  $0 build/kettle-vm-gcp.tar.gz --tdx --dry-run    # Uses cached VM name"
     exit 1
 fi
 
@@ -186,8 +186,8 @@ if [ ! -f "$TAR_FILE" ]; then
     log_error "tar.gz file not found: $TAR_FILE"
     echo ""
     echo "Make sure you have built the image first:"
-    echo "  npm run build:gcp          # For kettle-vm.tar.gz"
-    echo "  npm run build:gcp:devtools # For devtools tar.gz"
+    echo "  npm run build:gcp          # For kettle-vm-gcp.tar.gz"
+    echo "  npm run build:gcp:devtools # For kettle-vm-gcp-devtools.tar.gz"
     exit 1
 fi
 

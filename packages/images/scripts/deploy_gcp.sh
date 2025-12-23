@@ -19,10 +19,10 @@
 # - Prompts for manifest and Trust Authority configuration
 #
 # Examples:
-#   ./deploy_gcp.sh --tdx build/kettle-vm.tar.gz
-#   ./deploy_gcp.sh --tdx build/kettle-vm.tar.gz demo
-#   ./deploy_gcp.sh --sev-snp build/kettle-vm.tar.gz
-#   ./deploy_gcp.sh --sev-snp build/kettle-vm.tar.gz myvm
+#   ./deploy_gcp.sh --tdx build/kettle-vm-gcp.tar.gz
+#   ./deploy_gcp.sh --tdx build/kettle-vm-gcp.tar.gz demo
+#   ./deploy_gcp.sh --sev-snp build/kettle-vm-gcp.tar.gz
+#   ./deploy_gcp.sh --sev-snp build/kettle-vm-gcp.tar.gz myvm
 #
 
 set -euo pipefail
@@ -137,8 +137,8 @@ if [ ! -f "$TAR_FILE" ]; then
     log_error "tar.gz file not found: $TAR_FILE"
     echo ""
     echo "Make sure you have built the image first:"
-    echo "  npm run build:gcp          # For kettle-vm.tar.gz"
-    echo "  npm run build:gcp:devtools # For devtools tar.gz"
+    echo "  npm run build:gcp          # For kettle-vm-gcp.tar.gz"
+    echo "  npm run build:gcp:devtools # For kettle-vm-gcp-devtools.tar.gz"
     exit 1
 fi
 

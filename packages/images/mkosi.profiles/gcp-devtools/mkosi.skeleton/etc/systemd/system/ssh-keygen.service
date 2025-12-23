@@ -1,0 +1,13 @@
+[Unit]
+Description=Generate SSH host keys on first boot
+DefaultDependencies=no
+Before=ssh.service sshd.service
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

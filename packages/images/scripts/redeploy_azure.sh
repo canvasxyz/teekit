@@ -163,7 +163,7 @@ if [ ! -f "$VHD_FILE" ]; then
     echo ""
     echo "Make sure you have built the image first:"
     echo "  npm run build:az          # For kettle-vm-azure.vhd"
-    echo "  npm run build:az:devtools # For devtools VHD"
+    echo "  npm run build:az:devtools # For kettle-vm-azure-devtools.vhd"
     exit 1
 fi
 
