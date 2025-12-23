@@ -65,6 +65,9 @@ function App() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const initialMessagesLoadRef = useRef<boolean>(true)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectDelayRef = useRef<number>(1000) // Start with 1 second
+  const mountedRef = useRef<boolean>(true)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -109,6 +112,12 @@ function App() {
 
   // Setup or reconnect the chat WebSocket
   const setupChatWebSocket = useCallback(() => {
+    // Clear any pending reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+
     // Close any existing WebSocket that's not already closed
     if (wsRef.current) {
       try {
@@ -131,6 +140,7 @@ function App() {
     ws.onopen = () => {
       setConnected(true)
       setConnectionError("") // Clear any previous connection errors
+      reconnectDelayRef.current = 1000 // Reset backoff on successful connection
       console.log("Connected to chat server")
 
       // Set up control panel UI with attested measurements, expected measurements, etc.
@@ -182,6 +192,26 @@ function App() {
       if (event.code === 1011) {
         const reason = event.reason || "Initialization failed"
         setConnectionError(`Server error (${event.code}): ${reason}`)
+      }
+
+      // Schedule automatic reconnection with exponential backoff
+      // Skip if this was a manual disconnect (code 4000) or component unmounted
+      if (event.code !== 4000 && mountedRef.current) {
+        const delay = reconnectDelayRef.current
+        console.log(`Scheduling chat WebSocket reconnect in ${delay}ms`)
+        reconnectTimeoutRef.current = setTimeout(async () => {
+          if (!mountedRef.current) return
+          try {
+            await enc.ensureConnection()
+            if (mountedRef.current) {
+              setupChatWebSocket()
+            }
+          } catch (e) {
+            console.error("Failed to reconnect:", e)
+          }
+        }, delay)
+        // Exponential backoff: double the delay, cap at 30 seconds
+        reconnectDelayRef.current = Math.min(delay * 2, 30000)
       }
     }
 
@@ -239,9 +269,16 @@ function App() {
 
   // Setup WebSocket on mount
   useEffect(() => {
+    mountedRef.current = true
     const ws = setupChatWebSocket()
 
     return () => {
+      mountedRef.current = false
+      // Clear any pending reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
       try {
         ws.close()
       } finally {
