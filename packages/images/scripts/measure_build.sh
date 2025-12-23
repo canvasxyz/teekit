@@ -97,19 +97,8 @@ case "$STAGE_NAME" in
             measure_directory "$OUTPUT_DIR/usr/lib/modules" "kernel_modules"
         fi
         ;;
-    stage3-sqld)
-        # Stage 3: Base + kernel + sqld
-        measure_directory "$OUTPUT_DIR" "sqld_image"
-        if [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
-            measure_file "$OUTPUT_DIR/kettle-vm.efi" "sqld_efi"
-        fi
-        # Measure sqld binary
-        if [ -f "$OUTPUT_DIR/usr/bin/sqld" ]; then
-            measure_file "$OUTPUT_DIR/usr/bin/sqld" "sqld_binary"
-        fi
-        ;;
-    stage4-kettle)
-        # Stage 4: Base + kernel + sqld + runtime
+    stage3-kettle)
+        # Stage 3: Base + kernel + runtime
         measure_directory "$OUTPUT_DIR" "kettle_image"
         if [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
             measure_file "$OUTPUT_DIR/kettle-vm.efi" "kettle_efi"
@@ -122,17 +111,17 @@ case "$STAGE_NAME" in
             measure_file "$OUTPUT_DIR/usr/bin/kettle" "kettle_cli"
         fi
         ;;
-    stage5-gcp)
-        # Stage 5: Full GCP build
+    stage4-gcp)
+        # Stage 4: Full GCP build
         measure_directory "$OUTPUT_DIR" "gcp_image"
         # GCP profile creates tar.gz - check both possible names
-        if [ -f "$OUTPUT_DIR/kettle-vm-stage5.tar.gz" ]; then
-            measure_file "$OUTPUT_DIR/kettle-vm-stage5.tar.gz" "gcp_tar"
+        if [ -f "$OUTPUT_DIR/kettle-vm-stage4.tar.gz" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm-stage4.tar.gz" "gcp_tar"
         elif [ -f "$OUTPUT_DIR/kettle-vm.tar.gz" ]; then
             measure_file "$OUTPUT_DIR/kettle-vm.tar.gz" "gcp_tar"
         fi
-        if [ -f "$OUTPUT_DIR/kettle-vm-stage5.efi" ]; then
-            measure_file "$OUTPUT_DIR/kettle-vm-stage5.efi" "gcp_efi"
+        if [ -f "$OUTPUT_DIR/kettle-vm-stage4.efi" ]; then
+            measure_file "$OUTPUT_DIR/kettle-vm-stage4.efi" "gcp_efi"
         elif [ -f "$OUTPUT_DIR/kettle-vm.efi" ]; then
             measure_file "$OUTPUT_DIR/kettle-vm.efi" "gcp_efi"
         fi

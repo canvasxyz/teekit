@@ -11,9 +11,8 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
 - Kernel (`kernel/`): Outputs compiled kernel at `/usr/lib/modules/$KERNEL_VERSION/vmlinuz`
 - Base System (`base/`): Minimal Debian runtime environment (systemd, busybox, kmod, etc.)
 - Build Tools (`build-tools/`): Used only during build, not in final image
-- sqld: (`sqld/`): Builds the libsql server binary, depends on build-tools stage
 - Kettle Runtime (`kettle-vm/`): Includes kettle artifacts, services, and configuration
-  - Depends on base (for runtime) and sqld (for binary)
+  - Depends on base (for runtime) and build-tools (for build environment)
 
 ## Usage
 

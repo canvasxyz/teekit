@@ -320,7 +320,7 @@ jobs:
           echo "Azure profile adds different packages (dmidecode) and skeleton trees,"
           echo "so we need to clear the final image output to rebuild with Azure profile."
           echo ""
-          echo "Note: Subimage caches (kernel, sqld) are preserved since they are"
+          echo "Note: Subimage caches (kernel, build-tools) are preserved since they are"
           echo "profile-independent and can be reused for the Azure build."
 
           # Clear only the final image artifacts, not the subimage caches

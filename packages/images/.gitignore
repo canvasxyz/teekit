@@ -8,7 +8,6 @@ build/*.vmlinuz
 build/kernel*
 build/kettle-vm*
 build/build-tools
-build/sqld
 
 # Legacy artifacts
 build/tdx-debian*

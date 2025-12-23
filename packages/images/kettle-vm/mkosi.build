@@ -1,8 +1,6 @@
 #!/bin/bash
 set -euxo pipefail
 
-# Note: sqld is built separately in the sqld stage and included via BaseTrees
-
 # Use pre-built kettle CLI bundle and generate manifest/app
 # SRCDIR points to packages/images in the mkosi build environment
 IMAGES_DIR="$SRCDIR"

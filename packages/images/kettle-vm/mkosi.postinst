@@ -58,8 +58,6 @@ if [ -f "$BUILDROOT/usr/lib/node_modules/esbuild/bin/esbuild" ]; then
     ln -sf /usr/lib/node_modules/esbuild/bin/esbuild "$BUILDROOT/usr/local/bin/esbuild"
 fi
 
-# Note: sqld (libsql server) is built in sqld stage and included via BaseTrees
-
 # Install kettle launcher
 install -m 755 "kettle-vm/kettle-launcher.sh" "$BUILDROOT/usr/bin/kettle-launcher"
 
