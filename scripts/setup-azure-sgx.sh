@@ -132,6 +132,11 @@ sudo mkdir -p /opt/kettle
 sudo mkdir -p /var/lib/kettle
 sudo mkdir -p /etc/kettle
 
+export USER=$(whoami)
+sudo chown $USER /opt/kettle
+sudo chown $USER /var/lib/kettle
+sudo chown $USER /etc/kettle
+
 # Configure AESM service for Azure
 log_info "Configuring AESM service..."
 sudo tee /etc/aesmd.conf > /dev/null << 'EOF'
@@ -167,14 +172,14 @@ if [ ! -f /opt/kettle/enclave-key.pem ]; then
     log_warn "Generated development signing key at /opt/kettle/enclave-key.pem"
     log_warn "For production, use your own signing key!"
 fi
-export USER=$(whoami)
 sudo chown $USER /opt/kettle/enclave-key.pem
 chmod 600 /opt/kettle/enclave-key.pem
 
 # Print summary
-log_info "=========================================="
-log_info "SGX setup complete!"
-log_info "=========================================="
+echo ""
+echo "=========================================="
+echo "SGX setup complete!"
+echo "=========================================="
 echo ""
 echo "Installed components:"
 echo "  - Intel SGX PSW (Platform Software)"
@@ -187,3 +192,4 @@ echo "  - /opt/kettle       (enclave files)"
 echo "  - /var/lib/kettle   (database storage)"
 echo "  - /etc/kettle       (configuration)"
 echo ""
+echo "Start a new shell with \`bash\`, or logout and login again to continue."
