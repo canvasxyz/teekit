@@ -31,7 +31,7 @@ az ssh vm -g sgxGroup --name sgx-vm --local-user azureuser
 git clone https://github.com/canvasxyz/teekit.git
 cd teekit
 
-sudo ./scripts/setup-azure-sgx.sh
+./scripts/setup-azure-sgx.sh
 ```
 
 Build the kettle bundle:

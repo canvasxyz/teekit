@@ -27,12 +27,6 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    log_error "Please run as root (sudo)"
-    exit 1
-fi
-
 # Detect OS
 if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -56,21 +50,21 @@ fi
 log_info "Adding Intel SGX repository..."
 case $OS in
     ubuntu|debian)
-        apt-get update
-        apt-get install -y curl gnupg
+        sudo apt-get update
+        sudo apt-get install -y curl gnupg
 
         # Intel SGX repository key
         curl -fsSL https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | \
-            gpg --dearmor -o /usr/share/keyrings/intel-sgx.gpg
+            sudo gpg --dearmor --yes -o /usr/share/keyrings/intel-sgx.gpg
 
         # Add repository based on Ubuntu version
         if [ "$OS" = "ubuntu" ]; then
             echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-sgx.gpg] https://download.01.org/intel-sgx/sgx_repo/ubuntu $(lsb_release -cs) main" \
-                > /etc/apt/sources.list.d/intel-sgx.list
+                | sudo tee /etc/apt/sources.list.d/intel-sgx.list > /dev/null
         else
             # For Debian, use bookworm or closest Ubuntu equivalent
             echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-sgx.gpg] https://download.01.org/intel-sgx/sgx_repo/ubuntu jammy main" \
-                > /etc/apt/sources.list.d/intel-sgx.list
+                | sudo tee /etc/apt/sources.list.d/intel-sgx.list > /dev/null
         fi
         ;;
     *)
@@ -82,23 +76,23 @@ esac
 # Add Gramine repository
 log_info "Adding Gramine repository..."
 curl -fsSL https://packages.gramineproject.io/gramine-keyring.gpg | \
-    gpg --dearmor -o /usr/share/keyrings/gramine-keyring.gpg
+    sudo gpg --dearmor --yes -o /usr/share/keyrings/gramine-keyring.gpg
 
 if [ "$OS" = "ubuntu" ]; then
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/gramine-keyring.gpg] https://packages.gramineproject.io/ $(lsb_release -cs) main" \
-        > /etc/apt/sources.list.d/gramine.list
+        | sudo tee /etc/apt/sources.list.d/gramine.list > /dev/null
 else
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/gramine-keyring.gpg] https://packages.gramineproject.io/ bookworm main" \
-        > /etc/apt/sources.list.d/gramine.list
+        | sudo tee /etc/apt/sources.list.d/gramine.list > /dev/null
 fi
 
 # Update package lists
 log_info "Updating package lists..."
-apt-get update
+sudo apt-get update
 
 # Install Intel SGX driver and PSW
 log_info "Installing Intel SGX components..."
-apt-get install -y \
+sudo apt-get install -y \
     build-essential \
     libsgx-launch \
     libsgx-urts \
@@ -110,12 +104,12 @@ apt-get install -y \
 
 # Install Gramine
 log_info "Installing Gramine..."
-apt-get install -y gramine
+sudo apt-get install -y gramine
 
 # Install nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" || true
 
 # Install Node.js v22
 nvm install v22
@@ -134,13 +128,13 @@ npm install
 
 # Create kettle directories
 log_info "Creating kettle directories..."
-mkdir -p /opt/kettle
-mkdir -p /var/lib/kettle
-mkdir -p /etc/kettle
+sudo mkdir -p /opt/kettle
+sudo mkdir -p /var/lib/kettle
+sudo mkdir -p /etc/kettle
 
 # Configure AESM service for Azure
 log_info "Configuring AESM service..."
-cat > /etc/aesmd.conf << 'EOF'
+sudo tee /etc/aesmd.conf > /dev/null << 'EOF'
 # Azure SGX configuration
 # Use Azure's DCAP Quote Provider
 default quoting type = ecdsa_256
@@ -155,8 +149,8 @@ fi
 
 # Start AESM service
 log_info "Starting AESM service..."
-systemctl enable aesmd
-systemctl start aesmd || log_warn "AESM service failed to start (may be normal on some Azure configs)"
+sudo systemctl enable aesmd
+sudo systemctl start aesmd || log_warn "AESM service failed to start (may be normal on some Azure configs)"
 
 # Verify SGX setup
 log_info "Verifying SGX setup..."

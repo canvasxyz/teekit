@@ -5,7 +5,6 @@
   "description": "SGX deployment for Kettle using Gramine",
   "type": "module",
   "scripts": {
-    "setup": "sudo ./scripts/setup-azure-sgx.sh",
     "build:bundle": "./scripts/build-kettle-bundle.sh",
     "build:enclave": "make SGX=1",
     "build:enclave:debug": "make SGX=1 DEBUG=1 LOG_LEVEL=debug",
