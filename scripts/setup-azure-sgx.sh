@@ -163,11 +163,13 @@ fi
 # Generate Gramine signing key (for development)
 log_info "Generating Gramine signing key..."
 if [ ! -f /opt/kettle/enclave-key.pem ]; then
-    gramine-sgx-gen-private-key /opt/kettle/enclave-key.pem
-    chmod 600 /opt/kettle/enclave-key.pem
+    sudo gramine-sgx-gen-private-key /opt/kettle/enclave-key.pem
     log_warn "Generated development signing key at /opt/kettle/enclave-key.pem"
     log_warn "For production, use your own signing key!"
 fi
+export USER=$(whoami)
+sudo chown $USER /opt/kettle/enclave-key.pem
+chmod 600 /opt/kettle/enclave-key.pem
 
 # Print summary
 log_info "=========================================="
