@@ -20,6 +20,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRAMINE_DIR="$(dirname "$SCRIPT_DIR")"
 KETTLE_BUNDLE_DIR="${KETTLE_BUNDLE_DIR:-/opt/kettle}"
 KETTLE_DATA_DIR="${KETTLE_DATA_DIR:-/var/lib/kettle}"
+DEFAULT_SGX_KEY="/opt/kettle/enclave-key.pem"
+WORKERD_BIN="$GRAMINE_DIR/workerd"
+WORKERD_ZST="$GRAMINE_DIR/workerd.zst"
 
 # Mode
 DIRECT_MODE=false
@@ -56,15 +59,20 @@ trap cleanup EXIT INT TERM
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
-    # Check for workerd
-    if ! command -v workerd &> /dev/null; then
-        log_error "workerd not found. Install with: npm install -g workerd"
+    # Check for make
+    if ! command -v make &> /dev/null; then
+        log_error "make not found. Install with: apt install build-essential"
         exit 1
     fi
 
     # Check for Gramine (if not in direct mode)
     if [ "$DIRECT_MODE" = false ]; then
         if ! command -v gramine-sgx &> /dev/null; then
+            log_error "Gramine not found. Install with: apt install gramine"
+            exit 1
+        fi
+    else
+        if ! command -v gramine-direct &> /dev/null; then
             log_error "Gramine not found. Install with: apt install gramine"
             exit 1
         fi
@@ -77,10 +85,17 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Check for Gramine manifest (if not in direct mode)
-    if [ "$DIRECT_MODE" = false ]; then
-        if [ ! -f "$GRAMINE_DIR/workerd.manifest.sgx" ]; then
-            log_error "SGX manifest not found. Run: cd $GRAMINE_DIR && make"
+    # Check for workerd binary or compressed archive
+    if [ ! -f "$WORKERD_BIN" ]; then
+        if [ -f "$WORKERD_ZST" ]; then
+            if ! command -v zstd &> /dev/null; then
+                log_error "zstd not found. Install with: apt install zstd"
+                exit 1
+            fi
+            log_warn "workerd binary not found; it will be decompressed from workerd.zst"
+        else
+            log_error "workerd.zst not found in $GRAMINE_DIR"
+            log_error "Ensure the compressed workerd binary is present in the repo"
             exit 1
         fi
     fi
@@ -88,16 +103,22 @@ check_prerequisites() {
 
 # Start workerd in SGX enclave
 start_workerd_sgx() {
-    log_info "Starting workerd in SGX enclave..."
-    cd "$GRAMINE_DIR"
-    gramine-sgx workerd
+    log_info "Starting workerd in SGX enclave (via Makefile)..."
+    export KETTLE_BUNDLE_DIR KETTLE_DATA_DIR
+    if [ -z "${SGX_SIGN_KEY:-}" ] && [ -f "$DEFAULT_SGX_KEY" ] && [ ! -f "$GRAMINE_DIR/enclave-key.pem" ]; then
+        SGX_SIGN_KEY="$DEFAULT_SGX_KEY"
+    fi
+    if [ -n "${SGX_SIGN_KEY:-}" ]; then
+        export SGX_SIGN_KEY
+    fi
+    (cd "$GRAMINE_DIR" && make SGX=1 run)
 }
 
 # Start workerd in direct mode (no SGX)
 start_workerd_direct() {
-    log_info "Starting workerd in direct mode..."
-    cd "$GRAMINE_DIR"
-    gramine-direct workerd
+    log_info "Starting workerd in direct mode (via Makefile)..."
+    export KETTLE_BUNDLE_DIR KETTLE_DATA_DIR
+    (cd "$GRAMINE_DIR" && make SGX=0 direct-run)
 }
 
 # Main
