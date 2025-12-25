@@ -84,10 +84,19 @@ for profile in "${profiles[@]}"; do
   fi
 done
 
+image_conf="kettle-vm.conf"
+
+for name in "${profile_names[@]}"; do
+  if [[ $name == *azsgx* ]]; then
+    image_conf="kettle-vm-sgx.conf"
+    break
+  fi
+done
+
 if [ ${#profile_names[@]} -eq 0 ]; then
   echo "Building default mkosi image (no profile)..."
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} -I kettle-vm.conf
 else
   echo "Building mkosi image with profiles: ${profile_names[*]}"
-  bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} "${profile_args[@]}" -I kettle-vm.conf
 fi
+
+bash "$SCRIPT_DIR/env_wrapper.sh" mkosi -i ${force_args[@]+"${force_args[@]}"} "${profile_args[@]}" -I "$image_conf"

@@ -1,0 +1,10 @@
+# Intel SGX APT repository for libsgx packages
+Types: deb
+URIs: https://download.01.org/intel-sgx/sgx_repo/debian
+Suites: bookworm
+Components: main
+Signed-By: /usr/share/keyrings/intel-sgx.gpg
+Architectures: amd64
+
+# Note: Using Debian bookworm repo for Trixie compatibility
+# Trixie packages may not be available yet; bookworm is ABI-compatible

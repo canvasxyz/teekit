@@ -1,0 +1,19 @@
+[Unit]
+Description=SGX DCAP Quote Service
+After=gramine-sgx.service
+BindsTo=gramine-sgx.service
+PartOf=gramine-sgx.service
+
+[Service]
+Type=simple
+User=kettle
+Group=kettle
+Environment=QUOTE_SERVICE_PORT=3002
+ExecStart=/usr/bin/node /opt/kettle/sgx-quote-service.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/sgx-quote-service.log
+StandardError=append:/var/log/sgx-quote-service.log
+
+[Install]
+WantedBy=minimal.target

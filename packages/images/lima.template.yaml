@@ -23,6 +23,9 @@ mounts:
   - location: ABSOLUTE_IMAGES_PATH
     mountPoint: /home/debian/mnt
     writable: true
+  - location: ABSOLUTE_IMAGES_PATH/../gramine
+    mountPoint: /home/debian/mnt/gramine
+    writable: false
 ssh:
   forwardAgent: true
 provision:

@@ -1,0 +1,10 @@
+# Gramine APT repository
+Types: deb
+URIs: https://packages.gramineproject.io/
+Suites: jammy
+Components: main
+Signed-By: /usr/share/keyrings/gramine.gpg
+Architectures: amd64
+
+# Note: Gramine only provides Ubuntu packages (no official Debian repo).
+# Ubuntu jammy (22.04) packages are ABI-compatible with Debian Trixie.

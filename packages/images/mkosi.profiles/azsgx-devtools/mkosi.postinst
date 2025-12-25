@@ -1,0 +1,70 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Reuse the existing Azure + devtools post-install steps so the SGX image
+# keeps feature parity with the other Azure devtools variants.
+
+# --- Azure-specific setup ---
+
+mkosi-chroot systemctl enable "azure-complete-provisioning.service"
+ln -sf "/etc/systemd/system/azure-complete-provisioning.service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
+
+# --- Devtools-specific setup ---
+
+# Create apt/dpkg directories for package management
+mkdir -p "$BUILDROOT/var/lib/dpkg"
+mkdir -p "$BUILDROOT/var/lib/apt/lists/partial"
+mkdir -p "$BUILDROOT/var/cache/apt/archives/partial"
+
+# Configure APT sources
+cat > "$BUILDROOT/etc/apt/sources.list" << 'EOF'
+deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
+EOF
+
+# Deterministically set root password
+PASSWORD="devtools"
+HASH=$(mkosi-chroot openssl passwd -6 -salt salt "$PASSWORD")
+mkosi-chroot passwd -u root
+mkosi-chroot usermod -p "$HASH" root
+
+# Start SSH service
+if [ -f "$BUILDROOT/etc/default/dropbear" ]; then
+    # Remove -s, -w, -g flags from dropbear args
+    sed -i '/^DROPBEAR_EXTRA_ARGS=/s/-[swg] \?//g' "$BUILDROOT/etc/default/dropbear"
+else
+    echo "PermitRootLogin yes" >> "$BUILDROOT/etc/ssh/sshd_config"
+    echo "PasswordAuthentication yes" >> "$BUILDROOT/etc/ssh/sshd_config"
+    # Keep SSH connections alive to prevent timeout on cloud VMs
+    echo "ClientAliveInterval 60" >> "$BUILDROOT/etc/ssh/sshd_config"
+    echo "ClientAliveCountMax 3" >> "$BUILDROOT/etc/ssh/sshd_config"
+    echo "TCPKeepAlive yes" >> "$BUILDROOT/etc/ssh/sshd_config"
+    mkosi-chroot systemctl enable ssh.service
+    mkosi-chroot systemctl unmask ssh.service ssh.socket
+    mkosi-chroot systemctl enable ssh-keygen.service 2>/dev/null || true
+fi
+
+# Create direct shell service for serial console
+echo "Setting up serial console shell..."
+cat > "$BUILDROOT/etc/systemd/system/console-shell.service" << 'EOF'
+[Unit]
+Description=Direct Console Shell
+After=basic.target
+
+[Service]
+ExecStart=/bin/bash
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyS0
+Type=idle
+Restart=always
+
+[Install]
+WantedBy=minimal.target
+WantedBy=rescue.target
+WantedBy=emergency.target
+EOF
+
+mkosi-chroot systemctl enable console-shell.service

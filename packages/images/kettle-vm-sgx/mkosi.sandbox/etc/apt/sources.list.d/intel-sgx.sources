@@ -1,0 +1,8 @@
+# Intel SGX APT repository for libsgx packages
+# Note: Using Ubuntu noble (24.04) - closest to Debian Trixie
+Types: deb
+URIs: https://download.01.org/intel-sgx/sgx_repo/ubuntu
+Suites: noble
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/intel-sgx.gpg

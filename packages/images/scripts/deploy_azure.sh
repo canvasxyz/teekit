@@ -24,9 +24,12 @@ set -euo pipefail
 # Configuration
 RESOURCE_GROUP="tdx-group"
 GALLERY_NAME="tdxGallery"
-IMAGE_DEFINITION="kettle-vm-azure"
 CONTAINER_NAME="vhds"
-VM_SIZE="Standard_DC2es_v5"
+
+# These will be set based on the image type (azsgx vs azure/TDX)
+IMAGE_DEFINITION=""
+VM_SIZE=""
+SECURITY_TYPE=""  # "tdx" or "sgx"
 
 # Colors for logging
 RED='\033[0;31m'
@@ -63,7 +66,7 @@ cleanup_on_failure() {
     echo ""
     echo "To clean up, you can run:"
     echo "  az vm delete --name kettle-${DEPLOY_HASH} --resource-group ${RESOURCE_GROUP} --yes 2>/dev/null"
-    echo "  az sig image-version delete -g ${RESOURCE_GROUP} -r ${GALLERY_NAME} -i ${IMAGE_DEFINITION} -e ${IMAGE_VERSION:-unknown} 2>/dev/null"
+    echo "  az sig image-version delete -g ${RESOURCE_GROUP} -r ${GALLERY_NAME} -i ${IMAGE_DEFINITION:-kettle-vm-azure} -e ${IMAGE_VERSION:-unknown} 2>/dev/null"
     echo "  az storage blob delete -n ${BLOB_NAME:-unknown} -c ${CONTAINER_NAME} --account-name \${STORAGE_ACCT} --auth-mode login 2>/dev/null"
     exit 1
 }
@@ -110,10 +113,25 @@ VHD_BASENAME=$(basename "$VHD_FILE")
 BLOB_NAME="${VHD_BASENAME%.vhd}-${DEPLOY_HASH}.vhd"
 IMAGE_VERSION="1.0.${IMAGE_PATCH_VERSION}"
 
+# Detect image type based on filename
+if [[ "$VHD_BASENAME" == *"azsgx"* ]]; then
+    SECURITY_TYPE="sgx"
+    IMAGE_DEFINITION="kettle-vm-azsgx"
+    VM_SIZE="Standard_DC2ds_v3"
+    log_info "Detected SGX image - will deploy as Trusted Launch VM"
+else
+    SECURITY_TYPE="tdx"
+    IMAGE_DEFINITION="kettle-vm-azure"
+    VM_SIZE="Standard_DC2es_v5"
+    log_info "Detected TDX image - will deploy as Confidential VM"
+fi
+
 echo ""
-log_info "Azure TDX Image Deployment"
+log_info "Azure TEE Image Deployment"
 log_info "=========================="
 log_info "VHD File: $VHD_FILE"
+log_info "Security Type: $SECURITY_TYPE ($([ "$SECURITY_TYPE" = "sgx" ] && echo "Trusted Launch" || echo "Confidential VM"))"
+log_info "VM Size: $VM_SIZE"
 log_info "Blob Name: $BLOB_NAME"
 log_info "Image Version: $IMAGE_VERSION"
 log_info "VM Name: $VM_NAME"
@@ -311,17 +329,26 @@ if ! az sig image-definition show \
     --gallery-image-definition "$IMAGE_DEFINITION" &>/dev/null; then
     log_info "Creating image definition: $IMAGE_DEFINITION"
 
+    # Set security feature based on image type
+    if [ "$SECURITY_TYPE" = "sgx" ]; then
+        SECURITY_FEATURE="SecurityType=TrustedLaunchSupported"
+        OFFER_NAME="kettle-vm-azsgx"
+    else
+        SECURITY_FEATURE="SecurityType=ConfidentialVMSupported"
+        OFFER_NAME="kettle-vm-azure"
+    fi
+
     if ! az sig image-definition create \
         --resource-group "$RESOURCE_GROUP" \
         --gallery-name "$GALLERY_NAME" \
         --gallery-image-definition "$IMAGE_DEFINITION" \
         --publisher TeeKit \
-        --offer kettle-vm-azure \
+        --offer "$OFFER_NAME" \
         --sku 1.0 \
         --os-type Linux \
         --os-state Generalized \
         --hyper-v-generation V2 \
-        --features SecurityType=ConfidentialVMSupported \
+        --features "$SECURITY_FEATURE" \
         --output none; then
         log_error "Failed to create image definition"
         echo ""
@@ -331,12 +358,12 @@ if ! az sig image-definition show \
         echo "    --gallery-name ${GALLERY_NAME} \\"
         echo "    --gallery-image-definition ${IMAGE_DEFINITION} \\"
         echo "    --publisher TeeKit \\"
-        echo "    --offer kettle-vm-azure \\"
+        echo "    --offer ${OFFER_NAME} \\"
         echo "    --sku 1.0 \\"
         echo "    --os-type Linux \\"
         echo "    --os-state Generalized \\"
         echo "    --hyper-v-generation V2 \\"
-        echo "    --features SecurityType=ConfidentialVMSupported"
+        echo "    --features ${SECURITY_FEATURE}"
         exit 1
     fi
 
@@ -390,36 +417,71 @@ log_info "This may take 5-10 minutes..."
 if az vm show --name "$VM_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
     log_success "VM already exists: $VM_NAME (skipping creation)"
 else
-    if ! az vm create \
-        --name "$VM_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --security-type ConfidentialVM \
-        --os-disk-security-encryption-type VMGuestStateOnly \
-        --image "$IMAGE_ID" \
-        --size "$VM_SIZE" \
-        --enable-vtpm true \
-        --enable-secure-boot false \
-        --boot-diagnostics-storage "$STORAGE_ACCT" \
-        --generate-ssh-keys \
-        --output none; then
-        log_error "Failed to create VM"
-        echo ""
-        echo "Common issues:"
-        echo "  - DiskServiceInternalError: VHD format issue or region availability"
-        echo "  - QuotaExceeded: Request quota increase for DCesv5 VMs"
-        echo ""
-        echo "You can retry manually:"
-        echo "  az vm create \\"
-        echo "    --name ${VM_NAME} \\"
-        echo "    --resource-group ${RESOURCE_GROUP} \\"
-        echo "    --security-type ConfidentialVM \\"
-        echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
-        echo "    --image ${IMAGE_ID} \\"
-        echo "    --size ${VM_SIZE} \\"
-        echo "    --enable-vtpm true \\"
-        echo "    --enable-secure-boot false \\"
-        echo "    --boot-diagnostics-storage ${STORAGE_ACCT}"
-        exit 1
+    # Build VM create command based on security type
+    if [ "$SECURITY_TYPE" = "sgx" ]; then
+        # SGX: Trusted Launch VM with Secure Boot
+        if ! az vm create \
+            --name "$VM_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --security-type TrustedLaunch \
+            --image "$IMAGE_ID" \
+            --size "$VM_SIZE" \
+            --enable-vtpm true \
+            --enable-secure-boot true \
+            --boot-diagnostics-storage "$STORAGE_ACCT" \
+            --generate-ssh-keys \
+            --output none; then
+            log_error "Failed to create VM"
+            echo ""
+            echo "Common issues:"
+            echo "  - DiskServiceInternalError: VHD format issue or region availability"
+            echo "  - QuotaExceeded: Request quota increase for DCdsv3 VMs"
+            echo ""
+            echo "You can retry manually:"
+            echo "  az vm create \\"
+            echo "    --name ${VM_NAME} \\"
+            echo "    --resource-group ${RESOURCE_GROUP} \\"
+            echo "    --security-type TrustedLaunch \\"
+            echo "    --image ${IMAGE_ID} \\"
+            echo "    --size ${VM_SIZE} \\"
+            echo "    --enable-vtpm true \\"
+            echo "    --enable-secure-boot true \\"
+            echo "    --boot-diagnostics-storage ${STORAGE_ACCT}"
+            exit 1
+        fi
+    else
+        # TDX: Confidential VM
+        if ! az vm create \
+            --name "$VM_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --security-type ConfidentialVM \
+            --os-disk-security-encryption-type VMGuestStateOnly \
+            --image "$IMAGE_ID" \
+            --size "$VM_SIZE" \
+            --enable-vtpm true \
+            --enable-secure-boot false \
+            --boot-diagnostics-storage "$STORAGE_ACCT" \
+            --generate-ssh-keys \
+            --output none; then
+            log_error "Failed to create VM"
+            echo ""
+            echo "Common issues:"
+            echo "  - DiskServiceInternalError: VHD format issue or region availability"
+            echo "  - QuotaExceeded: Request quota increase for DCesv5 VMs"
+            echo ""
+            echo "You can retry manually:"
+            echo "  az vm create \\"
+            echo "    --name ${VM_NAME} \\"
+            echo "    --resource-group ${RESOURCE_GROUP} \\"
+            echo "    --security-type ConfidentialVM \\"
+            echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
+            echo "    --image ${IMAGE_ID} \\"
+            echo "    --size ${VM_SIZE} \\"
+            echo "    --enable-vtpm true \\"
+            echo "    --enable-secure-boot false \\"
+            echo "    --boot-diagnostics-storage ${STORAGE_ACCT}"
+            exit 1
+        fi
     fi
 fi
 

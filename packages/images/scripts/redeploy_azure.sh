@@ -32,10 +32,13 @@ set -euo pipefail
 # Configuration
 RESOURCE_GROUP="tdx-group"
 GALLERY_NAME="tdxGallery"
-IMAGE_DEFINITION="kettle-vm-azure"
 CONTAINER_NAME="vhds"
-VM_SIZE="Standard_DC2es_v5"
 VM_NAME_CACHE_FILE=".vm_name_azure"
+
+# These will be set based on the image type (azsgx vs azure/TDX)
+IMAGE_DEFINITION=""
+VM_SIZE=""
+SECURITY_TYPE=""  # "tdx" or "sgx"
 
 # Generate a random integer for image version patch number (1 to 2,000,000,000)
 IMAGE_PATCH_VERSION=$((1 + RANDOM * RANDOM % 2000000000))
@@ -75,19 +78,31 @@ cleanup_on_failure() {
     log_error "Redeployment failed. The original VM may have been deleted."
     echo ""
     echo "To manually recreate the VM with the existing NIC, run:"
-    echo "  az vm create \\"
-    echo "    --name ${VM_NAME} \\"
-    echo "    --resource-group ${RESOURCE_GROUP} \\"
-    echo "    --nics ${NIC_NAME:-<nic-name>} \\"
-    echo "    --security-type ConfidentialVM \\"
-    echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
-    echo "    --image ${IMAGE_ID:-<image-id>} \\"
-    echo "    --size ${PRESERVED_VM_SIZE:-$VM_SIZE} \\"
-    echo "    --enable-vtpm true \\"
-    echo "    --enable-secure-boot false"
+    if [ "${SECURITY_TYPE:-tdx}" = "sgx" ]; then
+        echo "  az vm create \\"
+        echo "    --name ${VM_NAME} \\"
+        echo "    --resource-group ${RESOURCE_GROUP} \\"
+        echo "    --nics ${NIC_NAME:-<nic-name>} \\"
+        echo "    --security-type TrustedLaunch \\"
+        echo "    --image ${IMAGE_ID:-<image-id>} \\"
+        echo "    --size ${PRESERVED_VM_SIZE:-$VM_SIZE} \\"
+        echo "    --enable-vtpm true \\"
+        echo "    --enable-secure-boot true"
+    else
+        echo "  az vm create \\"
+        echo "    --name ${VM_NAME} \\"
+        echo "    --resource-group ${RESOURCE_GROUP} \\"
+        echo "    --nics ${NIC_NAME:-<nic-name>} \\"
+        echo "    --security-type ConfidentialVM \\"
+        echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
+        echo "    --image ${IMAGE_ID:-<image-id>} \\"
+        echo "    --size ${PRESERVED_VM_SIZE:-$VM_SIZE} \\"
+        echo "    --enable-vtpm true \\"
+        echo "    --enable-secure-boot false"
+    fi
     echo ""
     echo "Resources that may need cleanup:"
-    echo "  az sig image-version delete -g ${RESOURCE_GROUP} -r ${GALLERY_NAME} -i ${IMAGE_DEFINITION} -e ${IMAGE_VERSION:-unknown} 2>/dev/null"
+    echo "  az sig image-version delete -g ${RESOURCE_GROUP} -r ${GALLERY_NAME} -i ${IMAGE_DEFINITION:-kettle-vm-azure} -e ${IMAGE_VERSION:-unknown} 2>/dev/null"
     echo "  az storage blob delete -n ${BLOB_NAME:-unknown} -c ${CONTAINER_NAME} --account-name \${STORAGE_ACCT} --auth-mode login 2>/dev/null"
     exit 1
 }
@@ -190,11 +205,26 @@ VHD_BASENAME=$(basename "$VHD_FILE")
 BLOB_NAME="${VHD_BASENAME%.vhd}-redeploy-${DEPLOY_HASH}.vhd"
 IMAGE_VERSION="1.0.${IMAGE_PATCH_VERSION}"
 
+# Detect image type based on filename
+if [[ "$VHD_BASENAME" == *"azsgx"* ]]; then
+    SECURITY_TYPE="sgx"
+    IMAGE_DEFINITION="kettle-vm-azsgx"
+    VM_SIZE="Standard_DC2ds_v3"
+    log_info "Detected SGX image - will deploy as Trusted Launch VM"
+else
+    SECURITY_TYPE="tdx"
+    IMAGE_DEFINITION="kettle-vm-azure"
+    VM_SIZE="Standard_DC2es_v5"
+    log_info "Detected TDX image - will deploy as Confidential VM"
+fi
+
 echo ""
 log_info "Azure VM Redeployment"
 log_info "====================="
 log_info "VM Name: $VM_NAME"
 log_info "VHD File: $VHD_FILE"
+log_info "Security Type: $SECURITY_TYPE ($([ "$SECURITY_TYPE" = "sgx" ] && echo "Trusted Launch" || echo "Confidential VM"))"
+log_info "Default VM Size: $VM_SIZE"
 log_info "Blob Name: $BLOB_NAME"
 log_info "Image Version: $IMAGE_VERSION"
 log_info "Deploy Hash: $DEPLOY_HASH"
@@ -501,17 +531,26 @@ if ! az sig image-definition show \
     --gallery-image-definition "$IMAGE_DEFINITION" &>/dev/null; then
     log_info "Creating image definition: $IMAGE_DEFINITION"
 
+    # Set security feature based on image type
+    if [ "$SECURITY_TYPE" = "sgx" ]; then
+        SECURITY_FEATURE="SecurityType=TrustedLaunchSupported"
+        OFFER_NAME="kettle-vm-azsgx"
+    else
+        SECURITY_FEATURE="SecurityType=ConfidentialVMSupported"
+        OFFER_NAME="kettle-vm-azure"
+    fi
+
     if ! az sig image-definition create \
         --resource-group "$RESOURCE_GROUP" \
         --gallery-name "$GALLERY_NAME" \
         --gallery-image-definition "$IMAGE_DEFINITION" \
         --publisher TeeKit \
-        --offer kettle-vm-azure \
+        --offer "$OFFER_NAME" \
         --sku 1.0 \
         --os-type Linux \
         --os-state Generalized \
         --hyper-v-generation V2 \
-        --features SecurityType=ConfidentialVMSupported \
+        --features "$SECURITY_FEATURE" \
         --output none; then
         log_error "Failed to create image definition"
         exit 1
@@ -589,20 +628,37 @@ log_info "Size: $PRESERVED_VM_SIZE"
 log_info "NIC: $NIC_NAME"
 log_info "This may take 5-10 minutes..."
 
-# Build the VM create command
-VM_CREATE_CMD=(
-    az vm create
-    --name "$VM_NAME"
-    --resource-group "$RESOURCE_GROUP"
-    --nics "$NIC_NAME"
-    --security-type ConfidentialVM
-    --os-disk-security-encryption-type VMGuestStateOnly
-    --image "$IMAGE_ID"
-    --size "$PRESERVED_VM_SIZE"
-    --enable-vtpm true
-    --enable-secure-boot false
-    --output none
-)
+# Build the VM create command based on security type
+if [ "$SECURITY_TYPE" = "sgx" ]; then
+    # SGX: Trusted Launch VM with Secure Boot
+    VM_CREATE_CMD=(
+        az vm create
+        --name "$VM_NAME"
+        --resource-group "$RESOURCE_GROUP"
+        --nics "$NIC_NAME"
+        --security-type TrustedLaunch
+        --image "$IMAGE_ID"
+        --size "$PRESERVED_VM_SIZE"
+        --enable-vtpm true
+        --enable-secure-boot true
+        --output none
+    )
+else
+    # TDX: Confidential VM
+    VM_CREATE_CMD=(
+        az vm create
+        --name "$VM_NAME"
+        --resource-group "$RESOURCE_GROUP"
+        --nics "$NIC_NAME"
+        --security-type ConfidentialVM
+        --os-disk-security-encryption-type VMGuestStateOnly
+        --image "$IMAGE_ID"
+        --size "$PRESERVED_VM_SIZE"
+        --enable-vtpm true
+        --enable-secure-boot false
+        --output none
+    )
+fi
 
 # Add boot diagnostics if available
 if [ -n "$BOOT_DIAG_STORAGE_NAME" ]; then
@@ -623,16 +679,28 @@ if ! "${VM_CREATE_CMD[@]}"; then
     log_error "Failed to create VM"
     echo ""
     echo "The NIC and public IP have been preserved. You can manually recreate the VM:"
-    echo "  az vm create \\"
-    echo "    --name ${VM_NAME} \\"
-    echo "    --resource-group ${RESOURCE_GROUP} \\"
-    echo "    --nics ${NIC_NAME} \\"
-    echo "    --security-type ConfidentialVM \\"
-    echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
-    echo "    --image ${IMAGE_ID} \\"
-    echo "    --size ${PRESERVED_VM_SIZE} \\"
-    echo "    --enable-vtpm true \\"
-    echo "    --enable-secure-boot false"
+    if [ "$SECURITY_TYPE" = "sgx" ]; then
+        echo "  az vm create \\"
+        echo "    --name ${VM_NAME} \\"
+        echo "    --resource-group ${RESOURCE_GROUP} \\"
+        echo "    --nics ${NIC_NAME} \\"
+        echo "    --security-type TrustedLaunch \\"
+        echo "    --image ${IMAGE_ID} \\"
+        echo "    --size ${PRESERVED_VM_SIZE} \\"
+        echo "    --enable-vtpm true \\"
+        echo "    --enable-secure-boot true"
+    else
+        echo "  az vm create \\"
+        echo "    --name ${VM_NAME} \\"
+        echo "    --resource-group ${RESOURCE_GROUP} \\"
+        echo "    --nics ${NIC_NAME} \\"
+        echo "    --security-type ConfidentialVM \\"
+        echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
+        echo "    --image ${IMAGE_ID} \\"
+        echo "    --size ${PRESERVED_VM_SIZE} \\"
+        echo "    --enable-vtpm true \\"
+        echo "    --enable-secure-boot false"
+    fi
     exit 1
 fi
 

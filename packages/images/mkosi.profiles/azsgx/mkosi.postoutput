@@ -1,0 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+
+# Reuse the Azure VHD conversion script to package the UKI for SGX builds.
+# SRCDIR is set by mkosi and points to the source directory (packages/images)
+exec "$SRCDIR/mkosi.profiles/azure/mkosi.postoutput" "$@"
