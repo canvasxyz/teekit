@@ -106,6 +106,22 @@ sudo apt-get install -y \
 log_info "Installing Gramine..."
 sudo apt-get install -y gramine
 
+# Install Azure DCAP client (required for ECDSA quotes on Azure)
+log_info "Installing Azure DCAP client..."
+if [ "$OS" = "ubuntu" ]; then
+    if ! apt-cache show az-dcap-client > /dev/null 2>&1; then
+        log_info "Adding Microsoft package repository for az-dcap-client..."
+        curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | \
+            sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/$(lsb_release -rs)/prod $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/microsoft-prod.list > /dev/null
+        sudo apt-get update
+    fi
+    sudo apt-get install -y az-dcap-client
+else
+    log_warn "Skipping az-dcap-client install on $OS; install it manually if needed."
+fi
+
 # Install nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
