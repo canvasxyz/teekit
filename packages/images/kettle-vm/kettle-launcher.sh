@@ -15,6 +15,15 @@ exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true))
 
 echo "Starting kettle launcher init script..."
 
+# Restore persisted databases if available
+# This uses db-persist to decrypt databases from /persistent/db using the sealing key
+if [ -x /usr/bin/db-persist ]; then
+  echo "Attempting to restore persisted databases..."
+  /usr/bin/db-persist decrypt-all || echo "Note: No persisted databases to restore (or decryption failed)"
+else
+  echo "Note: db-persist not available, skipping database restoration"
+fi
+
 # Track launched kettle PIDs for monitoring
 KETTLE_PIDS=()
 

@@ -1,6 +1,6 @@
 [Unit]
 Description=Kettle Application Launcher
-After=network-setup.service cloud-launcher.service
+After=network-setup.service cloud-launcher.service sealing-key.service persistent-mount.service
 Wants=network-setup.service cloud-launcher.service
 
 [Service]

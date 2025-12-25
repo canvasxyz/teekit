@@ -77,6 +77,9 @@ install -m 755 "kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launc
 # Install certbot-persist utility (encrypts/decrypts certs with sealing key)
 install -m 755 "kettle-vm/certbot-persist.sh" "$BUILDROOT/usr/bin/certbot-persist"
 
+# Install db-persist utility (encrypts/decrypts sqlite databases with sealing key)
+install -m 755 "kettle-vm/db-persist.sh" "$BUILDROOT/usr/bin/db-persist"
+
 # Install sealing-key (SEV-SNP key derivation)
 install -m 755 "kettle-vm/sealing-key.sh" "$BUILDROOT/usr/bin/sealing-key"
 
@@ -89,6 +92,7 @@ install -m 644 "kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
 install -m 644 "kettle-vm/kettle-launcher.service" "$SERVICE_DIR/"
 install -m 644 "kettle-vm/sealing-key.service" "$SERVICE_DIR/"
 install -m 644 "kettle-vm/firewall.service" "$SERVICE_DIR/"
+install -m 644 "kettle-vm/db-persist.service" "$SERVICE_DIR/"
 
 # Enable services
 systemctl --root="$BUILDROOT" enable cloud-launcher.service
@@ -96,3 +100,4 @@ systemctl --root="$BUILDROOT" enable certbot-launcher.service
 systemctl --root="$BUILDROOT" enable kettle-launcher.service
 systemctl --root="$BUILDROOT" enable sealing-key.service
 systemctl --root="$BUILDROOT" enable firewall.service
+systemctl --root="$BUILDROOT" enable db-persist.service

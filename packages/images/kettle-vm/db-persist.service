@@ -1,0 +1,16 @@
+[Unit]
+Description=Persist Kettle Databases on Shutdown
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+After=sealing-key.service persistent-mount.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+ExecStop=/usr/bin/db-persist encrypt-all
+RemainAfterExit=yes
+StandardOutput=append:/var/log/db-persist.log
+StandardError=append:/var/log/db-persist.log
+
+[Install]
+WantedBy=minimal.target
