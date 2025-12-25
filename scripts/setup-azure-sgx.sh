@@ -94,6 +94,7 @@ sudo apt-get update
 log_info "Installing Intel SGX components..."
 sudo apt-get install -y \
     build-essential \
+    zstd \
     libsgx-launch \
     libsgx-urts \
     libsgx-enclave-common \
@@ -120,6 +121,18 @@ if [ "$OS" = "ubuntu" ]; then
     sudo apt-get install -y az-dcap-client
 else
     log_warn "Skipping az-dcap-client install on $OS; install it manually if needed."
+fi
+
+# Ensure Azure quote provider library is discoverable
+QUOTE_PROVIDER="/usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so"
+if [ "$OS" = "ubuntu" ] && [ ! -f "$QUOTE_PROVIDER" ]; then
+    QP_PATH=$(dpkg -L az-dcap-client | grep -E 'libdcap_quoteprov\.so$' | head -n1 || true)
+    if [ -n "$QP_PATH" ] && [ -f "$QP_PATH" ]; then
+        log_info "Linking Azure quote provider to $QUOTE_PROVIDER..."
+        sudo ln -sf "$QP_PATH" "$QUOTE_PROVIDER"
+    else
+        log_warn "Azure quote provider library not found; DCAP quotes may fail."
+    fi
 fi
 
 # Install nvm
@@ -163,15 +176,35 @@ EOF
 
 # For Azure, configure the DCAP Quote Provider Library
 log_info "Configuring Azure DCAP Quote Provider..."
+QCNL_CONF="/etc/sgx_default_qcnl.conf"
+AZURE_PCCS_URL="https://global.acccache.azure.net/sgx/certification/v4/"
+if [ -f "$QCNL_CONF" ]; then
+    if grep -q "localhost:8081/sgx/certification/v4" "$QCNL_CONF"; then
+        log_info "Updating QCNL PCCS URL to Azure..."
+        sudo sed -i "s#https://localhost:8081/sgx/certification/v4/#${AZURE_PCCS_URL}#" "$QCNL_CONF"
+    fi
+else
+    log_warn "QCNL config not found at $QCNL_CONF"
+fi
 if [ -f /usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so ]; then
     # Azure provides its own quote provider
     export AZDCAP_DEBUG_LOG_LEVEL=INFO
 fi
 
+# Ensure user can access SGX device files
+log_info "Ensuring user is in SGX groups..."
+if getent group sgx > /dev/null 2>&1; then
+    sudo usermod -aG sgx "$USER"
+fi
+if getent group sgx_prv > /dev/null 2>&1; then
+    sudo usermod -aG sgx_prv "$USER"
+fi
+log_warn "Re-login may be required for SGX group changes to take effect."
+
 # Start AESM service
 log_info "Starting AESM service..."
 sudo systemctl enable aesmd
-sudo systemctl start aesmd || log_warn "AESM service failed to start (may be normal on some Azure configs)"
+sudo systemctl restart aesmd || log_warn "AESM service failed to start (may be normal on some Azure configs)"
 
 # Verify SGX setup
 log_info "Verifying SGX setup..."
