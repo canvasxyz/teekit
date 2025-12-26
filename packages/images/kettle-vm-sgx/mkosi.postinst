@@ -131,9 +131,10 @@ else
     exit 1
 fi
 
-# Copy SGX quote service source
-if [ -f "$GRAMINE_SRC/src/sgx-quote-service.ts" ]; then
-    cp "$GRAMINE_SRC/src/sgx-quote-service.ts" "$KETTLE_DIR/src/"
+# Copy pre-built SGX quote service (built during prep_kettle.sh)
+if [ -f "$KETTLE_ARTIFACTS/sgx-quote-service.js" ]; then
+    cp "$KETTLE_ARTIFACTS/sgx-quote-service.js" "$KETTLE_DIR/"
+    echo "Copied pre-built sgx-quote-service.js"
 fi
 
 # Copy workerd config (required for SGX attestation measurement)
@@ -189,11 +190,11 @@ mkosi-chroot sh -c "python3 -c \"import json; print(json.load(open('/opt/kettle/
 MRENCLAVE=$(cat "$KETTLE_DIR/mrenclave.txt")
 echo "MRENCLAVE: $MRENCLAVE"
 
-# 17. Build SGX quote service if TypeScript source present
-if [ -f "$KETTLE_DIR/src/sgx-quote-service.ts" ]; then
-    echo "Building SGX quote service..."
-    mkosi-chroot sh -c "cd /opt/kettle && npx esbuild src/sgx-quote-service.ts --bundle --platform=node --outfile=sgx-quote-service.js" 2>/dev/null || \
-        echo "Note: esbuild not available or failed, sgx-quote-service will need to be built separately"
+# 17. Verify SGX quote service was copied
+if [ -f "$KETTLE_DIR/sgx-quote-service.js" ]; then
+    echo "SGX quote service ready: /opt/kettle/sgx-quote-service.js"
+else
+    echo "Warning: sgx-quote-service.js not found - run prep_kettle.sh first"
 fi
 
 # 18. Set ownership for kettle user

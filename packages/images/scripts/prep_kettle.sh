@@ -38,7 +38,17 @@ node "$CLI_COMPILED" build-worker
 echo "Generating manifest..."
 node "$CLI_COMPILED" publish-local "dist/app.js" --path "/lib/kettle/app.js"
 
-# 6. Copy necessary files to images directory for mkosi
+# 6. Build SGX quote service for gramine
+echo "Building SGX quote service..."
+GRAMINE_DIR="$REPO_ROOT/packages/gramine"
+cd "$GRAMINE_DIR"
+if [ ! -d "node_modules" ]; then
+  npm install
+fi
+mkdir -p dist
+npm run build:sgx-quote-service
+
+# 7. Copy necessary files to images directory for mkosi
 echo "Copying artifacts to images directory..."
 mkdir -p "$IMAGES_DIR/kettle-artifacts"
 cp "$KETTLE_DIR/app.ts" "$IMAGES_DIR/kettle-artifacts/"
@@ -46,8 +56,9 @@ cp "$KETTLE_DIR/manifest.json" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/app.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/worker.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/externals.js" "$IMAGES_DIR/kettle-artifacts/"
+cp "$GRAMINE_DIR/dist/sgx-quote-service.js" "$IMAGES_DIR/kettle-artifacts/"
 
-# 7. Normalize artifact timestamps for reproducibility
+# 8. Normalize artifact timestamps for reproducibility
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
 TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
              date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
