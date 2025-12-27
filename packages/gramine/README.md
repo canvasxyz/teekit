@@ -43,22 +43,15 @@ cd packages/kettle
 npm run build
 
 cd ../gramine
-./scripts/build-kettle-bundle.sh
-```
 
-Build the SGX enclave:
+# Run ./scripts/build-kettle-bundle.sh
+npm run build:bundle
 
-```
-cd packages/gramine
+# Run Gramine build, sign the enclave
+npm run build:enclave
 
-make enclave-key.pem     # Generate signing key (development only)
-make SGX=1               # Build and sign the enclave
-make measurements        # View measurements (these should match published measurements)
-```
-
-Run the kettle in SGX at `http://localhost:3001`:
-
-```
+# Run the kettle in SGX at `http://localhost:3001`:
+make run
 ./scripts/start-kettle-sgx.sh
 ```
 
