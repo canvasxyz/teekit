@@ -52,7 +52,6 @@ npm run build:enclave
 
 # Run the kettle in SGX at `http://localhost:3001`:
 make run
-./scripts/start-kettle-sgx.sh
 ```
 
 ### Verifying Quotes
