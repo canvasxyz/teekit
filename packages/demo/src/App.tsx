@@ -19,21 +19,37 @@ import type {
 import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
 
-const REMOTE = "https://136.112.93.209.nip.io"
-export const baseUrl = document.location.search.includes("remote=1")
-  ? REMOTE
-  : document.location.hostname === "localhost"
-    ? "http://localhost:3001"
-    : document.location.hostname.endsWith(".vercel.app")
-      ? REMOTE
-      : `${document.location.protocol}//${document.location.hostname}`
+const REMOTES = [
+  { label: "Azure SGX", url: "https://20.62.0.14.canvas.xyz" },
+  { label: "Azure SGX", url: "http://20.62.0.14:3001" },
+  { label: "Local", url: "http://localhost:3001" },
+  {
+    label: "Custom",
+    url: `${document.location.protocol}//${document.location.hostname}`,
+  },
+  { label: "Custom", url: "custom" },
+]
 
-const UPTIME_REFRESH_MS = 10000
+const getDefaultRemote = () => {
+  return REMOTES[0].url
+}
 
-const enc = await TunnelClient.initialize(baseUrl, {
-  sgx: true,
-  customVerifyQuote: async () => true,
-})
+// Validate URL format (must be http/https with valid hostname/IP)
+const isValidEndpoint = (url: string): boolean => {
+  try {
+    const parsed = new URL(url)
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return false
+    }
+    // Check if hostname is not empty
+    if (!parsed.hostname) {
+      return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
 
 const buttonStyle = {
   padding: "8px 16px",
@@ -58,6 +74,13 @@ function App() {
   const [attestedReportData, setAttestedReportData] = useState<string>("")
   const [connectionError, setConnectionError] = useState<string>("")
   const [isMobile, setIsMobile] = useState<boolean>(false)
+  const [selectedRemote, setSelectedRemote] = useState<string>(getDefaultRemote)
+  const [customUrl, setCustomUrl] = useState<string>("http://localhost:3001")
+  const [debouncedCustomUrl, setDebouncedCustomUrl] = useState<string>("")
+  const [customUrlError, setCustomUrlError] = useState<string>("")
+  const [isInitializing, setIsInitializing] = useState<boolean>(true)
+  const encRef = useRef<TunnelClient | null>(null)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const initializedRef = useRef<boolean>(false)
   const wsRef = useRef<IWebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -82,8 +105,10 @@ function App() {
   }, [messages, isMobile])
 
   const fetchUptime = useCallback(async () => {
+    if (!encRef.current) return
+    const activeRemote = getActiveRemote()
     try {
-      const response = await enc.fetch(baseUrl + "/uptime")
+      const response = await encRef.current.fetch(activeRemote + "/uptime")
       const text = await response.text()
       try {
         const data: UptimeData = JSON.parse(text)
@@ -94,20 +119,13 @@ function App() {
     } catch (error) {
       console.error("Failed to fetch uptime:", error)
     }
-  }, [])
+  }, [selectedRemote, debouncedCustomUrl])
 
-  const disconnectRA = useCallback(() => {
-    try {
-      if (enc.ws) {
-        enc.ws.close(4000, "simulate disconnect")
-      }
-    } catch (e) {
-      console.error("Failed to close RA WebSocket:", e)
-    }
-  }, [])
 
   // Setup or reconnect the chat WebSocket
   const setupChatWebSocket = useCallback(() => {
+    if (!encRef.current) return
+
     // Clear any pending reconnect timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
@@ -127,10 +145,11 @@ function App() {
       wsRef.current = null
     }
 
-    const wsUrl = baseUrl
+    const activeRemote = getActiveRemote()
+    const wsUrl = activeRemote
       .replace(/^http:\/\//, "ws://")
       .replace(/^https:\/\//, "wss://")
-    const ws = new enc.WebSocket(wsUrl)
+    const ws = new encRef.current.WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -140,14 +159,21 @@ function App() {
       console.log("Connected to chat server")
 
       // Set up control panel UI with attested measurements, expected measurements, etc.
-      if (!enc.quote)
+      if (!encRef.current?.quote)
         throw new Error("unexpected: ws shouldn't open without an SGX quote")
-      setAttestedMeasurement(hex(enc.quote.body.mr_enclave))
-      setAttestedReportData(hex(enc.quote.body.report_data))
+
+      // Check if it's an SGX quote (has mr_enclave property)
+      if ("mr_enclave" in encRef.current.quote.body) {
+        setAttestedMeasurement(hex(encRef.current.quote.body.mr_enclave))
+        setAttestedReportData(hex(encRef.current.quote.body.report_data))
+      } else {
+        // TDX quotes don't have mr_enclave, they have mr_td
+        console.warn("TDX quotes not fully supported in UI yet")
+      }
 
       // For SGX: report_data[0:32] = SHA256(x25519key), no nonce involved
-      if (enc.serverX25519PublicKey) {
-        const keyBytes = new Uint8Array(enc.serverX25519PublicKey)
+      if (encRef.current.serverX25519PublicKey) {
+        const keyBytes = new Uint8Array(encRef.current.serverX25519PublicKey)
         crypto.subtle.digest("SHA-256", keyBytes).then((hashBuffer) => {
           const expectedHash = new Uint8Array(hashBuffer)
           // SGX report_data is 64 bytes: first 32 = SHA256(key), rest = zeros
@@ -193,9 +219,9 @@ function App() {
         const delay = reconnectDelayRef.current
         console.log(`Scheduling chat WebSocket reconnect in ${delay}ms`)
         reconnectTimeoutRef.current = setTimeout(async () => {
-          if (!mountedRef.current) return
+          if (!mountedRef.current || !encRef.current) return
           try {
-            await enc.ensureConnection()
+            await encRef.current.ensureConnection()
             if (mountedRef.current) {
               setupChatWebSocket()
             }
@@ -214,7 +240,7 @@ function App() {
     }
 
     return ws
-  }, [])
+  }, [selectedRemote, debouncedCustomUrl])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)")
@@ -239,29 +265,112 @@ function App() {
     }
   }, [])
 
+  // Initialize or reinitialize TunnelClient when selectedRemote or debouncedCustomUrl changes
   useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true
+    let cancelled = false
 
-      fetchUptime()
+    const initializeTunnel = async () => {
+      const activeRemote = getActiveRemote()
 
-      enc
-        .fetch(baseUrl + "/increment", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: "{}",
+      // Don't initialize if custom is selected but no valid URL yet
+      if (selectedRemote === "custom" && !debouncedCustomUrl) {
+        setIsInitializing(false)
+        return
+      }
+
+      // Don't initialize if custom URL has validation error
+      if (selectedRemote === "custom" && customUrlError) {
+        setIsInitializing(false)
+        return
+      }
+
+      setIsInitializing(true)
+      setConnectionError("")
+
+      // Clean up existing tunnel client if any
+      if (encRef.current) {
+        try {
+          encRef.current.close()
+        } catch (e) {
+          console.error("Error closing previous tunnel:", e)
+        }
+        encRef.current = null
+      }
+
+      // Clear existing state
+      setMessages([])
+      setHiddenMessagesCount(0)
+      setUptime("")
+      setSwCounter(0)
+      setAttestedMeasurement("")
+      setExpectedReportData("")
+      setAttestedReportData("")
+      setConnected(false)
+
+      try {
+        const tunnel = await TunnelClient.initialize(activeRemote, {
+          sgx: true,
+          customVerifyQuote: async () => true,
         })
-        .then(async (response) => {
-          const data = await response.json()
-          setSwCounter(data?.counter || 0)
-        })
+
+        if (cancelled) {
+          tunnel.close()
+          return
+        }
+
+        encRef.current = tunnel
+        setIsInitializing(false)
+
+        // Fetch initial data
+        if (!initializedRef.current) {
+          initializedRef.current = true
+        }
+
+        fetchUptime()
+
+        tunnel
+          .fetch(activeRemote + "/increment", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "{}",
+          })
+          .then(async (response) => {
+            const data = await response.json()
+            setSwCounter(data?.counter || 0)
+          })
+          .catch((error) => {
+            console.error("Failed to fetch counter:", error)
+          })
+
+        // Setup chat WebSocket
+        setupChatWebSocket()
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to initialize tunnel:", error)
+          setConnectionError(
+            `Failed to connect: ${error instanceof Error ? error.message : "Unknown error"}`,
+          )
+          setIsInitializing(false)
+        }
+      }
     }
-  }, [fetchUptime])
 
-  // Setup WebSocket on mount
+    initializeTunnel()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    selectedRemote,
+    debouncedCustomUrl,
+    setupChatWebSocket,
+    fetchUptime,
+    customUrlError,
+  ])
+
+  // Cleanup on unmount
   useEffect(() => {
     mountedRef.current = true
-    const ws = setupChatWebSocket()
 
     return () => {
       mountedRef.current = false
@@ -270,13 +379,27 @@ function App() {
         clearTimeout(reconnectTimeoutRef.current)
         reconnectTimeoutRef.current = null
       }
-      try {
-        ws.close()
-      } finally {
-        if (wsRef.current === ws) wsRef.current = null
+      // Clear debounce timer
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+      // Close chat WebSocket
+      if (wsRef.current) {
+        try {
+          wsRef.current.close()
+        } catch {}
+        wsRef.current = null
+      }
+      // Close tunnel
+      if (encRef.current) {
+        try {
+          encRef.current.close()
+        } catch {}
+        encRef.current = null
       }
     }
-  }, [setupChatWebSocket])
+  }, [])
 
   const sendMessage = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -300,7 +423,6 @@ function App() {
     return new Date(timestamp).toLocaleTimeString("en-US", {
       hour12: false,
       hour: "2-digit",
-      minute: "2-digit",
     })
   }
 
@@ -308,44 +430,114 @@ function App() {
     setNewMessage(e.target.value)
   }
 
+  const handleCustomUrlChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setCustomUrl(value)
+    setCustomUrlError("")
+
+    // Clear existing debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    // Set new debounce timer
+    debounceTimerRef.current = setTimeout(() => {
+      if (!value.trim()) {
+        setCustomUrlError("URL cannot be empty")
+        return
+      }
+
+      if (!isValidEndpoint(value)) {
+        setCustomUrlError("Invalid URL format (must be http:// or https://)")
+        return
+      }
+
+      // Valid URL - update debounced value to trigger connection
+      setDebouncedCustomUrl(value)
+    }, 1000)
+  }
+
+  // Get the actual URL to connect to
+  const getActiveRemote = (): string => {
+    if (selectedRemote === "custom") {
+      return debouncedCustomUrl || customUrl
+    }
+    return selectedRemote
+  }
+
   return (
     <div className="chat-container">
       <div className="chat-header">
         <h1>TEE Chat Room</h1>
         <div className="user-info">
-          <span className="username">You are: {username}</span>
-          <span>
+          {/* <span className="username">You are: {username}</span> */}
+          <div style={{ display: "inline-block", marginTop: 2 }}>
+            <select
+              id="remote-select"
+              value={selectedRemote}
+              onChange={(e) => setSelectedRemote(e.target.value)}
+              disabled={isInitializing}
+              style={{
+                display: "inline-block",
+                padding: "4px 8px",
+                fontSize: "0.85em",
+                border: "1px solid #ddd",
+                borderRadius: 4,
+                backgroundColor: isInitializing ? "#f5f5f5" : "white",
+                color: "#333",
+                cursor: isInitializing ? "not-allowed" : "pointer",
+                maxWidth: "280px",
+              }}
+            >
+              {REMOTES.map((remote) => (
+                <option key={remote.url} value={remote.url}>
+                  {remote.label}{" "}
+                  {remote.url === "custom" ? "" : `- ${remote.url}`}
+                </option>
+              ))}
+            </select>
+            {selectedRemote === "custom" && (
+              <>
+                <input
+                  id="custom-url"
+                  type="text"
+                  value={customUrl}
+                  onChange={handleCustomUrlChange}
+                  placeholder="http://example.com:3001"
+                  disabled={isInitializing}
+                  style={{
+                    display: "inline-block",
+                    marginLeft: "6px",
+                    padding: "4px 8px",
+                    fontSize: "0.85em",
+                    border: customUrlError
+                      ? "1px solid #f87171"
+                      : "1px solid #ddd",
+                    borderRadius: 4,
+                    backgroundColor: isInitializing ? "#f5f5f5" : "white",
+                    color: "#333",
+                    width: "180px",
+                  }}
+                />
+                {customUrlError && (
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      fontSize: "0.85em",
+                      color: "#dc2626",
+                    }}
+                  >
+                    {customUrlError}
+                  </span>
+                )}
+              </>
+            )}
             <span
               className={`status ${connected ? "connected" : "disconnected"}`}
             >
-              {connected
-                ? "🟢 WS Connected"
-                : connectionError
-                  ? "🔴 Connection Error"
-                  : "🔴 WS Disconnected"}
-            </span>{" "}
-            <a
-              href="#"
-              onClick={async (e) => {
-                e.preventDefault()
-                if (connected) {
-                  disconnectRA()
-                } else {
-                  // Reconnect both the tunnel and the chat WebSocket
-                  await enc.ensureConnection()
-                  setupChatWebSocket()
-                }
-              }}
-              style={{
-                color: "#333",
-                textDecoration: "underline",
-                cursor: "pointer",
-                fontSize: "0.85em",
-              }}
-            >
-              {connected ? "Disconnect" : "Connect"}
-            </a>
-          </span>
+              &nbsp; {connected ? "🟢" : connectionError ? "Error" : "🔴"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -436,7 +628,7 @@ function App() {
               <div
                 style={{ fontSize: "1.1em", fontWeight: 600, color: "#000" }}
               >
-                ~{uptime || "—"}
+                {uptime || "—"}
               </div>
             </div>
             <div style={{ textAlign: "center" }}>
@@ -472,12 +664,17 @@ function App() {
 
             <button
               onClick={async () => {
+                if (!encRef.current) return
+                const activeRemote = getActiveRemote()
                 try {
-                  const response = await enc.fetch(baseUrl + "/increment", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: "{}",
-                  })
+                  const response = await encRef.current.fetch(
+                    activeRemote + "/increment",
+                    {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: "{}",
+                    },
+                  )
                   const data = await response.json()
                   setSwCounter(data?.counter || 0)
                 } catch (error) {
@@ -502,7 +699,7 @@ function App() {
               textAlign: "left",
             }}
           >
-            <div style={{ marginBottom: 6 }}>Server: {baseUrl}</div>
+            <div style={{ marginBottom: 6 }}>Server: {getActiveRemote()}</div>
             <div style={{ marginBottom: 6 }}>
               Attested MRENCLAVE: {attestedMeasurement}
             </div>
@@ -534,8 +731,8 @@ function App() {
               </div>
               <div style={{ marginBottom: 6 }}>
                 X25519 tunnel key:{" "}
-                {enc?.serverX25519PublicKey
-                  ? hex(enc.serverX25519PublicKey)
+                {encRef.current?.serverX25519PublicKey
+                  ? hex(encRef.current.serverX25519PublicKey)
                   : "--"}
               </div>
             </div>
