@@ -477,7 +477,7 @@ function App() {
               }}
               style={buttonStyle}
             >
-              GET /uptime via TunnelClient
+              GET /uptime
             </button>
 
             <button
@@ -496,37 +496,7 @@ function App() {
               }}
               style={buttonStyle}
             >
-              POST /increment via TunnelClient
-            </button>
-
-            <button
-              onClick={async () => {
-                try {
-                  const r = await fetch("/uptime")
-                  const j = await r.json()
-                  setUptime(j?.uptime?.formatted || "")
-                } catch {}
-              }}
-              style={buttonStyle}
-            >
-              GET /uptime via ServiceWorker
-            </button>
-
-            <button
-              onClick={async () => {
-                try {
-                  const r = await fetch("/increment", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: "{}",
-                  })
-                  const j = await r.json()
-                  setSwCounter(j?.counter || 0)
-                } catch {}
-              }}
-              style={buttonStyle}
-            >
-              POST /increment via ServiceWorker
+              POST /increment
             </button>
           </div>
 
