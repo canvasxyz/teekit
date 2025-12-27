@@ -51,7 +51,6 @@ function App() {
   const [username] = useState<string>(getStoredUsername)
   const [connected, setConnected] = useState<boolean>(false)
   const [uptime, setUptime] = useState<string>("")
-  const [uptimeSpinKey, setUptimeSpinKey] = useState<number>(0)
   const [hiddenMessagesCount, setHiddenMessagesCount] = useState<number>(0)
   const [swCounter, setSwCounter] = useState<number>(0)
   const [attestedMeasurement, setAttestedMeasurement] = useState<string>("")
@@ -94,8 +93,6 @@ function App() {
       }
     } catch (error) {
       console.error("Failed to fetch uptime:", error)
-    } finally {
-      setUptimeSpinKey((k) => k + 1)
     }
   }, [])
 
@@ -243,11 +240,11 @@ function App() {
   }, [])
 
   useEffect(() => {
-    fetchUptime()
-    const interval = setInterval(fetchUptime, UPTIME_REFRESH_MS) // Update every 10 seconds
-
     if (!initializedRef.current) {
       initializedRef.current = true
+
+      fetchUptime()
+
       enc
         .fetch(baseUrl + "/increment", {
           method: "POST",
@@ -259,8 +256,6 @@ function App() {
           setSwCounter(data?.counter || 0)
         })
     }
-
-    return () => clearInterval(interval)
   }, [fetchUptime])
 
   // Setup WebSocket on mount
@@ -442,11 +437,6 @@ function App() {
                 style={{ fontSize: "1.1em", fontWeight: 600, color: "#000" }}
               >
                 ~{uptime || "—"}
-                <span
-                  key={uptimeSpinKey}
-                  className="uptime-spinner"
-                  style={{ animationDuration: UPTIME_REFRESH_MS + "ms" }}
-                ></span>
               </div>
             </div>
             <div style={{ textAlign: "center" }}>
