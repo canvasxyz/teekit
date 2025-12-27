@@ -31,7 +31,7 @@ export const baseUrl = document.location.search.includes("remote=1")
 const UPTIME_REFRESH_MS = 10000
 
 const enc = await TunnelClient.initialize(baseUrl, {
-  sevsnp: true,
+  sgx: true,
   customVerifyQuote: async () => true,
 })
 
@@ -57,7 +57,6 @@ function App() {
   const [attestedMeasurement, setAttestedMeasurement] = useState<string>("")
   const [expectedReportData, setExpectedReportData] = useState<string>("")
   const [attestedReportData, setAttestedReportData] = useState<string>("")
-  const [verifierNonce, setVerifierNonce] = useState<string>("")
   const [connectionError, setConnectionError] = useState<string>("")
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const initializedRef = useRef<boolean>(false)
@@ -144,25 +143,22 @@ function App() {
       console.log("Connected to chat server")
 
       // Set up control panel UI with attested measurements, expected measurements, etc.
-      if (!enc.sevsnpReport)
-        throw new Error("unexpected: ws shouldn't open without a SEV-SNP report")
-      setAttestedMeasurement(hex(enc.sevsnpReport.body.measurement))
-      setAttestedReportData(hex(enc.sevsnpReport.body.report_data))
-      enc
-        .getX25519ExpectedReportData()
-        .then((expectedReportData: Uint8Array) => {
-          setExpectedReportData(hex(expectedReportData ?? new Uint8Array()))
+      if (!enc.quote)
+        throw new Error("unexpected: ws shouldn't open without an SGX quote")
+      setAttestedMeasurement(hex(enc.quote.body.mr_enclave))
+      setAttestedReportData(hex(enc.quote.body.report_data))
 
-          const verifierData = enc.reportBindingData?.verifierData
-          if (verifierData === null || verifierData === undefined) return
-
-          // For SEV-SNP, verifierData is a plain Uint8Array nonce
-          if (verifierData instanceof Uint8Array) {
-            setVerifierNonce(hex(verifierData))
-          } else if ("val" in verifierData) {
-            setVerifierNonce(hex(verifierData.val ?? new Uint8Array()))
-          }
+      // For SGX: report_data[0:32] = SHA256(x25519key), no nonce involved
+      if (enc.serverX25519PublicKey) {
+        const keyBytes = new Uint8Array(enc.serverX25519PublicKey)
+        crypto.subtle.digest("SHA-256", keyBytes).then((hashBuffer) => {
+          const expectedHash = new Uint8Array(hashBuffer)
+          // SGX report_data is 64 bytes: first 32 = SHA256(key), rest = zeros
+          const paddedExpected = new Uint8Array(64)
+          paddedExpected.set(expectedHash, 0)
+          setExpectedReportData(hex(paddedExpected))
         })
+      }
 
       setTimeout(() => {
         inputRef.current?.focus()
@@ -548,7 +544,7 @@ function App() {
           >
             <div style={{ marginBottom: 6 }}>Server: {baseUrl}</div>
             <div style={{ marginBottom: 6 }}>
-              Attested Measurement (launch digest): {attestedMeasurement}
+              Attested MRENCLAVE: {attestedMeasurement}
             </div>
             <div style={{ marginBottom: 6 }}>
               Attested report_data: {attestedReportData}
@@ -574,11 +570,7 @@ function App() {
             </div>
             <div style={{ borderLeft: "1px solid #ccc", paddingLeft: 12 }}>
               <div style={{ marginBottom: 6 }}>
-                Based on sha512(nonce, key):
-              </div>
-              <div style={{ marginBottom: 6 }}>
-                Nonce:{" "}
-                {verifierNonce || <span style={{ color: "red" }}>None</span>}
+                Based on sha256(key) padded to 64 bytes:
               </div>
               <div style={{ marginBottom: 6 }}>
                 X25519 tunnel key:{" "}
