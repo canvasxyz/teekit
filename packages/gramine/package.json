@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build:bundle": "./scripts/build-kettle-bundle.sh",
+    "build:bundle:clean": "./scripts/build-kettle-bundle.sh && rm -rf /var/lib/kettle/do-storage/*",
     "build:sgx-quote-service": "esbuild src/sgx-quote-service.ts --bundle --platform=node --format=esm --outfile=dist/sgx-quote-service.js",
     "build:enclave": "make SGX=1",
     "build:enclave:debug": "make SGX=1 DEBUG=1 LOG_LEVEL=debug",
