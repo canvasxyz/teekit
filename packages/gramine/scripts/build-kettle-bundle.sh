@@ -55,6 +55,11 @@ log_info "Building worker bundle..."
 cd "$KETTLE_DIR"
 npm run build:worker
 
+# Build the SGX quote service
+log_info "Building SGX quote service..."
+cd "$GRAMINE_DIR"
+npm run build:sgx-quote-service
+
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR/static"
@@ -64,6 +69,9 @@ log_info "Copying bundle files to $OUTPUT_DIR..."
 cp "$KETTLE_DIR/dist/app.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/worker.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/externals.js" "$OUTPUT_DIR/"
+cp "$GRAMINE_DIR/dist/sgx-quote-service.js" "$OUTPUT_DIR/"
+cp "$GRAMINE_DIR/scripts/entrypoint.sh" "$OUTPUT_DIR/"
+chmod +x "$OUTPUT_DIR/entrypoint.sh"
 
 # Copy static files if they exist
 if [ -d "$KETTLE_DIR/dist/static" ]; then
@@ -130,7 +138,7 @@ const config :Workerd.Config = (
       ),
     ),
     # SGX quote service
-    ( name = "quote", external = ( address = "127.0.0.1:3002" ) ),
+    ( name = "quote", external = ( address = "127.0.0.1:3333" ) ),
     # Static files
     ( name = "static-files", disk = "/opt/kettle/static" ),
     # DO SQLite storage (writable)

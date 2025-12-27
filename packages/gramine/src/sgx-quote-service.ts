@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs"
 import { createHash } from "crypto"
 import { base64 } from "@scure/base"
 
-const DEFAULT_PORT = 3002
+const DEFAULT_PORT = 3333
 const ATTESTATION_USER_REPORT_DATA = "/dev/attestation/user_report_data"
 const ATTESTATION_QUOTE = "/dev/attestation/quote"
 const ATTESTATION_TYPE = "/dev/attestation/attestation_type"
@@ -276,8 +276,6 @@ export function startSgxQuoteService(port: number = DEFAULT_PORT) {
     })
   })
 
-  server.unref()
-
   return {
     server,
     port,
@@ -294,7 +292,7 @@ export function startSgxQuoteService(port: number = DEFAULT_PORT) {
 
 // CLI entry point
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const port = parseInt(process.env.QUOTE_SERVICE_PORT || "3002", 10)
+  const port = parseInt(process.env.QUOTE_SERVICE_PORT || "3333", 10)
   const service = startSgxQuoteService(port)
 
   process.on("SIGINT", () => service.stop())

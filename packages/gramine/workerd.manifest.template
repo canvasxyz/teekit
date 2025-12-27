@@ -7,7 +7,7 @@
 # Gramine configuration
 ################################################################################
 
-libos.entrypoint = "/usr/local/bin/workerd"
+libos.entrypoint = "/opt/kettle/entrypoint.sh"
 
 loader.log_level = "{{ log_level }}"
 
@@ -17,10 +17,11 @@ loader.env.KETTLE_SGX = "1"
 
 loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}"
 loader.env.HOME = "/root"
-loader.env.PATH = "/usr/bin:/bin"
+loader.env.PATH = "/usr/bin:/bin:/usr/local/bin"
+loader.env.QUOTE_SERVICE_PORT = "3333"
 
 loader.argv = [
-  "/usr/local/bin/workerd",
+  "/opt/kettle/entrypoint.sh",
   "serve",
   "--experimental",
   "--verbose",
@@ -61,10 +62,20 @@ fs.mounts = [
   { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
   { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
 
+  # Node.js binary (for SGX quote service)
+  { path = "/usr/bin/node", uri = "file:{{ node_bin }}" },
+
+  # Bash and utilities for entrypoint script
+  { path = "/bin/bash", uri = "file:/bin/bash" },
+  { path = "/bin/sleep", uri = "file:/bin/sleep" },
+  { path = "/bin/kill", uri = "file:/bin/kill" },
+  { path = "/usr/bin/curl", uri = "file:/usr/bin/curl" },
+  { path = "/usr/bin/lsof", uri = "file:/usr/bin/lsof" },
+
   # workerd binary (statically linked)
   { path = "/usr/local/bin/workerd", uri = "file:{{ workerd_bin }}" },
 
-  # Kettle bundle directory (contains worker.js, app.js, externals.js, config)
+  # Kettle bundle directory (contains worker.js, app.js, externals.js, config, quote service)
   { path = "/opt/kettle", uri = "file:{{ kettle_bundle_dir }}" },
 
   # Encrypted persistent storage (uses MRENCLAVE-based sealing key)
@@ -105,14 +116,22 @@ sgx.trusted_files = [
   "file:{{ arch_libdir }}/",
   "file:/usr/{{ arch_libdir }}/",
 
-  # workerd binary
+  # Binaries
   "file:{{ workerd_bin }}",
+  "file:{{ node_bin }}",
+  "file:/bin/bash",
+  "file:/bin/sleep",
+  "file:/bin/kill",
+  "file:/usr/bin/curl",
+  "file:/usr/bin/lsof",
 
   # Kettle JavaScript bundles (measured for integrity)
   "file:{{ kettle_bundle_dir }}/worker.js",
   "file:{{ kettle_bundle_dir }}/app.js",
   "file:{{ kettle_bundle_dir }}/externals.js",
   "file:{{ kettle_bundle_dir }}/workerd.config.capnp",
+  "file:{{ kettle_bundle_dir }}/sgx-quote-service.js",
+  "file:{{ kettle_bundle_dir }}/entrypoint.sh",
 
   # Static files for serving (HTML, CSS, JS assets)
   # TODO: bundle static files into REPORT_DATA, or otherwise enforce pinning

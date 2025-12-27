@@ -52,7 +52,7 @@ const config :Workerd.Config = (
         durableObjectStorage = (localDisk = "do-storage"),
       ),
     ),
-    ( name = "quote", external = ( address = "127.0.0.1:3002" ) ),
+    ( name = "quote", external = ( address = "127.0.0.1:3333" ) ),
     ( name = "static-files", disk = "/opt/kettle/static" ),
     ( name = "do-storage", disk = ( path = "/var/lib/kettle/do-storage", writable = true ) ),
   ],

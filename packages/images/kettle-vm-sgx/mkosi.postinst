@@ -163,6 +163,7 @@ mkosi-chroot sh -c "cd /opt/kettle && gramine-manifest \
     -Darch_libdir=/lib/x86_64-linux-gnu \
     -Dworkerd_bin=/opt/kettle/workerd \
     -Dkettle_bundle_dir=/opt/kettle \
+    -Dnode_bin=/usr/bin/node \
     workerd.manifest.template workerd.manifest"
 echo "Manifest generated: /opt/kettle/workerd.manifest"
 

@@ -29,6 +29,9 @@ SGX_SIGN_KEY ?= enclave-key.pem
 # workerd binary location (local binary in this directory)
 WORKERD_BIN ?= $(CURDIR)/workerd
 
+# Node.js binary location
+NODE_BIN ?= $(shell which node)
+
 # Kettle bundle directory
 KETTLE_BUNDLE_DIR ?= /opt/kettle
 
@@ -87,6 +90,7 @@ $(MANIFEST): workerd.manifest.template check-gramine check-workerd
 		-Dlog_level=$(LOG_LEVEL) \
 		-Darch_libdir=$(ARCH_LIBDIR) \
 		-Dworkerd_bin=$(WORKERD_BIN) \
+		-Dnode_bin=$(NODE_BIN) \
 		-Dkettle_bundle_dir=$(KETTLE_BUNDLE_DIR) \
 		-DDEBUG=$(DEBUG) \
 		$< > $@
