@@ -26,7 +26,12 @@
 set -euo pipefail
 
 # Configuration
-RESOURCE_GROUP="tdx-group"
+RESOURCE_GROUP_FILE=".resourcegroup"
+if [ -f "$RESOURCE_GROUP_FILE" ]; then
+    RESOURCE_GROUP=$(cat "$RESOURCE_GROUP_FILE")
+else
+    RESOURCE_GROUP="tdx-group"
+fi
 GALLERY_NAME="tdxGallery"
 CONTAINER_NAME="vhds"
 VM_PATTERN="kettle-"
