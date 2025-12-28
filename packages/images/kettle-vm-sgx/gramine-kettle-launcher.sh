@@ -10,8 +10,12 @@ KETTLE_BUNDLE_DIR="/opt/kettle"
 KETTLE_DATA_DIR="/var/lib/kettle"
 ENV_FILE="/etc/kettle/cloud-launcher.env"
 
-# Tee output to serial console for debugging
-exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+# Tee output to serial console for debugging (only if writable)
+if [ -w "$SERIAL_CONSOLE" ]; then
+    exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+else
+    echo "$LOG_PREFIX Serial console not writable at $SERIAL_CONSOLE; logging to stdout only"
+fi
 
 echo "Starting Gramine SGX kettle launcher..."
 

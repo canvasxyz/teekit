@@ -7,8 +7,12 @@ set -euo pipefail
 LOG_PREFIX="[gramine-setup]"
 SERIAL_CONSOLE="/dev/ttyS0"
 
-# Tee output to serial console for debugging
-exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+# Tee output to serial console for debugging (only if writable)
+if [ -w "$SERIAL_CONSOLE" ]; then
+    exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
+else
+    echo "$LOG_PREFIX Serial console not writable at $SERIAL_CONSOLE; logging to stdout only"
+fi
 
 echo "Preparing SGX environment..."
 
