@@ -36,7 +36,12 @@ if [ -f "$RESOURCE_GROUP_FILE" ]; then
 else
     RESOURCE_GROUP="tdx-group"
 fi
-GALLERY_NAME="tdxGallery"
+GALLERY_NAME_FILE=".galleryname"
+if [ -f "$GALLERY_NAME_FILE" ]; then
+    GALLERY_NAME=$(cat "$GALLERY_NAME_FILE")
+else
+    GALLERY_NAME="tdxGallery"
+fi
 CONTAINER_NAME="vhds"
 VM_NAME_CACHE_FILE=".vm_name_azure"
 

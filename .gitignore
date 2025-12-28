@@ -35,7 +35,9 @@ manifest.json
 
 *.vhd
 
+.resourcegroup
 .storageaccount
+.galleryname
 .dynv6_api_key
 .dynv6_azure_name
 .dynv6_gcp_name
