@@ -13,12 +13,14 @@ QUOTE_PROVIDER="/usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so"
 if [ ! -f "$BUILDROOT$QUOTE_PROVIDER" ]; then
     echo "Setting up Azure quote provider symlink..."
     # Find where az-dcap-client installed the library
-    QP_PATH=$(mkosi-chroot dpkg -L az-dcap-client 2>/dev/null | grep -E 'libdcap_quoteprov\.so$' | head -n1 || true)
+    QP_PATH=$(mkosi-chroot dpkg -L az-dcap-client | grep -E 'libdcap_quoteprov\.so$' | head -n1)
     if [ -n "$QP_PATH" ] && [ -f "$BUILDROOT$QP_PATH" ]; then
         echo "Linking $QP_PATH -> $QUOTE_PROVIDER"
         mkosi-chroot ln -sf "$QP_PATH" "$QUOTE_PROVIDER"
     else
-        echo "WARNING: Azure quote provider library not found in az-dcap-client package"
+        echo "ERROR: Azure quote provider library not found in az-dcap-client package"
+        echo "SGX attestation will not work without this library"
+        exit 1
     fi
 fi
 

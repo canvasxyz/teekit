@@ -17,21 +17,22 @@ AESMD_CONF="$BUILDROOT/etc/aesmd.conf"
 
 # 1. Create kettle user and group in target image
 echo "Creating kettle user..."
-mkosi-chroot groupadd -r kettle 2>/dev/null || true
-mkosi-chroot useradd -r -g kettle -d /var/lib/kettle -s /sbin/nologin kettle 2>/dev/null || true
+mkosi-chroot groupadd -r kettle || true  # May already exist
+mkosi-chroot useradd -r -g kettle -d /var/lib/kettle -s /sbin/nologin kettle || true  # May already exist
 
 # 2. Add kettle user to sgx groups for device access
 echo "Adding kettle to sgx groups..."
-mkosi-chroot groupadd -r sgx 2>/dev/null || true
-mkosi-chroot usermod -a -G sgx kettle 2>/dev/null || true
-mkosi-chroot getent group sgx_prv >/dev/null 2>&1 && mkosi-chroot usermod -a -G sgx_prv kettle 2>/dev/null || true
+mkosi-chroot groupadd -r sgx || true  # May already exist
+mkosi-chroot usermod -a -G sgx kettle
+# sgx_prv group is optional (only exists on some SGX setups)
+mkosi-chroot getent group sgx_prv >/dev/null 2>&1 && mkosi-chroot usermod -a -G sgx_prv kettle || true
 
 # 3. Ensure data directories exist and set ownership
 echo "Setting up data directories..."
 mkdir -p "$BUILDROOT/var/lib/kettle/do-storage"
 mkdir -p "$BUILDROOT/etc/kettle"
-mkosi-chroot chown -R kettle:kettle /var/lib/kettle 2>/dev/null || true
-mkosi-chroot chown -R kettle:kettle /etc/kettle 2>/dev/null || true
+mkosi-chroot chown -R kettle:kettle /var/lib/kettle
+mkosi-chroot chown -R kettle:kettle /etc/kettle
 
 # 4. Create /usr/lib/kettle directory for scripts and services
 mkdir -p "$KETTLE_LIB_DIR"
@@ -48,46 +49,39 @@ install -m 755 "$SRCDIR/kettle-vm-sgx/gramine-setup.sh" "$BUILDROOT/usr/bin/gram
 install -m 755 "$SRCDIR/kettle-vm-sgx/gramine-kettle-launcher.sh" "$BUILDROOT/usr/bin/gramine-kettle-launcher"
 
 # 7. Copy cloud config scripts from base kettle-vm
-if [ -f "$SRCDIR/kettle-vm/cloud-launcher.sh" ]; then
-    install -m 755 "$SRCDIR/kettle-vm/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
-fi
+echo "Installing cloud-launcher..."
+install -m 755 "$SRCDIR/kettle-vm/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
 
-# Copy cloud provider config scripts from packages/gramine
-GRAMINE_SCRIPTS="$SRCDIR/../gramine/scripts"
-if [ -d "$GRAMINE_SCRIPTS" ]; then
-    install -m 755 "$GRAMINE_SCRIPTS/config_azure" "$KETTLE_LIB_DIR/" 2>/dev/null || true
-    install -m 755 "$GRAMINE_SCRIPTS/config_local" "$KETTLE_LIB_DIR/" 2>/dev/null || true
-    install -m 755 "$GRAMINE_SCRIPTS/config_gcp" "$KETTLE_LIB_DIR/" 2>/dev/null || true
-fi
+# Copy cloud provider config scripts from scripts directory
+echo "Installing cloud provider config scripts..."
+install -m 755 "$SRCDIR/scripts/config_azure" "$KETTLE_LIB_DIR/"
+install -m 755 "$SRCDIR/scripts/config_local" "$KETTLE_LIB_DIR/"
+install -m 755 "$SRCDIR/scripts/config_gcp" "$KETTLE_LIB_DIR/"
 
-# 8. Install firewall script if available
-if [ -f "$SRCDIR/kettle-vm/setup-firewall.sh" ]; then
-    install -m 755 "$SRCDIR/kettle-vm/setup-firewall.sh" "$BUILDROOT/usr/bin/setup-firewall"
-fi
+# 8. Install firewall script
+echo "Installing firewall setup script..."
+install -m 755 "$SRCDIR/kettle-vm/setup-firewall.sh" "$BUILDROOT/usr/bin/setup-firewall"
 
 # 9. Copy cloud-launcher.service from kettle-vm
-if [ -f "$SRCDIR/kettle-vm/cloud-launcher.service" ]; then
-    install -m 644 "$SRCDIR/kettle-vm/cloud-launcher.service" "$SERVICE_DIR/"
-fi
+echo "Installing cloud-launcher.service..."
+install -m 644 "$SRCDIR/kettle-vm/cloud-launcher.service" "$SERVICE_DIR/"
 
 # 10. Copy firewall.service from kettle-vm
-if [ -f "$SRCDIR/kettle-vm/firewall.service" ]; then
-    install -m 644 "$SRCDIR/kettle-vm/firewall.service" "$SERVICE_DIR/"
-fi
+echo "Installing firewall.service..."
+install -m 644 "$SRCDIR/kettle-vm/firewall.service" "$SERVICE_DIR/"
 
 # 11. Copy certbot-launcher.service from kettle-vm
-if [ -f "$SRCDIR/kettle-vm/certbot-launcher.service" ]; then
-    install -m 644 "$SRCDIR/kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
-fi
+echo "Installing certbot-launcher.service..."
+install -m 644 "$SRCDIR/kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
 
 # 12. Enable services using systemctl --root
 echo "Enabling services..."
-systemctl --root="$BUILDROOT" enable gramine-sgx.service 2>/dev/null || true
-systemctl --root="$BUILDROOT" enable sgx-quote-service.service 2>/dev/null || true
-systemctl --root="$BUILDROOT" enable cloud-launcher.service 2>/dev/null || true
-systemctl --root="$BUILDROOT" enable firewall.service 2>/dev/null || true
-systemctl --root="$BUILDROOT" enable certbot-launcher.service 2>/dev/null || true
-systemctl --root="$BUILDROOT" enable aesmd.service 2>/dev/null || true
+systemctl --root="$BUILDROOT" enable gramine-sgx.service
+systemctl --root="$BUILDROOT" enable sgx-quote-service.service
+systemctl --root="$BUILDROOT" enable cloud-launcher.service
+systemctl --root="$BUILDROOT" enable firewall.service
+systemctl --root="$BUILDROOT" enable certbot-launcher.service
+systemctl --root="$BUILDROOT" enable aesmd.service
 
 # 13. Generate Gramine manifest and sign enclave
 # Note: Files were already copied by mkosi.build to $DESTDIR (now in $BUILDROOT)
@@ -126,7 +120,7 @@ EOF
 # Ensure workerd is on PATH for gramine-sgx launcher (it calls "workerd" by name).
 echo "Creating /usr/local/bin/workerd symlink..."
 mkdir -p "$BUILDROOT/usr/local/bin"
-mkosi-chroot ln -sf /opt/kettle/workerd /usr/local/bin/workerd 2>/dev/null || true
+mkosi-chroot ln -sf /opt/kettle/workerd /usr/local/bin/workerd
 
 # 15. Generate development signing key if not present
 echo "Setting up SGX signing key..."
@@ -152,14 +146,14 @@ mkosi-chroot sh -c "python3 -c \"import json; print(json.load(open('/opt/kettle/
 MRENCLAVE=$(cat "$KETTLE_DIR/mrenclave.txt")
 echo "MRENCLAVE: $MRENCLAVE"
 
-# 18. Verify SGX quote service was copied (required)
+# 18. Verify SGX quote service was copied
 if [ ! -f "$KETTLE_DIR/sgx-quote-service.js" ]; then
     echo "ERROR: sgx-quote-service.js missing in image at /opt/kettle/sgx-quote-service.js"
     exit 1
 fi
 
 # 19. Set ownership for kettle user
-mkosi-chroot chown -R kettle:kettle /opt/kettle 2>/dev/null || true
+mkosi-chroot chown -R kettle:kettle /opt/kettle
 
 # 20. Normalize timestamps for reproducibility
 find "$KETTLE_DIR" -exec touch -t 197001010000.00 {} + 2>/dev/null || true

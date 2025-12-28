@@ -17,15 +17,15 @@ mkdir -p "$BUILDROOT/usr/lib/node_modules"
 # Pin exact versions for reproducible builds (no caret ranges)
 npm_install_cmd="npm install --global-style --no-bin-links --prefix /usr workerd@1.20251128.0 esbuild@0.24.2"
 echo "Running in chroot: $npm_install_cmd"
-mkosi-chroot sh -c "$npm_install_cmd" || echo "Warning: Failed to install npm packages"
+mkosi-chroot sh -c "$npm_install_cmd"
 
 # npm installs to /usr/node_modules, but Node.js looks in /usr/lib/node_modules
 # Move the packages to the correct location
 echo "Moving npm packages to /usr/lib/node_modules..."
 if [ -d "$BUILDROOT/usr/node_modules" ]; then
-    cp -a --no-preserve=ownership "$BUILDROOT/usr/node_modules"/* "$BUILDROOT/usr/lib/node_modules/" 2>/dev/null || echo "Warning: Failed to move some packages"
-    rm -rf "$BUILDROOT/usr/node_modules"/* 2>/dev/null || true
-    rmdir "$BUILDROOT/usr/node_modules" 2>/dev/null || echo "Warning: Could not remove usr/node_modules"
+    cp -a --no-preserve=ownership "$BUILDROOT/usr/node_modules"/* "$BUILDROOT/usr/lib/node_modules/"
+    rm -rf "$BUILDROOT/usr/node_modules"/*
+    rmdir "$BUILDROOT/usr/node_modules"
 fi
 
 echo "Verifying installed packages..."
