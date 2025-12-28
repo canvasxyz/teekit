@@ -19,7 +19,6 @@ LOG_PREFIX="[kettle-launcher]"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRAMINE_DIR="$(dirname "$SCRIPT_DIR")"
 KETTLE_BUNDLE_DIR="${KETTLE_BUNDLE_DIR:-/opt/kettle}"
-KETTLE_DATA_DIR="${KETTLE_DATA_DIR:-/var/lib/kettle}"
 ENV_FILE="/etc/kettle/cloud-launcher.env"
 
 # Mode
@@ -63,100 +62,18 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-# Generate workerd config for a kettle instance
-generate_config() {
-    local index="$1"
-    local workerd_port=$((3001 + index * 2))
-    local quote_port=$((3002 + index * 2))
-    local storage_dir="$KETTLE_DATA_DIR/do-storage-$index"
-    local static_dir="$KETTLE_BUNDLE_DIR/static"
-    local config_file="$KETTLE_DATA_DIR/workerd-$index.config.capnp"
-
-    # Create storage directory
-    mkdir -p "$storage_dir"
-
-    # Generate workerd config
-    cat > "$config_file" << EOF
-using Workerd = import "/workerd/workerd.capnp";
-
-const config :Workerd.Config = (
-  v8Flags = ["--abort-on-uncaught-exception"],
-  services = [
-    (
-      name = "main",
-      worker = (
-        modules = [
-          ( name = "worker.js", esModule = embed "$KETTLE_BUNDLE_DIR/worker.js" ),
-          ( name = "app.js", esModule = embed "$KETTLE_BUNDLE_DIR/app.js" ),
-          ( name = "externals.js", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          # Package mappings
-          ( name = "hono", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "hono/cors", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "hono/ws", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "hono/cloudflare-workers", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "hono/utils/http-status", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@teekit/kettle/worker", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@teekit/tunnel", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@teekit/tunnel/samples", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@teekit/qvl", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@teekit/qvl/utils", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "cbor-x", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/ciphers", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/ciphers/salsa", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes/sha256", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes/sha512", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes/blake2b", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes/crypto", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes/sha1", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes/sha2", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/hashes/utils", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/curves", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@noble/curves/ed25519", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-          ( name = "@scure/base", esModule = embed "$KETTLE_BUNDLE_DIR/externals.js" ),
-        ],
-        compatibilityDate = "2025-11-05",
-        compatibilityFlags = ["nodejs_compat", "new_module_registry"],
-
-        bindings = [
-          ( name = "HONO_DO", durableObjectNamespace = "HonoDurableObject" ),
-          ( name = "QUOTE_SERVICE", service = "quote" ),
-          ( name = "STATIC_FILES", service = "static-files" ),
-        ],
-        durableObjectNamespaces = [
-          ( className = "HonoDurableObject", uniqueKey = "hono-durable-object-$index", enableSql = true ),
-        ],
-        durableObjectStorage = (localDisk = "do-storage"),
-      ),
-    ),
-    ( name = "quote", external = ( address = "127.0.0.1:$quote_port" ) ),
-    ( name = "static-files", disk = "$static_dir" ),
-    ( name = "do-storage", disk = ( path = "$storage_dir", writable = true ) ),
-  ],
-
-  sockets = [
-    ( name = "http", address = "*:$workerd_port", http = (), service = "main" ),
-  ]
-);
-EOF
-
-    echo "$config_file"
-}
-
 # Launch a single kettle instance
 launch_kettle() {
     local index="$1"
     local workerd_port=$((3001 + index * 2))
-    local quote_port=$((3002 + index * 2))
 
-    log_info "[$index] Launching kettle on port $workerd_port (quote: $quote_port)..."
-
-    # Generate config for this instance
-    local config_file
-    config_file=$(generate_config "$index")
-    log_info "[$index] Generated config: $config_file"
+    log_info "[$index] Launching kettle on port $workerd_port..."
 
     cd "$GRAMINE_DIR"
+
+    # Use the static config from the gramine package
+    # (measured into MRENCLAVE via Gramine manifest)
+    local config_file="$GRAMINE_DIR/workerd.config.capnp"
 
     if [ "$DIRECT_MODE" = true ]; then
         # Run workerd in Gramine-direct mode
@@ -188,9 +105,6 @@ main() {
         log_info "Starting Kettle Launcher (SGX MODE)"
     fi
     log_info "=========================================="
-
-    # Create data directories
-    mkdir -p "$KETTLE_DATA_DIR"
 
     # Load environment from cloud-launcher
     if [ -f "$ENV_FILE" ]; then

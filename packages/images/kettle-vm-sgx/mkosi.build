@@ -48,10 +48,10 @@ fi
 
 # 4. Copy workerd config (required for SGX attestation measurement)
 echo "Copying workerd config..."
-if [ -f "$GRAMINE_SRC/workerd.config.capnp" ]; then
-    cp "$GRAMINE_SRC/workerd.config.capnp" "$KETTLE_DIR/"
+if [ -f "$SRCDIR/kettle-vm-sgx/workerd.config.capnp" ]; then
+    cp "$SRCDIR/kettle-vm-sgx/workerd.config.capnp" "$KETTLE_DIR/"
 else
-    echo "ERROR: workerd.config.capnp not found at $GRAMINE_SRC"
+    echo "ERROR: workerd.config.capnp not found at $SRCDIR/kettle-vm-sgx"
     exit 1
 fi
 
