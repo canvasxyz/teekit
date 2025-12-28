@@ -3,16 +3,17 @@ set -euo pipefail
 
 # Build script for kettle-vm-sgx mkosi image
 # This copies workerd and kettle bundles. Gramine manifest generation
-# happens in postinst where gramine tools are available.
+# happens in postinst where gramine tools are available via mkosi-chroot.
 
 GRAMINE_SRC="$SRCDIR/gramine"
 KETTLE_ARTIFACTS="$SRCDIR/kettle-artifacts"
-KETTLE_DIR="$BUILDROOT/opt/kettle"
+KETTLE_DIR="$DESTDIR/opt/kettle"
 
 echo "=== Building kettle-vm-sgx ==="
 
 mkdir -p "$KETTLE_DIR"
 mkdir -p "$KETTLE_DIR/static"
+mkdir -p "$KETTLE_DIR/src"
 
 # 1. Decompress workerd binary
 echo "Decompressing workerd..."
@@ -38,18 +39,46 @@ fi
 
 # 3. Copy Gramine manifest template for postinst processing
 echo "Copying Gramine manifest template..."
-cp "$GRAMINE_SRC/workerd.manifest.template" "$KETTLE_DIR/"
+if [ -f "$GRAMINE_SRC/workerd.manifest.template" ]; then
+    cp "$GRAMINE_SRC/workerd.manifest.template" "$KETTLE_DIR/"
+else
+    echo "ERROR: workerd.manifest.template not found at $GRAMINE_SRC"
+    exit 1
+fi
 
-# 4. Copy SGX quote service source for postinst build
-echo "Copying SGX quote service..."
+# 4. Copy workerd config (required for SGX attestation measurement)
+echo "Copying workerd config..."
+if [ -f "$GRAMINE_SRC/workerd.config.capnp" ]; then
+    cp "$GRAMINE_SRC/workerd.config.capnp" "$KETTLE_DIR/"
+else
+    echo "ERROR: workerd.config.capnp not found at $GRAMINE_SRC"
+    exit 1
+fi
+
+# 5. Copy entrypoint script
+echo "Copying entrypoint script..."
+if [ -f "$GRAMINE_SRC/scripts/entrypoint.sh" ]; then
+    cp "$GRAMINE_SRC/scripts/entrypoint.sh" "$KETTLE_DIR/"
+    chmod +x "$KETTLE_DIR/entrypoint.sh"
+else
+    echo "ERROR: entrypoint.sh not found at $GRAMINE_SRC/scripts"
+    exit 1
+fi
+
+# 6. Copy pre-built SGX quote service if available
+if [ -f "$KETTLE_ARTIFACTS/sgx-quote-service.js" ]; then
+    cp "$KETTLE_ARTIFACTS/sgx-quote-service.js" "$KETTLE_DIR/"
+    echo "Copied pre-built sgx-quote-service.js"
+fi
+
+# 7. Copy SGX quote service source for potential postinst build
 if [ -f "$GRAMINE_SRC/src/sgx-quote-service.ts" ]; then
-    mkdir -p "$KETTLE_DIR/src"
     cp "$GRAMINE_SRC/src/sgx-quote-service.ts" "$KETTLE_DIR/src/"
 else
     echo "WARNING: sgx-quote-service.ts not found, skipping"
 fi
 
-# 5. Normalize timestamps for reproducibility
+# 8. Normalize timestamps for reproducibility
 find "$KETTLE_DIR" -exec touch -t 197001010000.00 {} +
 
 echo "=== kettle-vm-sgx build complete (gramine steps in postinst) ==="

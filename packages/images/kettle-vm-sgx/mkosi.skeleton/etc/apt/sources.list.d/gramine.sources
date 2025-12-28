@@ -1,8 +1,8 @@
 # Gramine APT repository
-# Note: Using Debian bookworm - closest to Debian Trixie
+# Note: Using Ubuntu noble (24.04) - matches Intel SGX repo version
 Types: deb
 URIs: https://packages.gramineproject.io/
-Suites: bookworm
+Suites: noble
 Components: main
 Architectures: amd64
 Signed-By: /usr/share/keyrings/gramine.gpg

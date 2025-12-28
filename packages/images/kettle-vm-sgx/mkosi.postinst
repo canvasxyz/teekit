@@ -2,8 +2,10 @@
 set -euo pipefail
 
 # Post-install script for kettle-vm-sgx
-# Sets up users, directories, systemd services, and generates Gramine manifest
-# Note: This runs on the HOST with $BUILDROOT pointing to the target image
+# Sets up users, directories, systemd services, and generates Gramine manifest.
+# File copying (workerd, bundles, etc.) is done by mkosi.build using $DESTDIR.
+# This script handles tasks that require mkosi-chroot (gramine tools, user creation).
+# Note: This runs on the HOST with $BUILDROOT pointing to the target image.
 
 echo "=== Post-install: kettle-vm-sgx ==="
 
@@ -11,16 +13,18 @@ echo "=== Post-install: kettle-vm-sgx ==="
 SERVICE_DIR="$BUILDROOT/etc/systemd/system"
 KETTLE_DIR="$BUILDROOT/opt/kettle"
 KETTLE_LIB_DIR="$BUILDROOT/usr/lib/kettle"
+AESMD_CONF="$BUILDROOT/etc/aesmd.conf"
 
 # 1. Create kettle user and group in target image
 echo "Creating kettle user..."
 mkosi-chroot groupadd -r kettle 2>/dev/null || true
 mkosi-chroot useradd -r -g kettle -d /var/lib/kettle -s /sbin/nologin kettle 2>/dev/null || true
 
-# 2. Add kettle user to sgx group for device access
-echo "Adding kettle to sgx group..."
+# 2. Add kettle user to sgx groups for device access
+echo "Adding kettle to sgx groups..."
 mkosi-chroot groupadd -r sgx 2>/dev/null || true
 mkosi-chroot usermod -a -G sgx kettle 2>/dev/null || true
+mkosi-chroot getent group sgx_prv >/dev/null 2>&1 && mkosi-chroot usermod -a -G sgx_prv kettle 2>/dev/null || true
 
 # 3. Ensure data directories exist and set ownership
 echo "Setting up data directories..."
@@ -83,76 +87,20 @@ systemctl --root="$BUILDROOT" enable sgx-quote-service.service 2>/dev/null || tr
 systemctl --root="$BUILDROOT" enable cloud-launcher.service 2>/dev/null || true
 systemctl --root="$BUILDROOT" enable firewall.service 2>/dev/null || true
 systemctl --root="$BUILDROOT" enable certbot-launcher.service 2>/dev/null || true
+systemctl --root="$BUILDROOT" enable aesmd.service 2>/dev/null || true
 
-# 13. Copy files and generate Gramine manifest
-echo "Setting up /opt/kettle..."
+# 13. Generate Gramine manifest and sign enclave
+# Note: Files were already copied by mkosi.build to $DESTDIR (now in $BUILDROOT)
+echo "Setting up Gramine enclave..."
 
-# Ensure /opt/kettle exists (BuildScript sandbox may not have persisted it)
-mkdir -p "$KETTLE_DIR"
-mkdir -p "$KETTLE_DIR/static"
-mkdir -p "$KETTLE_DIR/src"
-
-# Find gramine source directory
-GRAMINE_SRC="$SRCDIR/../gramine"
-if [ ! -d "$GRAMINE_SRC" ]; then
-    GRAMINE_SRC="$SRCDIR/gramine"
-fi
-
-# Copy workerd binary (decompress from zst)
-echo "Decompressing workerd binary..."
-if [ -f "$GRAMINE_SRC/workerd.zst" ]; then
-    # Copy compressed file first, then decompress inside chroot where zstd is available
-    cp "$GRAMINE_SRC/workerd.zst" "$KETTLE_DIR/"
-    mkosi-chroot sh -c "cd /opt/kettle && zstd -d workerd.zst -o workerd && rm workerd.zst && chmod +x workerd"
-else
-    echo "ERROR: workerd.zst not found at $GRAMINE_SRC/workerd.zst"
+# Verify required files exist (copied by mkosi.build)
+if [ ! -f "$KETTLE_DIR/workerd" ]; then
+    echo "ERROR: workerd not found at $KETTLE_DIR/workerd"
+    echo "Ensure mkosi.build ran successfully"
     exit 1
 fi
-
-# Copy kettle bundles from kettle-artifacts
-echo "Copying kettle bundles..."
-KETTLE_ARTIFACTS="$SRCDIR/kettle-artifacts"
-if [ -d "$KETTLE_ARTIFACTS" ]; then
-    cp "$KETTLE_ARTIFACTS/app.js" "$KETTLE_DIR/"
-    cp "$KETTLE_ARTIFACTS/worker.js" "$KETTLE_DIR/"
-    cp "$KETTLE_ARTIFACTS/externals.js" "$KETTLE_DIR/"
-    cp "$KETTLE_ARTIFACTS/manifest.json" "$KETTLE_DIR/"
-else
-    echo "ERROR: kettle-artifacts not found at $KETTLE_ARTIFACTS"
-    exit 1
-fi
-
-# Copy manifest template
-echo "Copying manifest template..."
-if [ -f "$GRAMINE_SRC/workerd.manifest.template" ]; then
-    cp "$GRAMINE_SRC/workerd.manifest.template" "$KETTLE_DIR/"
-else
-    echo "ERROR: workerd.manifest.template not found at $GRAMINE_SRC"
-    exit 1
-fi
-
-# Copy pre-built SGX quote service (built during prep_kettle.sh)
-if [ -f "$KETTLE_ARTIFACTS/sgx-quote-service.js" ]; then
-    cp "$KETTLE_ARTIFACTS/sgx-quote-service.js" "$KETTLE_DIR/"
-    echo "Copied pre-built sgx-quote-service.js"
-fi
-
-# Copy workerd config (required for SGX attestation measurement)
-if [ -f "$GRAMINE_SRC/workerd.config.capnp" ]; then
-    cp "$GRAMINE_SRC/workerd.config.capnp" "$KETTLE_DIR/"
-    echo "Copied workerd.config.capnp"
-else
-    echo "ERROR: workerd.config.capnp not found at $GRAMINE_SRC"
-    exit 1
-fi
-
-# Copy entrypoint script
-if [ -f "$GRAMINE_SRC/scripts/entrypoint.sh" ]; then
-    cp "$GRAMINE_SRC/scripts/entrypoint.sh" "$KETTLE_DIR/"
-    chmod +x "$KETTLE_DIR/entrypoint.sh"
-    echo "Copied entrypoint.sh"
-else
-    echo "ERROR: entrypoint.sh not found at $GRAMINE_SRC/scripts"
+if [ ! -f "$KETTLE_DIR/workerd.manifest.template" ]; then
+    echo "ERROR: workerd.manifest.template not found at $KETTLE_DIR"
     exit 1
 fi
 
@@ -167,7 +115,20 @@ mkosi-chroot sh -c "cd /opt/kettle && gramine-manifest \
     workerd.manifest.template workerd.manifest"
 echo "Manifest generated: /opt/kettle/workerd.manifest"
 
-# 14. Generate development signing key if not present
+# 14. Configure AESM for Azure SGX
+echo "Configuring AESM (aesmd) service..."
+cat > "$AESMD_CONF" << 'EOF'
+# Azure SGX configuration
+# Use Azure's DCAP Quote Provider
+default quoting type = ecdsa_256
+EOF
+
+# Ensure workerd is on PATH for gramine-sgx launcher (it calls "workerd" by name).
+echo "Creating /usr/local/bin/workerd symlink..."
+mkdir -p "$BUILDROOT/usr/local/bin"
+mkosi-chroot ln -sf /opt/kettle/workerd /usr/local/bin/workerd 2>/dev/null || true
+
+# 15. Generate development signing key if not present
 echo "Setting up SGX signing key..."
 mkdir -p "$KETTLE_DIR/keys"
 if [ ! -f "$KETTLE_DIR/keys/enclave-key.pem" ]; then
@@ -175,7 +136,7 @@ if [ ! -f "$KETTLE_DIR/keys/enclave-key.pem" ]; then
     echo "Generated development signing key"
 fi
 
-# 15. Sign the enclave
+# 16. Sign the enclave
 echo "Signing SGX enclave..."
 mkosi-chroot sh -c "cd /opt/kettle && gramine-sgx-sign \
     --manifest workerd.manifest \
@@ -183,7 +144,7 @@ mkosi-chroot sh -c "cd /opt/kettle && gramine-sgx-sign \
     --output workerd.manifest.sgx"
 echo "Enclave signed: /opt/kettle/workerd.manifest.sgx"
 
-# 16. Extract MRENCLAVE for attestation
+# 17. Extract MRENCLAVE for attestation
 echo "Extracting MRENCLAVE..."
 mkosi-chroot sh -c "cd /opt/kettle && gramine-sgx-sigstruct-view --output-format json workerd.sig > /opt/kettle/sigstruct.json"
 # Extract just the MRENCLAVE value (run python inside chroot too)
@@ -191,17 +152,16 @@ mkosi-chroot sh -c "python3 -c \"import json; print(json.load(open('/opt/kettle/
 MRENCLAVE=$(cat "$KETTLE_DIR/mrenclave.txt")
 echo "MRENCLAVE: $MRENCLAVE"
 
-# 17. Verify SGX quote service was copied
-if [ -f "$KETTLE_DIR/sgx-quote-service.js" ]; then
-    echo "SGX quote service ready: /opt/kettle/sgx-quote-service.js"
-else
-    echo "Warning: sgx-quote-service.js not found - run prep_kettle.sh first"
+# 18. Verify SGX quote service was copied (required)
+if [ ! -f "$KETTLE_DIR/sgx-quote-service.js" ]; then
+    echo "ERROR: sgx-quote-service.js missing in image at /opt/kettle/sgx-quote-service.js"
+    exit 1
 fi
 
-# 18. Set ownership for kettle user
+# 19. Set ownership for kettle user
 mkosi-chroot chown -R kettle:kettle /opt/kettle 2>/dev/null || true
 
-# 19. Normalize timestamps for reproducibility
+# 20. Normalize timestamps for reproducibility
 find "$KETTLE_DIR" -exec touch -t 197001010000.00 {} + 2>/dev/null || true
 find "$KETTLE_LIB_DIR" -exec touch -t 197001010000.00 {} + 2>/dev/null || true
 

@@ -1,0 +1,8 @@
+# Microsoft APT repository for Azure DCAP client
+# Note: Using Ubuntu jammy (22.04) - az-dcap-client not available in 24.04
+Types: deb
+URIs: https://packages.microsoft.com/ubuntu/22.04/prod
+Suites: jammy
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/microsoft.gpg

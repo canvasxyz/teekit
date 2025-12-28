@@ -4,10 +4,40 @@ set -euxo pipefail
 # Reuse the existing Azure + devtools post-install steps so the SGX image
 # keeps feature parity with the other Azure devtools variants.
 
-# --- Azure-specific setup ---
-
 mkosi-chroot systemctl enable "azure-complete-provisioning.service"
 ln -sf "/etc/systemd/system/azure-complete-provisioning.service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
+
+# Ensure Azure quote provider library is discoverable at the standard path
+# Intel SGX DCAP libraries look for libdcap_quoteprov.so at this location
+QUOTE_PROVIDER="/usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so"
+if [ ! -f "$BUILDROOT$QUOTE_PROVIDER" ]; then
+    echo "Setting up Azure quote provider symlink..."
+    # Find where az-dcap-client installed the library
+    QP_PATH=$(mkosi-chroot dpkg -L az-dcap-client 2>/dev/null | grep -E 'libdcap_quoteprov\.so$' | head -n1 || true)
+    if [ -n "$QP_PATH" ] && [ -f "$BUILDROOT$QP_PATH" ]; then
+        echo "Linking $QP_PATH -> $QUOTE_PROVIDER"
+        mkosi-chroot ln -sf "$QP_PATH" "$QUOTE_PROVIDER"
+    else
+        echo "WARNING: Azure quote provider library not found in az-dcap-client package"
+    fi
+fi
+
+# Configure DCAP Quote Provider to use Azure's attestation cache instead of local PCCS
+QCNL_CONF="$BUILDROOT/etc/sgx_default_qcnl.conf"
+cat > "$QCNL_CONF" << 'EOF'
+{
+  "pccs_url": "https://global.acccache.azure.net/sgx/certification/v4/",
+  "use_secure_cert": true,
+  "retry_times": 6,
+  "retry_delay": 10,
+  "local_pck_url": "",
+  "pck_cache_expire_hours": 168,
+  "verify_collateral_cache_expire_hours": 168,
+  "collateral_service": "https://global.acccache.azure.net/sgx/certification/v4/",
+  "collateral_version": "v4"
+}
+EOF
+echo "Azure QCNL configuration written to /etc/sgx_default_qcnl.conf"
 
 # --- Devtools-specific setup ---
 
