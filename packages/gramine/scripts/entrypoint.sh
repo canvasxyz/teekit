@@ -38,4 +38,5 @@ done
 
 # Start workerd in the foreground
 echo "[entrypoint] Starting workerd..."
+cd /opt/kettle
 exec /usr/local/bin/workerd "$@"
