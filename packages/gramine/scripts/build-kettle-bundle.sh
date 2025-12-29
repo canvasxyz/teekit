@@ -70,6 +70,7 @@ cp "$KETTLE_DIR/dist/app.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/worker.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/externals.js" "$OUTPUT_DIR/"
 cp "$GRAMINE_DIR/dist/sgx-quote-service.js" "$OUTPUT_DIR/"
+cp "$GRAMINE_DIR/workerd.config.capnp" "$OUTPUT_DIR/"
 cp "$GRAMINE_DIR/scripts/entrypoint.sh" "$OUTPUT_DIR/"
 chmod +x "$OUTPUT_DIR/entrypoint.sh"
 
