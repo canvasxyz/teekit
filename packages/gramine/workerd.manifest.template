@@ -25,7 +25,7 @@ loader.argv = [
   "serve",
   "--experimental",
   "--verbose",
-  "/opt/kettle/workerd.config.capnp",
+  "workerd.config.capnp",
 ]
 
 ################################################################################
