@@ -34,24 +34,16 @@ cd teekit
 ./scripts/setup-azure-sgx.sh
 ```
 
-Build the kettle bundle:
+Log out and log in again. Then, to build the kettle bundle:
 
 ```
 npm install
-
-cd packages/kettle
 npm run build
 
-cd ../gramine
-
-# Run ./scripts/build-kettle-bundle.sh
-npm run build:bundle
-
-# Run Gramine build, sign the enclave
-npm run build:enclave
-
-# Run the kettle in SGX at `http://localhost:3001`:
-make run
+cd packages/gramine
+npm run build:bundle    # Run ./scripts/build-kettle-bundle.sh
+npm run build:enclave   # Run Gramine build, sign the enclave
+SGX=1 make run          # Run the kettle at http://localhost:3001
 ```
 
 ### Verifying Quotes
