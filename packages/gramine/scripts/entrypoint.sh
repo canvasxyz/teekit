@@ -36,17 +36,6 @@ for i in {1..10}; do
     sleep 1
 done
 
-# Cleanup function
-cleanup() {
-    echo "[entrypoint] Shutting down..."
-    if [ -n "${QUOTE_PID:-}" ] && kill -0 $QUOTE_PID 2>/dev/null; then
-        echo "[entrypoint] Stopping quote service (PID: $QUOTE_PID)"
-        kill $QUOTE_PID 2>/dev/null || true
-    fi
-}
-
-trap cleanup EXIT INT TERM
-
 # Start workerd in the foreground
 echo "[entrypoint] Starting workerd..."
 exec /usr/local/bin/workerd "$@"
