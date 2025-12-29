@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"build": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
+		"genkeys:secureboot": "bash scripts/genkeys_secureboot.sh",
 		"build:vm": "bash scripts/mkosi_build",
 		"build:vm:clean": "bash scripts/mkosi_build --clean",
 		"build:devtools": "bash scripts/mkosi_build devtools",

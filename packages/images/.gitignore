@@ -31,3 +31,13 @@ cli.bundle.js
 .vm_name_gcp
 .vm_name_azure
 .vm_zone_gcp
+
+# Secure Boot signing keys (DO NOT COMMIT!)
+mkosi.secureboot.key
+mkosi.secureboot.crt
+mkosi.secureboot.GUID.txt
+*.key
+*.crt
+*.cer
+*.esl
+*.auth

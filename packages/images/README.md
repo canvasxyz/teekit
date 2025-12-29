@@ -41,7 +41,20 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
    brew install lima
    ```
 
-4. Now that dependencies are installed, start a build using `env_wrapper.sh`,
+4. Generate Secure Boot signing keys (required for Azure SGX builds):
+
+   ```bash
+   npm run genkeys:secureboot
+   ```
+
+   This generates cryptographic keys needed to sign the UKI (Unified Kernel Image)
+   for UEFI Secure Boot on Azure Trusted Launch VMs. The following files are created:
+
+   - `mkosi.secureboot.key` - Private signing key (keep secret!)
+   - `mkosi.secureboot.crt` - Public certificate (enrolled in Azure UEFI)
+   - `mkosi.secureboot.GUID.txt` - Unique identifier for key enrollment
+
+5. Now that dependencies are installed, start a build using `env_wrapper.sh`,
    optionally using the Azure, GCP, Azure devtools, or GCP devtools profile.
 
    ```
@@ -52,7 +65,7 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
    scripts/env_wrapper.sh mkosi --force --profile=gcp-devtools -I kettle-vm.conf
    ```
 
-5. Export measurements:
+6. Export measurements:
 
    ```
    make measure

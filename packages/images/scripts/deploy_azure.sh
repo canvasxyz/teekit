@@ -128,12 +128,31 @@ if [[ "$VHD_BASENAME" == *"azsgx"* ]]; then
     SECURITY_TYPE="sgx"
     IMAGE_DEFINITION="kettle-vm-azsgx"
     VM_SIZE="Standard_DC2ds_v3"
-    log_info "Detected SGX image - will deploy as Trusted Launch VM"
+    log_info "Detected SGX image - will deploy as Trusted Launch VM with Secure Boot"
 else
     SECURITY_TYPE="tdx"
     IMAGE_DEFINITION="kettle-vm-azure"
     VM_SIZE="Standard_DC2es_v5"
     log_info "Detected TDX image - will deploy as Confidential VM"
+fi
+
+# For SGX images, validate Secure Boot certificate exists
+if [ "$SECURITY_TYPE" = "sgx" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CERT_FILE="$SCRIPT_DIR/../mkosi.secureboot.crt"
+
+    if [ ! -f "$CERT_FILE" ]; then
+        log_error "Secure Boot certificate not found: $CERT_FILE"
+        echo ""
+        echo "SGX images require Secure Boot signing. Please generate keys first:"
+        echo "  npm run genkeys:secureboot"
+        echo ""
+        echo "Then rebuild the SGX image:"
+        echo "  npm run build:azsgx"
+        exit 1
+    fi
+
+    log_success "Found Secure Boot certificate: $CERT_FILE"
 fi
 
 echo ""
@@ -390,29 +409,120 @@ log_step "Creating image version from VHD"
 log_info "Creating image version: $IMAGE_VERSION"
 log_info "This may take 10-20 minutes..."
 
-if ! az sig image-version create \
-    --resource-group "$RESOURCE_GROUP" \
-    --gallery-name "$GALLERY_NAME" \
-    --gallery-image-definition "$IMAGE_DEFINITION" \
-    --gallery-image-version "$IMAGE_VERSION" \
-    --os-vhd-uri "$BLOB_URL" \
-    --os-vhd-storage-account "$STORAGE_ACCT" \
-    --output none; then
-    log_error "Failed to create image version"
-    echo ""
-    echo "You can retry manually:"
-    echo "  az sig image-version create \\"
-    echo "    --resource-group ${RESOURCE_GROUP} \\"
-    echo "    --gallery-name ${GALLERY_NAME} \\"
-    echo "    --gallery-image-definition ${IMAGE_DEFINITION} \\"
-    echo "    --gallery-image-version ${IMAGE_VERSION} \\"
-    echo "    --os-vhd-uri ${BLOB_URL} \\"
-    echo "    --os-vhd-storage-account ${STORAGE_ACCT}"
-    exit 1
+# Get Azure region from resource group
+REGION=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv)
+
+if [ "$SECURITY_TYPE" = "sgx" ]; then
+    # SGX: Use REST API with Secure Boot UEFI keys
+    log_info "Enrolling Secure Boot keys in image version..."
+
+    # Convert certificate to DER format, then base64 encode (Azure expects DER-encoded X.509)
+    CERT_DER=$(mktemp)
+    if ! openssl x509 -in "$CERT_FILE" -inform PEM -outform DER -out "$CERT_DER"; then
+        log_error "Failed to convert certificate to DER format"
+        rm -f "$CERT_DER"
+        exit 1
+    fi
+    CERT_B64=$(base64 -w 0 < "$CERT_DER" 2>/dev/null || base64 < "$CERT_DER" | tr -d '\n')
+    rm -f "$CERT_DER"
+
+    # Create temporary JSON payload for REST API
+    PAYLOAD_FILE=$(mktemp)
+    cat > "$PAYLOAD_FILE" <<EOF
+{
+  "location": "$REGION",
+  "properties": {
+    "publishingProfile": {
+      "targetRegions": [
+        {
+          "name": "$REGION",
+          "regionalReplicaCount": 1
+        }
+      ]
+    },
+    "storageProfile": {
+      "osDiskImage": {
+        "source": {
+          "storageAccountId": "/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Storage/storageAccounts/${STORAGE_ACCT}",
+          "uri": "${BLOB_URL}"
+        },
+        "hostCaching": "ReadOnly"
+      }
+    },
+    "securityProfile": {
+      "uefiSettings": {
+        "signatureTemplateNames": [
+          "MicrosoftUefiCertificateAuthorityTemplate"
+        ],
+        "additionalSignatures": {
+          "db": [
+            {
+              "type": "x509",
+              "value": ["${CERT_B64}"]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+EOF
+
+    # Create image version using REST API
+    if ! az rest --method PUT \
+        --uri "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Compute/galleries/${GALLERY_NAME}/images/${IMAGE_DEFINITION}/versions/${IMAGE_VERSION}?api-version=2025-03-03" \
+        --body @"$PAYLOAD_FILE"; then
+        log_error "Failed to create image version with Secure Boot keys"
+        rm -f "$PAYLOAD_FILE"
+        echo ""
+        echo "You can retry manually using the Azure REST API."
+        echo "See: https://learn.microsoft.com/en-us/rest/api/compute/gallery-image-versions/create-or-update"
+        exit 1
+    fi
+
+    rm -f "$PAYLOAD_FILE"
+    log_success "Created image version with Secure Boot keys enrolled"
+
+    # Wait for image version to finish replicating
+    log_info "Waiting for image version to finish replicating..."
+    if ! az sig image-version wait \
+        --resource-group "$RESOURCE_GROUP" \
+        --gallery-name "$GALLERY_NAME" \
+        --gallery-image-definition "$IMAGE_DEFINITION" \
+        --gallery-image-version "$IMAGE_VERSION" \
+        --created \
+        --timeout 1200; then
+        log_error "Timeout waiting for image version replication"
+        exit 1
+    fi
+    log_success "Image version replication complete"
+else
+    # TDX: Use standard image version creation
+    if ! az sig image-version create \
+        --resource-group "$RESOURCE_GROUP" \
+        --gallery-name "$GALLERY_NAME" \
+        --gallery-image-definition "$IMAGE_DEFINITION" \
+        --gallery-image-version "$IMAGE_VERSION" \
+        --os-vhd-uri "$BLOB_URL" \
+        --os-vhd-storage-account "$STORAGE_ACCT" \
+        --output none; then
+        log_error "Failed to create image version"
+        echo ""
+        echo "You can retry manually:"
+        echo "  az sig image-version create \\"
+        echo "    --resource-group ${RESOURCE_GROUP} \\"
+        echo "    --gallery-name ${GALLERY_NAME} \\"
+        echo "    --gallery-image-definition ${IMAGE_DEFINITION} \\"
+        echo "    --gallery-image-version ${IMAGE_VERSION} \\"
+        echo "    --os-vhd-uri ${BLOB_URL} \\"
+        echo "    --os-vhd-storage-account ${STORAGE_ACCT}"
+        exit 1
+    fi
+
+    log_success "Created image version: $IMAGE_VERSION"
 fi
 
 IMAGE_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Compute/galleries/${GALLERY_NAME}/images/${IMAGE_DEFINITION}/versions/${IMAGE_VERSION}"
-log_success "Created image version: $IMAGE_VERSION"
 
 # ============================================================================
 # STEP 9: Create Confidential VM
@@ -430,6 +540,7 @@ else
     # Build VM create command based on security type
     if [ "$SECURITY_TYPE" = "sgx" ]; then
         # SGX: Trusted Launch VM with Secure Boot
+        # The UKI is signed during build and custom UEFI keys are enrolled in the image version
         if ! az vm create \
             --name "$VM_NAME" \
             --resource-group "$RESOURCE_GROUP" \
