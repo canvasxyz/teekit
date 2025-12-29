@@ -117,26 +117,76 @@ log_success "Logged in to Azure (Subscription: $SUBSCRIPTION_ID)"
 # ============================================================================
 # STEP 2: Find and delete VMs matching pattern
 # ============================================================================
-log_step "Finding VMs matching pattern '${VM_PATTERN}*'"
+log_step "Finding VMs in resource group '$RESOURCE_GROUP'"
 
-VM_LIST=$(az vm list --resource-group "$RESOURCE_GROUP" --query "[?starts_with(name, '${VM_PATTERN}')].name" -o tsv 2>/dev/null || echo "")
+# Get all VMs
+ALL_VMS=$(az vm list --resource-group "$RESOURCE_GROUP" --query "[].name" -o tsv 2>/dev/null || echo "")
 
+if [ -z "$ALL_VMS" ]; then
+    log_info "No VMs found in resource group"
+else
+    TOTAL_VM_COUNT=$(echo "$ALL_VMS" | wc -l)
+    log_info "Found $TOTAL_VM_COUNT total VM(s) in resource group"
+    echo ""
+    
+    # Separate VMs into those matching pattern and those not matching
+    VM_LIST=""
+    NON_MATCHING_VMS=""
+    
+    while read -r vm; do
+        if [[ "$vm" == ${VM_PATTERN}* ]]; then
+            VM_LIST="${VM_LIST}${vm}"$'\n'
+        else
+            NON_MATCHING_VMS="${NON_MATCHING_VMS}${vm}"$'\n'
+        fi
+    done <<< "$ALL_VMS"
+    
+    # Trim trailing newlines
+    VM_LIST=$(echo "$VM_LIST" | sed '/^$/d')
+    NON_MATCHING_VMS=$(echo "$NON_MATCHING_VMS" | sed '/^$/d')
+    
+    # Show VMs that will be deleted
+    if [ -z "$VM_LIST" ]; then
+        log_info "No VMs match deletion pattern '${VM_PATTERN}*'"
+    else
+        VM_COUNT=$(echo "$VM_LIST" | wc -l)
+        echo -e "${GREEN}VMs matching pattern '${VM_PATTERN}*' (WILL BE DELETED):${NC}"
+        echo "$VM_LIST" | while read -r vm; do
+            # Get the VM's public IP address
+            VM_IP=$(az vm list-ip-addresses --name "$vm" --resource-group "$RESOURCE_GROUP" \
+                --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" -o tsv 2>/dev/null || echo "")
+            if [ -n "$VM_IP" ]; then
+                echo -e "  ${RED}✗${NC} $vm (IP: $VM_IP)"
+            else
+                echo -e "  ${RED}✗${NC} $vm (IP: <none>)"
+            fi
+        done
+    fi
+    
+    # Show VMs that will NOT be deleted
+    if [ -n "$NON_MATCHING_VMS" ]; then
+        NON_MATCHING_COUNT=$(echo "$NON_MATCHING_VMS" | wc -l)
+        echo ""
+        echo -e "${YELLOW}VMs NOT matching pattern (will be preserved):${NC}"
+        echo "$NON_MATCHING_VMS" | while read -r vm; do
+            # Get the VM's public IP address
+            VM_IP=$(az vm list-ip-addresses --name "$vm" --resource-group "$RESOURCE_GROUP" \
+                --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" -o tsv 2>/dev/null || echo "")
+            if [ -n "$VM_IP" ]; then
+                echo -e "  ${GREEN}✓${NC} $vm (IP: $VM_IP)"
+            else
+                echo -e "  ${GREEN}✓${NC} $vm (IP: <none>)"
+            fi
+        done
+    fi
+    echo ""
+fi
+
+# Only proceed with deletion if we have VMs matching the pattern
 if [ -z "$VM_LIST" ]; then
-    log_info "No VMs found matching pattern '${VM_PATTERN}*'"
+    log_info "No VMs to delete, skipping VM cleanup"
 else
     VM_COUNT=$(echo "$VM_LIST" | wc -l)
-    log_info "Found $VM_COUNT VM(s) to delete:"
-    echo "$VM_LIST" | while read -r vm; do
-        # Get the VM's public IP address
-        VM_IP=$(az vm list-ip-addresses --name "$vm" --resource-group "$RESOURCE_GROUP" \
-            --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" -o tsv 2>/dev/null || echo "")
-        if [ -n "$VM_IP" ]; then
-            echo "  - $vm (IP: $VM_IP)"
-        else
-            echo "  - $vm (IP: <none>)"
-        fi
-    done
-    echo ""
 
     # Get associated resources for each VM before deletion
     declare -A NIC_LIST
@@ -144,7 +194,7 @@ else
     declare -A NSG_LIST
     declare -A PIP_LIST
 
-    for VM_NAME in $VM_LIST; do
+    while read -r VM_NAME; do
         log_info "Collecting associated resources for VM: $VM_NAME"
 
         # Get network interface
@@ -184,10 +234,10 @@ else
         for disk in $DATA_DISKS; do
             DISK_LIST["$disk"]=1
         done
-    done
+    done <<< "$VM_LIST"
 
     # Delete VMs
-    for VM_NAME in $VM_LIST; do
+    while read -r VM_NAME; do
         if [ "$DRY_RUN" = true ]; then
             log_dry_run "Delete VM: $VM_NAME"
         else
@@ -198,7 +248,7 @@ else
                 log_warning "Failed to delete VM: $VM_NAME (may not exist)"
             fi
         fi
-    done
+    done <<< "$VM_LIST"
 
     # Wait for VM deletions to complete before cleaning up associated resources
     if [ "$DRY_RUN" = false ]; then
