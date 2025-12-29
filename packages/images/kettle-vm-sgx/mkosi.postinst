@@ -58,6 +58,13 @@ install -m 755 "$SRCDIR/scripts/config_azure" "$KETTLE_LIB_DIR/"
 install -m 755 "$SRCDIR/scripts/config_local" "$KETTLE_LIB_DIR/"
 install -m 755 "$SRCDIR/scripts/config_gcp" "$KETTLE_LIB_DIR/"
 
+# 7a. Install certbot-launcher (needed by certbot-launcher.service enabled below)
+# Note: certbot-persist and sealing-key are NOT installed - those are only for
+# confidential VMs (SEV-SNP/TDX). This is a Trusted Launch VM with SGX enclaves,
+# not a full confidential VM, so certificates persist normally on disk.
+echo "Installing certbot-launcher..."
+install -m 755 "$SRCDIR/kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
+
 # 8. Install firewall script
 echo "Installing firewall setup script..."
 install -m 755 "$SRCDIR/kettle-vm/setup-firewall.sh" "$BUILDROOT/usr/bin/setup-firewall"
