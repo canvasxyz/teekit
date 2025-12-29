@@ -166,6 +166,15 @@ check-mrenclave: $(MRENCLAVE_FILE)
 
 # Run in SGX mode
 sgx-run: $(SGX_MANIFEST) $(SGX_SIG) check-mrenclave
+	@# Check if quote service port is already in use
+	@if lsof -Pi :3333 -sTCP:LISTEN -t >/dev/null 2>&1; then \
+		echo "Port 3333 is required by the quote service. To fix this:"; \
+		echo "  1. Find the process using it: lsof -i :3333"; \
+		echo "  2. Stop it: kill <PID>"; \
+		echo ""; \
+		echo "Or set a different port: QUOTE_SERVICE_PORT=3334 make run"; \
+		exit 1; \
+	fi
 	@echo "Starting kettle in SGX enclave..."
 	@echo "  Serving on http://localhost:3001"
 	$(GRAMINE) workerd
