@@ -113,8 +113,8 @@ else
 
         printf "%-25s %-18s %-23b %-18s %-18s\n" "$name" "$zone" "$status_display" "$external_ip" "$machine_type"
 
-        # Show service URLs for running VMs with external IPs (only for valid TEE instances)
-        if [[ "$status" == "RUNNING" ]] && [ "$external_ip" != "-" ] && [[ "$name" =~ ^(kettle-) ]]; then
+        # Show service URLs for running VMs with external IPs
+        if [[ "$status" == "RUNNING" ]] && [ "$external_ip" != "-" ]; then
             printf "%-25s %-18s %-12s ${CYAN}http://%s:3001${NC}\n" "" "" "" "$external_ip"
         fi
     done
@@ -160,10 +160,10 @@ log_section "IMAGES (Filtered to Kettles)"
 IMAGE_LIST=$(gcloud compute images list --filter="name~'^(kettle-|tdx-)'" --format="csv[no-heading](name,status,diskSizeGb,creationTimestamp)" 2>/dev/null || echo "")
 
 if [ -z "$IMAGE_LIST" ]; then
-    log_warning "No TDX images found"
+    log_warning "No images found"
 else
     IMAGE_COUNT=$(echo "$IMAGE_LIST" | wc -l)
-    log_success "Found $IMAGE_COUNT TDX image(s) matching kettle- or tdx-"
+    log_success "Found $IMAGE_COUNT image(s)"
     echo ""
     printf "${GREEN}%-40s %-10s %-12s %-25s${NC}\n" "NAME" "STATUS" "SIZE (GB)" "CREATED"
     printf "%s\n" "$(printf '%.0s-' {1..90})"
