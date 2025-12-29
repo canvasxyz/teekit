@@ -16,6 +16,20 @@ set -euo pipefail
 
 LOG_PREFIX="[firewall]"
 
+# Check if iptables-legacy is available
+if ! command -v iptables-legacy &> /dev/null; then
+    echo "WARNING: iptables-legacy not found, skipping firewall configuration"
+    echo "This is expected in minimal environments or non-netfilter kernels"
+    exit 0
+fi
+
+# Check if we can actually use iptables (requires CAP_NET_ADMIN)
+if ! iptables-legacy -L -n &> /dev/null; then
+    echo "WARNING: Cannot use iptables (insufficient permissions or kernel support)"
+    echo "Firewall configuration skipped"
+    exit 0
+fi
+
 KETTLE_COUNT="${KETTLE_COUNT:-10}"
 MAX_HTTPS_PORT=$((443 + KETTLE_COUNT - 1))
 MAX_KETTLE_PORT=$((3001 + KETTLE_COUNT - 1))
@@ -47,9 +61,14 @@ ip6tables-legacy -P OUTPUT ACCEPT 2>/dev/null || true
 iptables-legacy -A INPUT -i lo -j ACCEPT
 ip6tables-legacy -A INPUT -i lo -j ACCEPT 2>/dev/null || true
 
-# Allow established connections
-iptables-legacy -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-ip6tables-legacy -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+# Allow established connections (requires conntrack module)
+# If conntrack is not available, we skip this rule (less secure but functional)
+if iptables-legacy -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; then
+    ip6tables-legacy -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+    echo "  Connection tracking enabled"
+else
+    echo "  WARNING: conntrack module not available, skipping stateful filtering"
+fi
 
 # Allow ICMP (ping) - useful for health checks
 iptables-legacy -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
@@ -82,7 +101,13 @@ else
 fi
 
 # Log dropped packets (rate limited to prevent log flooding)
-iptables-legacy -A INPUT -m limit --limit 5/min -j LOG --log-prefix "iptables-dropped: " --log-level 4
+# Skip if limit or LOG modules are not available (common in minimal kernels)
+# Note that CONFIG_NETFILTER_XT_MATCH_LIMIT, CONFIG_NETFILTER_XT_TARGET_LOG are not enabled in the yocto config
+if iptables-legacy -A INPUT -m limit --limit 5/min -j LOG --log-prefix "iptables-dropped: " --log-level 4 2>/dev/null; then
+    echo "  Logging enabled for dropped packets"
+else
+    echo "  WARNING: limit or LOG module not available, skipping packet logging"
+fi
 
 # Final drop (explicit, matches default policy)
 iptables-legacy -A INPUT -j DROP
