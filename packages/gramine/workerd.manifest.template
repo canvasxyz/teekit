@@ -65,6 +65,10 @@ fs.mounts = [
   # Node.js binary (for SGX quote service)
   { path = "/usr/bin/node", uri = "file:{{ node_bin }}" },
 
+  # Node.js shared modules (for system-installed Node.js with externalized builtins)
+  # Required when using system Node.js (e.g., from apt) which stores modules in /usr/share/nodejs
+  { path = "/usr/share/nodejs", uri = "file:/usr/share/nodejs" },
+
   # Bash and utilities for entrypoint script
   { path = "/bin/bash", uri = "file:/bin/bash" },
   { path = "/bin/sleep", uri = "file:/bin/sleep" },
@@ -119,6 +123,10 @@ sgx.trusted_files = [
   # Binaries
   "file:{{ workerd_bin }}",
   "file:{{ node_bin }}",
+
+  # Node.js shared modules (for system-installed Node.js with externalized builtins)
+  "file:/usr/share/nodejs/",
+
   "file:/bin/bash",
   "file:/bin/sleep",
   "file:/bin/kill",
