@@ -24,8 +24,12 @@ mkosi-chroot useradd -r -g kettle -d /var/lib/kettle -s /sbin/nologin kettle || 
 echo "Adding kettle to sgx groups..."
 mkosi-chroot groupadd -r sgx || true  # May already exist
 mkosi-chroot usermod -a -G sgx kettle
-# sgx_prv group is optional (only exists on some SGX setups)
-mkosi-chroot getent group sgx_prv >/dev/null 2>&1 && mkosi-chroot usermod -a -G sgx_prv kettle || true
+
+# 2a. Add kettle user to sgx_prv group, normally created by linksgx.sh during aesmd startup
+echo "Creating sgx_prv group for DCAP attestation..."
+mkosi-chroot groupadd -r -g 1000 sgx_prv
+mkosi-chroot usermod -a -G sgx_prv kettle
+mkosi-chroot usermod -a -G sgx_prv aesmd
 
 # 3. Ensure data directories exist and set ownership
 echo "Setting up data directories..."
@@ -88,6 +92,32 @@ systemctl --root="$BUILDROOT" enable firewall.service
 systemctl --root="$BUILDROOT" enable certbot-launcher.service
 systemctl --root="$BUILDROOT" enable aesmd.service
 
+# 12a. Create systemd-tmpfiles configuration for SGX groups
+# Ensure groups exist even if image build somehow missed them
+echo "Creating systemd-tmpfiles configuration for SGX groups..."
+mkdir -p "$BUILDROOT/usr/lib/tmpfiles.d"
+cat > "$BUILDROOT/usr/lib/tmpfiles.d/sgx-groups.conf" << 'EOF'
+# Ensure SGX groups exist before udev processes device rules
+# This prevents "Unknown group 'sgx_prv'" errors during boot
+g sgx_prv 1000 - - -
+g sgx 996 - - -
+EOF
+
+# 12b. Configure AESM service ordering and retry logic
+# With groups created during image build, this just ensures proper ordering.
+echo "Configuring aesmd service dependencies..."
+mkdir -p "$BUILDROOT/etc/systemd/system/aesmd.service.d"
+cat > "$BUILDROOT/etc/systemd/system/aesmd.service.d/sgx-init.conf" << 'EOF'
+[Unit]
+# Ensure SGX devices are initialized before AESM starts
+After=systemd-udev-settle.service
+
+[Service]
+Restart=on-failure
+RestartSec=3
+StartLimitBurst=2
+EOF
+
 # 13. Generate Gramine manifest and sign enclave
 # Note: Files were already copied by mkosi.build to $DESTDIR (now in $BUILDROOT)
 echo "Setting up Gramine enclave..."
@@ -121,6 +151,20 @@ cat > "$AESMD_CONF" << 'EOF'
 # Use Azure's DCAP Quote Provider
 default quoting type = ecdsa_256
 EOF
+
+# 14a. Create ID enclave symlinks in AESM directory
+# Required for DCAP attestation on some platforms (e.g., Debian)
+echo "Creating ID enclave symlinks for AESM..."
+AESM_DIR="$BUILDROOT/opt/intel/sgx-aesm-service/aesm"
+if [ ! -d "$AESM_DIR" ]; then
+    echo "WARNING: AESM directory not found at $AESM_DIR, skipping symlink creation"
+elif [ ! -f "$BUILDROOT/usr/lib/x86_64-linux-gnu/libsgx_id_enclave.signed.so" ]; then
+    echo "WARNING: ID enclave file not found, skipping symlink creation"
+else
+    mkosi-chroot ln -sf /usr/lib/x86_64-linux-gnu/libsgx_id_enclave.signed.so /opt/intel/sgx-aesm-service/aesm/libsgx_id_enclave.signed.so
+    mkosi-chroot ln -sf /usr/lib/x86_64-linux-gnu/libsgx_id_enclave.signed.so.1 /opt/intel/sgx-aesm-service/aesm/libsgx_id_enclave.signed.so.1
+    echo "ID enclave symlinks created"
+fi
 
 # Ensure workerd is on PATH for gramine-sgx launcher (it calls "workerd" by name).
 echo "Creating /usr/local/bin/workerd symlink..."

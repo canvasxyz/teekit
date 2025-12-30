@@ -9,16 +9,15 @@ Type=exec
 User=kettle
 Group=kettle
 EnvironmentFile=-/etc/kettle/cloud-launcher.env
-ExecStartPre=/usr/bin/gramine-setup
+ExecStartPre=+/usr/bin/gramine-setup
 ExecStart=/usr/bin/gramine-kettle-launcher
-PermissionsStartOnly=yes
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/var/log/kettle.log
 StandardError=append:/var/log/kettle.log
 
 # SGX device access
-SupplementaryGroups=sgx
+SupplementaryGroups=sgx sgx_prv
 
 [Install]
 WantedBy=minimal.target
