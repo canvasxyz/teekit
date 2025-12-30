@@ -41,7 +41,6 @@ mkdir -p "$KETTLE_LIB_DIR"
 mkdir -p "$SERVICE_DIR"
 echo "Installing systemd services..."
 install -m 644 "$SRCDIR/kettle-vm-sgx/gramine-sgx.service" "$SERVICE_DIR/"
-install -m 644 "$SRCDIR/kettle-vm-sgx/sgx-quote-service.service" "$SERVICE_DIR/"
 
 # 6. Install launcher scripts
 echo "Installing launcher scripts..."
@@ -84,7 +83,6 @@ install -m 644 "$SRCDIR/kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
 # 12. Enable services using systemctl --root
 echo "Enabling services..."
 systemctl --root="$BUILDROOT" enable gramine-sgx.service
-systemctl --root="$BUILDROOT" enable sgx-quote-service.service
 systemctl --root="$BUILDROOT" enable cloud-launcher.service
 systemctl --root="$BUILDROOT" enable firewall.service
 systemctl --root="$BUILDROOT" enable certbot-launcher.service

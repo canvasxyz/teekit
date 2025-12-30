@@ -32,23 +32,23 @@ trap cleanup EXIT INT TERM
 # Launch a single kettle instance
 launch_kettle() {
     local index="$1"
-    local workerd_port=$((3001 + index * 2))
 
-    echo "[$index] Launching kettle on port $workerd_port..."
+    echo "[$index] Launching kettle inside SGX enclave..."
 
     cd "$KETTLE_BUNDLE_DIR"
 
-    # Use the static config from /opt/kettle/workerd.config.capnp
-    # (measured into MRENCLAVE via Gramine manifest)
-    gramine-sgx workerd serve \
-        --experimental \
-        "$KETTLE_BUNDLE_DIR/workerd.config.capnp" \
-        --socket-addr "http=0.0.0.0:$workerd_port" \
-        --verbose &
+    # Launch Gramine SGX with the workerd manifest
+    # The manifest defines:
+    # - libos.entrypoint = /opt/kettle/entrypoint.sh (starts quote service, then workerd)
+    # - loader.argv = arguments for workerd (serve, config, etc.)
+    # - All files are measured into MRENCLAVE for attestation
+    # Quote service will run on port 3333 inside the enclave
+    # Workerd will run on port 3001 (configured in workerd.config.capnp)
+    gramine-sgx workerd &
 
     local pid=$!
     KETTLE_PIDS+=("$pid")
-    echo "[$index] Launched kettle with PID $pid"
+    echo "[$index] Launched kettle with PID $pid (quote service on 3333, workerd on 3001)"
 }
 
 # Load environment from cloud-launcher
