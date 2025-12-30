@@ -9,7 +9,7 @@ import {
 import "./App.css"
 
 import { TunnelClient } from "@teekit/tunnel"
-import { hex } from "@teekit/qvl"
+import { hex, type SgxQuote } from "@teekit/qvl"
 import type {
   WebSocket as IWebSocket,
   MessageEvent,
@@ -28,8 +28,19 @@ export const baseUrl =
 
 const UPTIME_REFRESH_MS = 10000
 
+async function getExpectedSgxReportData(
+  x25519PublicKey?: Uint8Array,
+): Promise<Uint8Array> {
+  if (!x25519PublicKey) return new Uint8Array()
+
+  const hashBuffer = await crypto.subtle.digest("SHA-256", x25519PublicKey)
+  const reportData = new Uint8Array(64)
+  reportData.set(new Uint8Array(hashBuffer), 0)
+  return reportData
+}
+
 const enc = await TunnelClient.initialize(baseUrl, {
-  sevsnp: true,
+  sgx: true,
   // Don't actually validate anything, since we often use this app with sample quotes.
   // Validation status is shown in the frontend instead.
   customVerifyQuote: async () => true,
@@ -58,7 +69,7 @@ function App() {
   const [attestedMeasurement, setAttestedMeasurement] = useState<string>("")
   const [expectedReportData, setExpectedReportData] = useState<string>("")
   const [attestedReportData, setAttestedReportData] = useState<string>("")
-  const [verifierNonce, setVerifierNonce] = useState<string>("")
+  const [attestedSigner, setAttestedSigner] = useState<string>("")
   const initializedRef = useRef<boolean>(false)
   const wsRef = useRef<IWebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -138,25 +149,17 @@ function App() {
       console.log("Connected to chat server")
 
       // Set up control panel UI with attested measurements, expected measurements, etc.
-      if (!enc.sevsnpReport)
-        throw new Error("unexpected: ws shouldn't open without a SEV-SNP report")
-      setAttestedMeasurement(hex(enc.sevsnpReport.body.measurement))
-      setAttestedReportData(hex(enc.sevsnpReport.body.report_data))
-      enc
-        .getX25519ExpectedReportData()
-        .then((expectedReportData: Uint8Array) => {
+      if (!enc.quote)
+        throw new Error("unexpected: ws shouldn't open without an SGX quote")
+      const sgxQuote = enc.quote as SgxQuote
+      setAttestedMeasurement(hex(sgxQuote.body.mr_enclave))
+      setAttestedSigner(hex(sgxQuote.body.mr_signer))
+      setAttestedReportData(hex(sgxQuote.body.report_data))
+      getExpectedSgxReportData(enc.serverX25519PublicKey).then(
+        (expectedReportData: Uint8Array) => {
           setExpectedReportData(hex(expectedReportData ?? new Uint8Array()))
-
-          const verifierData = enc.reportBindingData?.verifierData
-          if (verifierData === null || verifierData === undefined) return
-
-          // For SEV-SNP, verifierData is a plain Uint8Array nonce
-          if (verifierData instanceof Uint8Array) {
-            setVerifierNonce(hex(verifierData))
-          } else if ("val" in verifierData) {
-            setVerifierNonce(hex(verifierData.val ?? new Uint8Array()))
-          }
-        })
+        },
+      )
     }
 
     ws.onmessage = (event: MessageEvent) => {
@@ -427,7 +430,10 @@ function App() {
           >
             <div style={{ marginBottom: 6 }}>Server: {baseUrl}</div>
             <div style={{ marginBottom: 6 }}>
-              Attested Measurement (launch digest): {attestedMeasurement}
+              Attested Measurement (MRENCLAVE): {attestedMeasurement}
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              Attested Signer (MRSIGNER): {attestedSigner}
             </div>
             <div style={{ marginBottom: 6 }}>
               Attested report_data: {attestedReportData}
@@ -453,11 +459,7 @@ function App() {
             </div>
             <div style={{ borderLeft: "1px solid #ccc", paddingLeft: 12 }}>
               <div style={{ marginBottom: 6 }}>
-                Based on sha512(nonce, key):
-              </div>
-              <div style={{ marginBottom: 6 }}>
-                Nonce:{" "}
-                {verifierNonce || <span style={{ color: "red" }}>None</span>}
+                Based on sha256(x25519_public_key):
               </div>
               <div style={{ marginBottom: 6 }}>
                 X25519 tunnel key:{" "}
