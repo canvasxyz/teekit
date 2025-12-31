@@ -8,6 +8,9 @@
 # Uncompressed workerd binary (decompressed from workerd.zst at build time)
 workerd
 
+# Go binary (built by make -f sgx-entrypoint.mk)
+sgx-entrypoint
+
 # Signing keys (should never be committed)
 *.pem
 

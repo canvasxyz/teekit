@@ -40,7 +40,7 @@ fi
 # 3. Copy Gramine manifest template for postinst processing
 echo "Copying Gramine manifest template..."
 if [ -f "$GRAMINE_SRC/workerd.manifest.template" ]; then
-    cp "$GRAMINE_SRC/workerd.manifest.template" "$KETTLE_DIR/"
+    cp "$GRAMINE_SRC/workerd.manifest.template" "$KETTLE_DIR/workerd.manifest.template"
 else
     echo "ERROR: workerd.manifest.template not found at $GRAMINE_SRC"
     exit 1
@@ -55,30 +55,24 @@ else
     exit 1
 fi
 
-# 5. Copy entrypoint script
-echo "Copying entrypoint script..."
-if [ -f "$GRAMINE_SRC/scripts/entrypoint.sh" ]; then
-    cp "$GRAMINE_SRC/scripts/entrypoint.sh" "$KETTLE_DIR/"
-    chmod +x "$KETTLE_DIR/entrypoint.sh"
+# 5. Build and copy sgx-entrypoint (combined quote service + workerd launcher)
+echo "Building sgx-entrypoint..."
+if [ -f "$GRAMINE_SRC/sgx-entrypoint.go" ]; then
+    # Build Go binary in source directory with reproducible flags
+    (cd "$GRAMINE_SRC" && make -f sgx-entrypoint.mk clean && make -f sgx-entrypoint.mk)
+
+    # Copy to kettle directory
+    cp "$GRAMINE_SRC/sgx-entrypoint" "$KETTLE_DIR/"
+    chmod +x "$KETTLE_DIR/sgx-entrypoint"
+    echo "Built and copied sgx-entrypoint binary ($(stat -c%s $KETTLE_DIR/sgx-entrypoint | numfmt --to=iec-i --suffix=B))"
 else
-    echo "ERROR: entrypoint.sh not found at $GRAMINE_SRC/scripts"
+    echo "ERROR: sgx-entrypoint.go not found at $GRAMINE_SRC"
     exit 1
 fi
 
-# 6. Copy pre-built SGX quote service if available
-if [ -f "$KETTLE_ARTIFACTS/sgx-quote-service.js" ]; then
-    cp "$KETTLE_ARTIFACTS/sgx-quote-service.js" "$KETTLE_DIR/"
-    echo "Copied pre-built sgx-quote-service.js"
-fi
-
-# 7. Copy SGX quote service source for potential postinst build
-if [ -f "$GRAMINE_SRC/src/sgx-quote-service.ts" ]; then
-    cp "$GRAMINE_SRC/src/sgx-quote-service.ts" "$KETTLE_DIR/src/"
-else
-    echo "WARNING: sgx-quote-service.ts not found, skipping"
-fi
-
-# 8. Normalize timestamps for reproducibility
+# 7. Normalize timestamps for reproducibility
 find "$KETTLE_DIR" -exec touch -t 197001010000.00 {} +
 
 echo "=== kettle-vm-sgx build complete (gramine steps in postinst) ==="
+echo "  - workerd: $(stat -c%s $KETTLE_DIR/workerd | numfmt --to=iec-i --suffix=B)"
+echo "  - sgx-entrypoint: $(stat -c%s $KETTLE_DIR/sgx-entrypoint | numfmt --to=iec-i --suffix=B)"

@@ -148,14 +148,13 @@ if [ ! -f "$KETTLE_DIR/workerd.manifest.template" ]; then
     exit 1
 fi
 
-# Generate Gramine manifest inside the chroot
+# Generate Gramine manifest inside the chroot (Go version, no Node.js)
 echo "Generating Gramine manifest..."
 mkosi-chroot sh -c "cd /opt/kettle && gramine-manifest \
     -Dlog_level=error \
     -Darch_libdir=/lib/x86_64-linux-gnu \
     -Dworkerd_bin=/opt/kettle/workerd \
     -Dkettle_bundle_dir=/opt/kettle \
-    -Dnode_bin=/usr/bin/node \
     workerd.manifest.template workerd.manifest"
 echo "Manifest generated: /opt/kettle/workerd.manifest"
 
@@ -210,11 +209,12 @@ mkosi-chroot sh -c "python3 -c \"import json; print(json.load(open('/opt/kettle/
 MRENCLAVE=$(cat "$KETTLE_DIR/mrenclave.txt")
 echo "MRENCLAVE: $MRENCLAVE"
 
-# 18. Verify SGX quote service was copied
-if [ ! -f "$KETTLE_DIR/sgx-quote-service.js" ]; then
-    echo "ERROR: sgx-quote-service.js missing in image at /opt/kettle/sgx-quote-service.js"
+# 18. Verify sgx-entrypoint was copied
+if [ ! -f "$KETTLE_DIR/sgx-entrypoint" ]; then
+    echo "ERROR: sgx-entrypoint (Go binary) missing in image at /opt/kettle/sgx-entrypoint"
     exit 1
 fi
+echo "Verified sgx-entrypoint binary: $(stat -c%s $KETTLE_DIR/sgx-entrypoint | numfmt --to=iec-i --suffix=B)"
 
 # 19. Set ownership for kettle user
 mkosi-chroot chown -R kettle:kettle /opt/kettle

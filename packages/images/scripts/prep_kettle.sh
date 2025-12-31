@@ -38,15 +38,9 @@ node "$CLI_COMPILED" build-worker
 echo "Generating manifest..."
 node "$CLI_COMPILED" publish-local "dist/app.js" --path "/lib/kettle/app.js"
 
-# 6. Build SGX quote service for gramine
-echo "Building SGX quote service..."
-GRAMINE_DIR="$REPO_ROOT/packages/gramine"
-cd "$GRAMINE_DIR"
-if [ ! -d "node_modules" ]; then
-  npm install
-fi
-mkdir -p dist
-npm run build:sgx-quote-service
+# 6. SGX quote service (Go binary built during mkosi.build)
+# The Go-based quote service is built directly during image build
+# No pre-build step needed here
 
 # 7. Copy necessary files to images directory for mkosi
 echo "Copying artifacts to images directory..."
@@ -56,7 +50,7 @@ cp "$KETTLE_DIR/manifest.json" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/app.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/worker.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/externals.js" "$IMAGES_DIR/kettle-artifacts/"
-cp "$GRAMINE_DIR/dist/sgx-quote-service.js" "$IMAGES_DIR/kettle-artifacts/"
+# Note: sgx-entrypoint Go binary is built during mkosi.build, not here
 
 # 8. Normalize artifact timestamps for reproducibility
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"

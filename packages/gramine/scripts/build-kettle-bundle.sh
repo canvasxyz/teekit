@@ -55,10 +55,10 @@ log_info "Building worker bundle..."
 cd "$KETTLE_DIR"
 npm run build:worker
 
-# Build the SGX quote service
-log_info "Building SGX quote service..."
+# Build sgx-entrypoint (combined quote service + workerd launcher)
+log_info "Building sgx-entrypoint..."
 cd "$GRAMINE_DIR"
-npm run build:sgx-quote-service
+make -f sgx-entrypoint.mk
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
@@ -69,10 +69,11 @@ log_info "Copying bundle files to $OUTPUT_DIR..."
 cp "$KETTLE_DIR/dist/app.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/worker.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/externals.js" "$OUTPUT_DIR/"
-cp "$GRAMINE_DIR/dist/sgx-quote-service.js" "$OUTPUT_DIR/"
 cp "$GRAMINE_DIR/workerd.config.capnp" "$OUTPUT_DIR/"
-cp "$GRAMINE_DIR/scripts/entrypoint.sh" "$OUTPUT_DIR/"
-chmod +x "$OUTPUT_DIR/entrypoint.sh"
+
+# Copy sgx-entrypoint
+cp "$GRAMINE_DIR/sgx-entrypoint" "$OUTPUT_DIR/"
+chmod +x "$OUTPUT_DIR/sgx-entrypoint"
 
 # Copy static files if they exist
 if [ -d "$KETTLE_DIR/dist/static" ]; then

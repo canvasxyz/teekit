@@ -94,6 +94,7 @@ sudo apt-get update
 log_info "Installing Intel SGX components..."
 sudo apt-get install -y \
     build-essential \
+    golang-go \
     zstd \
     libsgx-launch \
     libsgx-urts \
@@ -238,6 +239,7 @@ echo "Installed components:"
 echo "  - Intel SGX PSW (Platform Software)"
 echo "  - Intel SGX DCAP (Data Center Attestation Primitives)"
 echo "  - Gramine Library OS"
+echo "  - Go toolchain (for sgx-entrypoint)"
 echo "  - Node.js via NVM"
 echo ""
 echo "Directories created:"

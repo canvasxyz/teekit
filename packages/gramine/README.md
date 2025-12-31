@@ -34,9 +34,14 @@ cd teekit
 ./scripts/setup-azure-sgx.sh
 ```
 
-Log out and log in again. Then, to build the kettle bundle:
+Log out and log in again. Then, set up the bundle directory and build:
 
-```
+```bash
+# One-time setup: Configure bundle directory permissions
+sudo mkdir -p /opt/kettle
+sudo chown $USER:$USER /opt/kettle
+
+# Build the project
 npm install
 npm run build
 
@@ -45,6 +50,8 @@ npm run build:bundle    # Run ./scripts/build-kettle-bundle.sh
 npm run build:enclave   # Run Gramine build, sign the enclave
 SGX=1 make run          # Run the kettle at http://localhost:3001
 ```
+
+**Note**: SGX enclave initialization takes **30-60 seconds**. The enclave is loading when you see "Emulating a raw syscall instruction" in the logs. Wait for the quote service to become available at `http://localhost:3333/healthz` before testing.
 
 ### Verifying Quotes
 
@@ -100,6 +107,24 @@ ls /dev/sgx*
 
 # Check AESM service
 systemctl status aesmd
+```
+
+### Build Fails with Permission Denied
+
+If `npm run build:bundle` fails with "Permission denied" when copying to `/opt/kettle`:
+
+```bash
+# Run the one-time setup:
+sudo mkdir -p /opt/kettle
+sudo chown $USER:$USER /opt/kettle
+
+# Then retry the build
+npm run build:bundle
+```
+
+Alternatively, use the combined build script which handles permissions automatically:
+```bash
+./build-and-test-go.sh
 ```
 
 ### Quote Generation Fails

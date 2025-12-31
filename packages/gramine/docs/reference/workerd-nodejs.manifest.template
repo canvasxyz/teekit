@@ -2,16 +2,12 @@
 # inside an Intel SGX enclave via Gramine. workerd is based on V8 and requires
 # significant memory for the JavaScript heap and pointer compression cage.
 # The workerd binary must be statically linked to avoid GLIBC version issues.
-#
-# This version uses sgx-entrypoint, a single Go binary that combines:
-# - SGX quote service (HTTP server for attestation on port 3333)
-# - workerd launcher (starts and manages workerd process)
 
 ################################################################################
 # Gramine configuration
 ################################################################################
 
-libos.entrypoint = "/opt/kettle/sgx-entrypoint"
+libos.entrypoint = "/opt/kettle/entrypoint.sh"
 
 loader.log_level = "{{ log_level }}"
 
@@ -25,11 +21,11 @@ loader.env.PATH = "/usr/bin:/bin:/usr/local/bin"
 loader.env.QUOTE_SERVICE_PORT = "3333"
 
 loader.argv = [
-  "/opt/kettle/sgx-entrypoint",
+  "/opt/kettle/entrypoint.sh",
   "serve",
   "--experimental",
   "--verbose",
-  "/opt/kettle/workerd.config.capnp",
+  "workerd.config.capnp",
 ]
 
 ################################################################################
@@ -65,6 +61,20 @@ fs.mounts = [
   # Gramine runtime libraries
   { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
   { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
+
+  # Node.js binary (for SGX quote service)
+  { path = "/usr/bin/node", uri = "file:{{ node_bin }}" },
+
+  # Node.js shared modules (for system-installed Node.js with externalized builtins)
+  # Required when using system Node.js (e.g., from apt) which stores modules in /usr/share/nodejs
+  { path = "/usr/share/nodejs", uri = "file:/usr/share/nodejs" },
+
+  # Bash and utilities for entrypoint script
+  { path = "/bin/bash", uri = "file:/bin/bash" },
+  { path = "/bin/sleep", uri = "file:/bin/sleep" },
+  { path = "/bin/kill", uri = "file:/bin/kill" },
+  { path = "/usr/bin/curl", uri = "file:/usr/bin/curl" },
+  { path = "/usr/bin/lsof", uri = "file:/usr/bin/lsof" },
 
   # workerd binary (statically linked)
   { path = "/usr/local/bin/workerd", uri = "file:{{ workerd_bin }}" },
@@ -112,15 +122,24 @@ sgx.trusted_files = [
 
   # Binaries
   "file:{{ workerd_bin }}",
+  "file:{{ node_bin }}",
+
+  # Node.js shared modules (for system-installed Node.js with externalized builtins)
+  "file:/usr/share/nodejs/",
+
+  "file:/bin/bash",
+  "file:/bin/sleep",
+  "file:/bin/kill",
+  "file:/usr/bin/curl",
+  "file:/usr/bin/lsof",
 
   # Kettle JavaScript bundles (measured for integrity)
   "file:{{ kettle_bundle_dir }}/worker.js",
   "file:{{ kettle_bundle_dir }}/app.js",
   "file:{{ kettle_bundle_dir }}/externals.js",
   "file:{{ kettle_bundle_dir }}/workerd.config.capnp",
-
-  # SGX entrypoint (statically linked Go binary combining quote service + workerd launcher)
-  "file:{{ kettle_bundle_dir }}/sgx-entrypoint",
+  "file:{{ kettle_bundle_dir }}/sgx-quote-service.js",
+  "file:{{ kettle_bundle_dir }}/entrypoint.sh",
 
   # Static files for serving (HTML, CSS, JS assets)
   # TODO: bundle static files into REPORT_DATA, or otherwise enforce pinning

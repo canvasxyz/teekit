@@ -39,7 +39,7 @@ launch_kettle() {
 
     # Launch Gramine SGX with the workerd manifest
     # The manifest defines:
-    # - libos.entrypoint = /opt/kettle/entrypoint.sh (starts quote service, then workerd)
+    # - libos.entrypoint = /opt/kettle/sgx-entrypoint (Go binary: quote service + workerd launcher)
     # - loader.argv = arguments for workerd (serve, config, etc.)
     # - All files are measured into MRENCLAVE for attestation
     # Quote service will run on port 3333 inside the enclave
