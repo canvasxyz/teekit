@@ -144,6 +144,10 @@ export NVM_DIR="$HOME/.nvm"
 nvm install v22
 nvm alias default v22
 
+# Ensure system Node.js module directory exists for Gramine manifest
+log_info "Ensuring /usr/share/nodejs exists..."
+sudo mkdir -p /usr/share/nodejs
+
 # Install homebrew
 NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 echo >> ~/.bashrc
