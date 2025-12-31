@@ -74,6 +74,12 @@ function App() {
   const wsRef = useRef<IWebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const [kvKey, setKvKey] = useState<string>("")
+  const [kvValue, setKvValue] = useState<string>("")
+  const [kvStatus, setKvStatus] = useState<string>("")
+  const [kvResult, setKvResult] = useState<string>("")
+  const [kvBusy, setKvBusy] = useState<boolean>(false)
+  const [kvCommand, setKvCommand] = useState<"init" | "get" | "put">("get")
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -224,6 +230,96 @@ function App() {
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value)
+  }
+
+  const handleKvInit = async () => {
+    setKvBusy(true)
+    setKvStatus("Initializing database...")
+    setKvResult("")
+    try {
+      const response = await enc.fetch(baseUrl + "/db/init", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      setKvStatus("Init OK")
+      setKvResult(JSON.stringify(data))
+    } catch (error) {
+      setKvStatus(`Init failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setKvBusy(false)
+    }
+  }
+
+  const handleKvPut = async () => {
+    if (!kvKey.trim() || !kvValue.trim()) {
+      setKvStatus("Key and value are required.")
+      return
+    }
+    setKvBusy(true)
+    setKvStatus("Writing value...")
+    setKvResult("")
+    try {
+      const response = await enc.fetch(baseUrl + "/db/put", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: kvKey.trim(), value: kvValue }),
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      setKvStatus("Put OK")
+      setKvResult(JSON.stringify(data))
+    } catch (error) {
+      setKvStatus(`Put failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setKvBusy(false)
+    }
+  }
+
+  const handleKvGet = async () => {
+    if (!kvKey.trim()) {
+      setKvStatus("Key is required.")
+      return
+    }
+    setKvBusy(true)
+    setKvStatus("Fetching value...")
+    setKvResult("")
+    try {
+      const response = await enc.fetch(
+        baseUrl + `/db/get?key=${encodeURIComponent(kvKey.trim())}`,
+      )
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      setKvStatus("Get OK")
+      setKvResult(JSON.stringify(data))
+    } catch (error) {
+      setKvStatus(`Get failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setKvBusy(false)
+    }
+  }
+
+  const handleKvSend = async () => {
+    if (kvCommand === "init") {
+      await handleKvInit()
+      return
+    }
+    if (kvCommand === "get") {
+      await handleKvGet()
+      return
+    }
+    await handleKvPut()
   }
 
   return (
@@ -469,6 +565,68 @@ function App() {
               </div>
             </div>
             <br />
+          </div>
+
+          <div className="kv-panel">
+            <div className="kv-title">KV Store</div>
+            <div className="kv-command-row">
+              <button
+                className={`kv-command-button ${kvCommand === "init" ? "active" : ""}`}
+                onClick={() => setKvCommand("init")}
+                disabled={kvBusy}
+              >
+                Init
+              </button>
+              <button
+                className={`kv-command-button ${kvCommand === "get" ? "active" : ""}`}
+                onClick={() => setKvCommand("get")}
+                disabled={kvBusy}
+              >
+                Get
+              </button>
+              <button
+                className={`kv-command-button ${kvCommand === "put" ? "active" : ""}`}
+                onClick={() => setKvCommand("put")}
+                disabled={kvBusy}
+              >
+                Put
+              </button>
+            </div>
+            {kvCommand !== "init" ? (
+              <div className="kv-row">
+                <input
+                  className="kv-input"
+                  type="text"
+                  placeholder="Key"
+                  value={kvKey}
+                  onChange={(e) => setKvKey(e.target.value)}
+                  disabled={kvBusy}
+                />
+              </div>
+            ) : null}
+            {kvCommand === "put" ? (
+              <div className="kv-row">
+                <input
+                  className="kv-input"
+                  type="text"
+                  placeholder="Value"
+                  value={kvValue}
+                  onChange={(e) => setKvValue(e.target.value)}
+                  disabled={kvBusy}
+                />
+              </div>
+            ) : null}
+            <div className="kv-actions">
+              <button
+                className="kv-send-button"
+                onClick={handleKvSend}
+                disabled={kvBusy}
+              >
+                Send
+              </button>
+            </div>
+            {kvStatus ? <div className="kv-status">{kvStatus}</div> : null}
+            {kvResult ? <pre className="kv-result">{kvResult}</pre> : null}
           </div>
         </div>
       </div>
