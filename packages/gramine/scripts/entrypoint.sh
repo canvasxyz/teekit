@@ -28,8 +28,8 @@ for i in {1..600}; do
         exit 1
     fi
 
-    if [ $i -eq 10 ]; then
-        echo "[entrypoint] ERROR: Quote service failed to respond after 10 seconds"
+    if [ $i -eq 600 ]; then
+        echo "[entrypoint] ERROR: Quote service failed to respond after 120 seconds"
         kill $QUOTE_PID 2>/dev/null || true
         exit 1
     fi
