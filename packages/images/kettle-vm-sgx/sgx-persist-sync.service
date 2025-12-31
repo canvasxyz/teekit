@@ -1,0 +1,17 @@
+[Unit]
+Description=Sync SGX Kettle Data to Persistent Storage
+# Only run if the main persist service is active
+After=sgx-persist.service
+Requires=sgx-persist.service
+
+[Service]
+Type=oneshot
+# Save current data to persistent storage
+# NOTE: This copies files while Gramine is running. For SQLite databases,
+# this may result in a point-in-time copy that's not fully consistent,
+# but it's better than losing all data on crash.
+ExecStart=/usr/bin/sgx-persist save
+
+# Logging
+StandardOutput=append:/var/log/sgx-persist.log
+StandardError=append:/var/log/sgx-persist.log

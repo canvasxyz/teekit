@@ -1,0 +1,16 @@
+[Unit]
+Description=Periodic SGX Data Persistence
+# Don't start until the main service is active
+After=sgx-persist.service
+
+[Timer]
+# Trigger the sync service (not the main persist service)
+Unit=sgx-persist-sync.service
+# Run every 5 minutes after boot
+OnBootSec=5min
+OnUnitActiveSec=5min
+# Randomize to avoid thundering herd on multi-VM deployments
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

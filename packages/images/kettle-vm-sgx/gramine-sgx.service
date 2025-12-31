@@ -1,8 +1,10 @@
 [Unit]
 Description=Kettle SGX Enclave
-After=network-setup.service cloud-launcher.service aesmd.service
+After=network-setup.service cloud-launcher.service aesmd.service sgx-persist.service
 Requires=aesmd.service
-Wants=network-setup.service cloud-launcher.service
+Wants=network-setup.service cloud-launcher.service sgx-persist.service
+# Ensure enclave stops during shutdown (ordering via After= reverses during stop)
+Conflicts=shutdown.target
 
 [Service]
 Type=exec

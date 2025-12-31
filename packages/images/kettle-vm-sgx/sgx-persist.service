@@ -1,0 +1,28 @@
+[Unit]
+Description=SGX Kettle Data Persistence
+# Run after persistent storage is mounted (Wants = graceful degradation if unavailable)
+After=persistent-mount.service
+Wants=persistent-mount.service
+# Run before Gramine enclave starts
+Before=gramine-sgx.service
+# Don't run during shutdown ordering conflicts
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Restore data at boot (before Gramine starts)
+ExecStart=/usr/bin/sgx-persist restore
+
+# Save data at shutdown (after Gramine stops)
+# The '+' prefix runs as root even if the service User is different
+ExecStop=/usr/bin/sgx-persist save
+
+# Logging
+StandardOutput=append:/var/log/sgx-persist.log
+StandardError=append:/var/log/sgx-persist.log
+
+[Install]
+WantedBy=minimal.target

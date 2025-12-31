@@ -62,11 +62,15 @@ install -m 755 "$SRCDIR/scripts/config_local" "$KETTLE_LIB_DIR/"
 install -m 755 "$SRCDIR/scripts/config_gcp" "$KETTLE_LIB_DIR/"
 
 # 7a. Install certbot-launcher (needed by certbot-launcher.service enabled below)
-# Note: certbot-persist and sealing-key are NOT installed - those are only for
-# confidential VMs (SEV-SNP/TDX). This is a Trusted Launch VM with SGX enclaves,
-# not a full confidential VM, so certificates persist normally on disk.
 echo "Installing certbot-launcher..."
 install -m 755 "$SRCDIR/kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
+
+# 7b. Install SGX persistence scripts
+# Unlike SEV-SNP which uses snpguest for sealing keys, SGX uses Gramine's built-in
+# Protected File System (PFS) which encrypts /var/lib/kettle using MRENCLAVE-bound keys.
+# We just need to sync the encrypted files to/from persistent storage across reboots.
+echo "Installing sgx-persist..."
+install -m 755 "$SRCDIR/kettle-vm-sgx/sgx-persist.sh" "$BUILDROOT/usr/bin/sgx-persist"
 
 # 8. Install firewall script
 echo "Installing firewall setup script..."
@@ -84,6 +88,13 @@ install -m 644 "$SRCDIR/kettle-vm/firewall.service" "$SERVICE_DIR/"
 echo "Installing certbot-launcher.service..."
 install -m 644 "$SRCDIR/kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
 
+# 11a. Install sgx-persist.service for data persistence
+echo "Installing sgx-persist.service..."
+install -m 644 "$SRCDIR/kettle-vm-sgx/sgx-persist.service" "$SERVICE_DIR/"
+# Periodic sync for crash safety (every 5 minutes)
+install -m 644 "$SRCDIR/kettle-vm-sgx/sgx-persist-sync.service" "$SERVICE_DIR/"
+install -m 644 "$SRCDIR/kettle-vm-sgx/sgx-persist.timer" "$SERVICE_DIR/"
+
 # 12. Enable services using systemctl --root
 echo "Enabling services..."
 systemctl --root="$BUILDROOT" enable gramine-sgx.service
@@ -91,6 +102,10 @@ systemctl --root="$BUILDROOT" enable cloud-launcher.service
 systemctl --root="$BUILDROOT" enable firewall.service
 systemctl --root="$BUILDROOT" enable certbot-launcher.service
 systemctl --root="$BUILDROOT" enable aesmd.service
+# Enable persistent storage for SGX data
+systemctl --root="$BUILDROOT" enable persistent-mount.service
+systemctl --root="$BUILDROOT" enable sgx-persist.service
+systemctl --root="$BUILDROOT" enable sgx-persist.timer
 
 # 12a. Create systemd-tmpfiles configuration for SGX groups
 # Ensure groups exist even if image build somehow missed them
