@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 # Cleans up Azure resources created by deploy_azure.sh
-# Usage: ./cleanup_azure.sh [--dry-run]
+# Usage: ./cleanup_azure.sh [--dry-run] [RESOURCE_GROUP]
+#        GROUP=mygroup ./cleanup_azure.sh [--dry-run]
 #
 # This script will:
 # 1. Delete all VMs matching "kettle-*" pattern
@@ -12,10 +13,9 @@
 #
 # Prerequisites:
 # - Azure CLI installed and logged in (az login)
-# - Resource group 'tdx-group' exists
 #
 # NOTE: The following resources are NOT cleaned up by this script:
-# - The resource group itself (tdx-group)
+# - The resource group itself
 # - The storage account (cached in .storageaccount) - reusable across deployments
 # - The blob container "vhds" - reusable across deployments
 # - The Azure Compute Gallery (tdxGallery) itself - reusable across deployments
@@ -25,9 +25,24 @@
 
 set -euo pipefail
 
+# Parse arguments
+DRY_RUN=false
+ARG_RESOURCE_GROUP=""
+for arg in "$@"; do
+    if [ "$arg" = "--dry-run" ]; then
+        DRY_RUN=true
+    else
+        ARG_RESOURCE_GROUP="$arg"
+    fi
+done
+
 # Configuration
 RESOURCE_GROUP_FILE=".resourcegroup"
-if [ -f "$RESOURCE_GROUP_FILE" ]; then
+if [ -n "$ARG_RESOURCE_GROUP" ]; then
+    RESOURCE_GROUP="$ARG_RESOURCE_GROUP"
+elif [ -n "${GROUP:-}" ]; then
+    RESOURCE_GROUP="$GROUP"
+elif [ -f "$RESOURCE_GROUP_FILE" ]; then
     RESOURCE_GROUP=$(cat "$RESOURCE_GROUP_FILE")
 else
     RESOURCE_GROUP="tdx-group"
@@ -35,12 +50,6 @@ fi
 GALLERY_NAME="tdxGallery"
 CONTAINER_NAME="vhds"
 VM_PATTERN="kettle-"
-
-# Parse arguments
-DRY_RUN=false
-if [ "${1:-}" = "--dry-run" ]; then
-    DRY_RUN=true
-fi
 
 # Colors for logging
 RED='\033[0;31m'
@@ -128,11 +137,11 @@ else
     TOTAL_VM_COUNT=$(echo "$ALL_VMS" | wc -l)
     log_info "Found $TOTAL_VM_COUNT total VM(s) in resource group"
     echo ""
-    
+
     # Separate VMs into those matching pattern and those not matching
     VM_LIST=""
     NON_MATCHING_VMS=""
-    
+
     while read -r vm; do
         if [[ "$vm" == ${VM_PATTERN}* ]]; then
             VM_LIST="${VM_LIST}${vm}"$'\n'
@@ -140,11 +149,11 @@ else
             NON_MATCHING_VMS="${NON_MATCHING_VMS}${vm}"$'\n'
         fi
     done <<< "$ALL_VMS"
-    
+
     # Trim trailing newlines
     VM_LIST=$(echo "$VM_LIST" | sed '/^$/d')
     NON_MATCHING_VMS=$(echo "$NON_MATCHING_VMS" | sed '/^$/d')
-    
+
     # Show VMs that will be deleted
     if [ -z "$VM_LIST" ]; then
         log_info "No VMs match deletion pattern '${VM_PATTERN}*'"
@@ -162,7 +171,7 @@ else
             fi
         done
     fi
-    
+
     # Show VMs that will NOT be deleted
     if [ -n "$NON_MATCHING_VMS" ]; then
         NON_MATCHING_COUNT=$(echo "$NON_MATCHING_VMS" | wc -l)
