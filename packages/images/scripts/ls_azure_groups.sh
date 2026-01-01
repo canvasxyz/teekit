@@ -119,4 +119,15 @@ else
     done
 fi
 
+# ============================================================================
+# Summary
+# ============================================================================
+log_section "USEFUL COMMANDS"
+
+echo ""
+echo "Inspect a resource group:"
+echo "  npm run ls:az -- <GROUP_NAME>"
+echo ""
+echo "Delete a resource group (deletes all resources in it):"
+echo "  az group delete --name <GROUP_NAME> --yes"
 echo ""
