@@ -69,7 +69,13 @@ if ! command -v uuidgen &>/dev/null; then
 fi
 
 echo -e "${GREEN}[1/3]${NC} Generating GUID for key identification..."
-uuidgen --random > "$GUID_FILE"
+# Prefer uuidgen --random but fall back to default if RNG option unsupported
+if ! uuidgen --random > "$GUID_FILE" 2>/dev/null; then
+    if ! uuidgen > "$GUID_FILE"; then
+        echo -e "${RED}[ERROR]${NC} Failed to generate GUID with uuidgen"
+        exit 1
+    fi
+fi
 GUID=$(cat "$GUID_FILE")
 echo "      GUID: $GUID"
 echo ""

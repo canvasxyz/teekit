@@ -145,7 +145,7 @@ if [ "$SECURITY_TYPE" = "sgx" ]; then
         log_error "Secure Boot certificate not found: $CERT_FILE"
         echo ""
         echo "SGX images require Secure Boot signing. Please generate keys first:"
-        echo "  npm run genkeys:secureboot"
+        echo "  npm run update:genkeys_secureboot"
         echo ""
         echo "Then rebuild the SGX image:"
         echo "  npm run build:azsgx"

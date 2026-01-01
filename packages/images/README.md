@@ -44,7 +44,7 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
 4. Generate Secure Boot signing keys (required for Azure SGX builds):
 
    ```bash
-   npm run genkeys:secureboot
+   npm run update:genkeys_secureboot
    ```
 
    This generates cryptographic keys needed to sign the UKI (Unified Kernel Image)

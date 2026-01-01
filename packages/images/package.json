@@ -5,7 +5,6 @@
 	"type": "module",
 	"scripts": {
 		"build": "scripts/check_perms.sh && scripts/setup_deps.sh && scripts/prep_kettle.sh",
-		"genkeys:secureboot": "bash scripts/genkeys_secureboot.sh",
 		"build:vm": "bash scripts/mkosi_build",
 		"build:vm:clean": "bash scripts/mkosi_build --clean",
 		"build:devtools": "bash scripts/mkosi_build devtools",
@@ -44,6 +43,7 @@
 		"config:az": "bash scripts/config_azure.sh",
 		"config:gcp": "bash scripts/config_gcp.sh",
 		"reset:lima": "limactl stop tee-builder && limactl delete tee-builder",
+		"update:genkeys_secureboot": "bash scripts/genkeys_secureboot.sh",
 		"update:gpgkeys": "bash scripts/update_gpg_keys.sh",
 		"update:gpgkeys:show": "bash scripts/update_gpg_keys.sh show"
 	}
