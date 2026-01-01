@@ -25,6 +25,7 @@ lima.yaml
 NvVars
 
 kettle-artifacts/
+gramine/
 cli.bundle.js
 
 .storageaccount

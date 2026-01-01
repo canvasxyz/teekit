@@ -38,9 +38,33 @@ node "$CLI_COMPILED" build-worker
 echo "Generating manifest..."
 node "$CLI_COMPILED" publish-local "dist/app.js" --path "/lib/kettle/app.js"
 
-# 6. SGX quote service (Go binary built during mkosi.build)
-# The Go-based quote service is built directly during image build
-# No pre-build step needed here
+# 6. Build sgx-entrypoint and create hardlinks to gramine files
+echo "Building sgx-entrypoint binary..."
+GRAMINE_SRC="$REPO_ROOT/packages/gramine"
+GRAMINE_DEST="$IMAGES_DIR/gramine"
+mkdir -p "$GRAMINE_DEST"
+
+# Build sgx-entrypoint using go (must be done before mkosi build)
+(
+    cd "$GRAMINE_SRC"
+    # Clean any previous build
+    rm -f sgx-entrypoint
+    # Build with reproducible flags (from sgx-entrypoint.mk)
+    CGO_ENABLED=0 go build \
+        -trimpath \
+        -mod=readonly \
+        -ldflags="-s -w -extldflags=-static" \
+        -o sgx-entrypoint \
+        sgx-entrypoint.go
+    echo "Built sgx-entrypoint binary ($(stat -c%s sgx-entrypoint | numfmt --to=iec-i --suffix=B))"
+)
+
+# Use hardlinks to avoid file duplication (same inode, no extra disk space)
+ln -f "$GRAMINE_SRC/sgx-entrypoint" "$GRAMINE_DEST/"
+ln -f "$GRAMINE_SRC/sgx-entrypoint.go" "$GRAMINE_DEST/"
+ln -f "$GRAMINE_SRC/sgx-entrypoint.mk" "$GRAMINE_DEST/"
+ln -f "$GRAMINE_SRC/workerd.manifest.template" "$GRAMINE_DEST/"
+ln -f "$GRAMINE_SRC/workerd.zst" "$GRAMINE_DEST/"
 
 # 7. Copy necessary files to images directory for mkosi
 echo "Copying artifacts to images directory..."
@@ -50,7 +74,6 @@ cp "$KETTLE_DIR/manifest.json" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/app.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/worker.js" "$IMAGES_DIR/kettle-artifacts/"
 cp "$KETTLE_DIR/dist/externals.js" "$IMAGES_DIR/kettle-artifacts/"
-# Note: sgx-entrypoint Go binary is built during mkosi.build, not here
 
 # 8. Normalize artifact timestamps for reproducibility
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
@@ -60,6 +83,7 @@ TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
 
 echo "Normalizing artifact timestamps to $TOUCH_TIME..."
 find "$IMAGES_DIR/kettle-artifacts" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+find "$IMAGES_DIR/gramine" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
 touch -h -t "$TOUCH_TIME" "$IMAGES_DIR/cli.bundle.js" 2>/dev/null || true
 
 echo "Kettle artifacts prepared successfully!"
