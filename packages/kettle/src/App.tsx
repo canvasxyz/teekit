@@ -33,7 +33,7 @@ async function getExpectedSgxReportData(
 ): Promise<Uint8Array> {
   if (!x25519PublicKey) return new Uint8Array()
 
-  const hashBuffer = await crypto.subtle.digest("SHA-256", x25519PublicKey)
+  const hashBuffer = await crypto.subtle.digest("SHA-256", x25519PublicKey.slice())
   const reportData = new Uint8Array(64)
   reportData.set(new Uint8Array(hashBuffer), 0)
   return reportData
