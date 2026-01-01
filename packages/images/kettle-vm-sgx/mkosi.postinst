@@ -185,13 +185,14 @@ echo "Creating /usr/local/bin/workerd symlink..."
 mkdir -p "$BUILDROOT/usr/local/bin"
 mkosi-chroot ln -sf /opt/kettle/workerd /usr/local/bin/workerd
 
-# 15. Generate development signing key if not present
-echo "Setting up SGX signing key..."
-mkdir -p "$KETTLE_DIR/keys"
+# 15. Verify deterministic development signing key was copied by mkosi.build
+echo "Verifying SGX signing key..."
 if [ ! -f "$KETTLE_DIR/keys/enclave-key.pem" ]; then
-    mkosi-chroot sh -c "gramine-sgx-gen-private-key -f /opt/kettle/keys/enclave-key.pem"
-    echo "Generated development signing key"
+    echo "ERROR: enclave-key.pem not found at $KETTLE_DIR/keys/"
+    echo "       Key should have been copied by mkosi.build"
+    exit 1
 fi
+echo "Using deterministic development signing key for reproducible builds"
 
 # 16. Sign the enclave
 echo "Signing SGX enclave..."

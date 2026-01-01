@@ -66,6 +66,21 @@ ln -f "$GRAMINE_SRC/sgx-entrypoint.mk" "$GRAMINE_DEST/"
 ln -f "$GRAMINE_SRC/workerd.manifest.template" "$GRAMINE_DEST/"
 ln -f "$GRAMINE_SRC/workerd.zst" "$GRAMINE_DEST/"
 
+# Generate or copy deterministic enclave signing key for reproducible builds
+mkdir -p "$IMAGES_DIR/kettle-vm-sgx/keys"
+mkdir -p "$GRAMINE_DEST/keys"
+
+if [ ! -f "$IMAGES_DIR/kettle-vm-sgx/keys/enclave-key.pem" ]; then
+    echo "Generating deterministic enclave signing key..."
+    # Generate RSA key with exponent 3 (required by Gramine)
+    # This key is for development/testing only
+    openssl genrsa -3 3072 > "$IMAGES_DIR/kettle-vm-sgx/keys/enclave-key.pem" 2>/dev/null
+    echo "Generated enclave-key.pem (development key)"
+fi
+
+cp "$IMAGES_DIR/kettle-vm-sgx/keys/enclave-key.pem" "$GRAMINE_DEST/keys/"
+echo "Copied enclave signing key to gramine/"
+
 # 7. Copy necessary files to images directory for mkosi
 echo "Copying artifacts to images directory..."
 mkdir -p "$IMAGES_DIR/kettle-artifacts"
@@ -85,6 +100,8 @@ echo "Normalizing artifact timestamps to $TOUCH_TIME..."
 find "$IMAGES_DIR/kettle-artifacts" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
 find "$IMAGES_DIR/gramine" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
 touch -h -t "$TOUCH_TIME" "$IMAGES_DIR/cli.bundle.js" 2>/dev/null || true
+# Ensure the key file also has normalized timestamp
+touch -h -t "$TOUCH_TIME" "$IMAGES_DIR/gramine/keys/enclave-key.pem" 2>/dev/null || true
 
 echo "Kettle artifacts prepared successfully!"
 echo "  - CLI bundle: $IMAGES_DIR/cli.bundle.js"

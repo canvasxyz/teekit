@@ -68,6 +68,19 @@ else
     exit 1
 fi
 
+# 6. Copy deterministic enclave signing key for reproducible builds
+echo "Copying enclave signing key..."
+mkdir -p "$KETTLE_DIR/keys"
+if [ -f "$GRAMINE_SRC/keys/enclave-key.pem" ]; then
+    cp "$GRAMINE_SRC/keys/enclave-key.pem" "$KETTLE_DIR/keys/"
+    chmod 600 "$KETTLE_DIR/keys/enclave-key.pem"
+    echo "Copied deterministic enclave signing key"
+else
+    echo "ERROR: enclave-key.pem not found at $GRAMINE_SRC/keys/"
+    echo "       Run prep_kettle.sh to prepare it first"
+    exit 1
+fi
+
 # 7. Normalize timestamps for reproducibility
 find "$KETTLE_DIR" -exec touch -t 197001010000.00 {} +
 

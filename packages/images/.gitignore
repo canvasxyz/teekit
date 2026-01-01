@@ -33,6 +33,9 @@ cli.bundle.js
 .vm_name_azure
 .vm_zone_gcp
 
+# SGX Enclave signing keys
+kettle-vm-sgx/keys/enclave-key.pem
+
 # Secure Boot signing keys (DO NOT COMMIT!)
 mkosi.secureboot.key
 mkosi.secureboot.crt
