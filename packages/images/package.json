@@ -39,7 +39,7 @@
 		"redeploy:azsgx": "bash scripts/redeploy_azure.sh build/kettle-vm-azsgx.vhd",
 		"redeploy:azsgx:devtools": "bash scripts/redeploy_azure.sh build/kettle-vm-azsgx-devtools.vhd",
 		"ls:az": "bash scripts/ls_azure.sh",
-		"ls:az:groups": "echo 'Groups:\n' && az group list --output table && echo '\nVMs:\n' && az vm list --query \"sort_by([], &resourceGroup)[].{Name:name, Location:location, ResourceGroup:resourceGroup, ProvisioningState:provisioningState}\" --output table",
+		"ls:az:groups": "bash scripts/ls_azure_groups.sh",
 		"ls:gcp": "bash scripts/ls_gcp.sh",
 		"config:az": "bash scripts/config_azure.sh",
 		"config:gcp": "bash scripts/config_gcp.sh",
