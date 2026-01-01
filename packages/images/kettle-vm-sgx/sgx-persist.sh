@@ -8,20 +8,21 @@ set -euo pipefail
 # the host filesystem, but since the rootfs is ephemeral (UKI boot), we
 # need to sync them to persistent storage.
 #
-# This script simply copies the encrypted blobs to/from /persistent.
-# No additional encryption is needed - Gramine already handles that.
+# Encrypted data is stored in a directory named by the first 16 characters
+# of the MRENCLAVE measurement. This enables version isolation, an audit trail,
+# and rollbacks.
 #
 # SECURITY NOTE: Unlike SEV-SNP's certbot-persist which encrypts certificates
-# with a sealing key, this script stores /etc/letsencrypt UNENCRYPTED on the
-# persistent disk. This is intentional: Azure SGX VMs use Trusted Launch (not
-# full memory encryption), so the TLS certificates are not in the enclave's
-# trust boundary anyway. The security-sensitive data (DO storage, app state)
-# IS encrypted by Gramine PFS.
+# with a sealing key, this script stores /etc/letsencrypt unencrypted on the
+# persistent disk. This is intentional since TLS is not in the enclave's trust
+# boundary anyway. Application state is encrypted by Gramine PFS and you should
+# use TunnelServer and TunnelClient to bypass TLS attestation.
 
 LOG_PREFIX="[sgx-persist]"
 SERIAL_CONSOLE="/dev/ttyS0"
 KETTLE_DATA_DIR="/var/lib/kettle"
-PERSISTENT_KETTLE_DIR="/persistent/kettle-data"
+MRENCLAVE_FILE="/opt/kettle/mrenclave.txt"
+PERSISTENT_KETTLE_DIR="" # Will be set dynamically based on MRENCLAVE later
 PERSISTENT_CERTS_DIR="/persistent/certs"
 LETSENCRYPT_DIR="/etc/letsencrypt"
 
@@ -34,6 +35,46 @@ log() {
 
 error() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
+}
+
+# Get MRENCLAVE and set the persistent data directory
+# Uses first 16 chars of MRENCLAVE for the directory name
+get_mrenclave_dir() {
+    if [ ! -f "$MRENCLAVE_FILE" ]; then
+        error "MRENCLAVE file not found: $MRENCLAVE_FILE"
+        error "Cannot determine enclave identity for persistence"
+        return 1
+    fi
+
+    local mrenclave
+    mrenclave=$(cat "$MRENCLAVE_FILE" | tr -d '[:space:]')
+
+    if [ -z "$mrenclave" ] || [ ${#mrenclave} -lt 16 ]; then
+        error "Invalid MRENCLAVE value in $MRENCLAVE_FILE"
+        return 1
+    fi
+
+    # Use first 16 characters (8 bytes = 64 bits) for directory name
+    local mrenclave_short="${mrenclave:0:16}"
+    echo "/persistent/kettle-data/${mrenclave_short}"
+}
+
+# Initialize PERSISTENT_KETTLE_DIR based on MRENCLAVE
+init_persistent_dir() {
+    # Skip if already initialized
+    if [ -n "$PERSISTENT_KETTLE_DIR" ]; then
+        return 0
+    fi
+
+    PERSISTENT_KETTLE_DIR=$(get_mrenclave_dir) || {
+        error "Cannot proceed without MRENCLAVE measurement"
+        return 1
+    }
+
+    local mrenclave
+    mrenclave=$(cat "$MRENCLAVE_FILE" | tr -d '[:space:]')
+    log "MRENCLAVE: ${mrenclave:0:16}... (using first 16 chars for directory)"
+    log "Persistent data directory: $PERSISTENT_KETTLE_DIR"
 }
 
 # Check if persistent storage is available
@@ -50,6 +91,9 @@ restore_data() {
         log "No persistent storage available, skipping restore"
         return 0
     fi
+
+    # Initialize persistent directory based on MRENCLAVE
+    init_persistent_dir
 
     # Restore kettle data (Gramine-encrypted database files)
     if [ -d "$PERSISTENT_KETTLE_DIR" ] && [ -n "$(ls -A "$PERSISTENT_KETTLE_DIR" 2>/dev/null)" ]; then
@@ -105,6 +149,9 @@ save_data() {
         log "No persistent storage available, skipping save"
         return 0
     fi
+
+    # Initialize persistent directory based on MRENCLAVE
+    init_persistent_dir
 
     # Save kettle data (Gramine-encrypted database files)
     if [ -d "$KETTLE_DATA_DIR" ] && [ -n "$(ls -A "$KETTLE_DATA_DIR" 2>/dev/null)" ]; then
@@ -163,6 +210,16 @@ check_persistent() {
 status() {
     log "=== SGX Persist Status ==="
 
+    # Show MRENCLAVE info
+    if [ -f "$MRENCLAVE_FILE" ]; then
+        local mrenclave
+        mrenclave=$(cat "$MRENCLAVE_FILE" | tr -d '[:space:]')
+        log "MRENCLAVE: $mrenclave"
+        log "MRENCLAVE (short): ${mrenclave:0:16}"
+    else
+        log "MRENCLAVE: NOT AVAILABLE (file not found)"
+    fi
+
     if has_persistent_storage; then
         log "Persistent storage: AVAILABLE"
         df -h /persistent | tail -1
@@ -170,12 +227,28 @@ status() {
         log "Persistent storage: NOT AVAILABLE"
     fi
 
+    # Initialize persistent directory based on MRENCLAVE
+    init_persistent_dir
+
     if [ -d "$PERSISTENT_KETTLE_DIR" ]; then
         local file_count=$(find "$PERSISTENT_KETTLE_DIR" -type f 2>/dev/null | wc -l)
         local size=$(du -sh "$PERSISTENT_KETTLE_DIR" 2>/dev/null | cut -f1)
-        log "Persisted kettle data: $file_count files, $size"
+        log "Persisted kettle data: $file_count files, $size (at $PERSISTENT_KETTLE_DIR)"
     else
-        log "Persisted kettle data: none"
+        log "Persisted kettle data: none (at $PERSISTENT_KETTLE_DIR)"
+    fi
+
+    # Show all persisted versions
+    if [ -d "/persistent/kettle-data" ]; then
+        log "All persisted enclave versions:"
+        for dir in /persistent/kettle-data/*/; do
+            if [ -d "$dir" ]; then
+                local version_name=$(basename "$dir")
+                local version_size=$(du -sh "$dir" 2>/dev/null | cut -f1)
+                local version_files=$(find "$dir" -type f 2>/dev/null | wc -l)
+                log "  - $version_name: $version_files files, $version_size"
+            fi
+        done
     fi
 
     if [ -d "$PERSISTENT_CERTS_DIR" ]; then

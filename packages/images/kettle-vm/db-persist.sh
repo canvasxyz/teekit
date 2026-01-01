@@ -4,10 +4,17 @@ set -euo pipefail
 # db-persist.sh - Utility for encrypting/decrypting Kettle SQLite databases
 # Uses AES-256-CBC + HMAC-SHA256 (encrypt-then-MAC) with SEV-SNP sealing key
 # Similar to certbot-persist.sh but for database persistence
+#
+# Encrypted data is stored in a directory named by the first 16 characters
+# of the VM's launch measurement. This enables version isolation, an audit trail,
+# and rollbacks.
 
 LOG_PREFIX="[db-persist]"
 SEALING_KEY_FILE="/var/lib/kettle/sealing-key.bin"
-PERSISTENT_DB_DIR="/persistent/db"
+VM_IDENTITY_FILE="/etc/kettle/vm-identity"
+# PERSISTENT_DB_DIR is set dynamically based on measurement (see init_persistent_dir)
+PERSISTENT_DB_DIR_BASE="/persistent/db"
+PERSISTENT_DB_DIR=""  # Initialized by init_persistent_dir
 KETTLE_DB_BASE="/var/lib/kettle"
 
 log() {
@@ -16,6 +23,32 @@ log() {
 
 error() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $LOG_PREFIX ERROR: $*" >&2
+}
+
+# Initialize persistent directory based on VM measurement
+# Uses first 16 chars of measurement for directory name
+init_persistent_dir() {
+    if [ -n "$PERSISTENT_DB_DIR" ]; then
+        return 0
+    fi
+
+    if [ ! -f "$VM_IDENTITY_FILE" ]; then
+        error "VM identity file not found: $VM_IDENTITY_FILE"
+        error "Cannot proceed without measurement"
+        return 1
+    fi
+
+    source "$VM_IDENTITY_FILE"
+
+    if [ -z "${MEASUREMENT_SHORT:-}" ]; then
+        error "MEASUREMENT_SHORT not set in $VM_IDENTITY_FILE"
+        error "Cannot proceed without measurement"
+        return 1
+    fi
+
+    PERSISTENT_DB_DIR="${PERSISTENT_DB_DIR_BASE}/${MEASUREMENT_SHORT}"
+    log "Using measurement-indexed storage: $PERSISTENT_DB_DIR"
+    log "Measurement (short): $MEASUREMENT_SHORT"
 }
 
 # Derive encryption key from sealing key using SHA-256
@@ -266,6 +299,9 @@ encrypt_all() {
         return 0
     fi
 
+    # Initialize persistent directory based on measurement
+    init_persistent_dir
+
     local count=0
 
     # Look for db directories (db, db-0, db-1, etc.)
@@ -279,7 +315,7 @@ encrypt_all() {
         fi
     done
 
-    log "Encrypted $count database(s)"
+    log "Encrypted $count database(s) to $PERSISTENT_DB_DIR"
     return 0
 }
 
@@ -298,21 +334,91 @@ decrypt_all() {
         return 0
     fi
 
+    # Initialize persistent directory based on measurement
+    init_persistent_dir
+
     local count=0
 
     # Look for encrypted database files
-    for enc_file in "$PERSISTENT_DB_DIR"/*.enc; do
-        if [ -f "$enc_file" ]; then
-            local db_name
-            db_name=$(basename "$enc_file" .enc)
-            if decrypt_db "$db_name"; then
-                count=$((count + 1))
+    if [ -d "$PERSISTENT_DB_DIR" ]; then
+        for enc_file in "$PERSISTENT_DB_DIR"/*.enc; do
+            if [ -f "$enc_file" ]; then
+                local db_name
+                db_name=$(basename "$enc_file" .enc)
+                if decrypt_db "$db_name"; then
+                    count=$((count + 1))
+                fi
             fi
-        fi
-    done
+        done
+    fi
 
-    log "Decrypted $count database(s)"
+    log "Decrypted $count database(s) from $PERSISTENT_DB_DIR"
     return 0
+}
+
+# Show persistence status
+# Usage: status
+show_status() {
+    log "=== DB Persist Status ==="
+
+    # Show VM identity info
+    if [ -f "$VM_IDENTITY_FILE" ]; then
+        source "$VM_IDENTITY_FILE"
+        log "TEE Type: ${TEE_TYPE:-unknown}"
+        log "Measurement: ${MEASUREMENT:-unknown}"
+        log "Measurement (short): ${MEASUREMENT_SHORT:-unknown}"
+    else
+        log "VM Identity: NOT AVAILABLE (file not found)"
+    fi
+
+    if has_sealing_key; then
+        log "Sealing key: AVAILABLE"
+    else
+        log "Sealing key: NOT AVAILABLE"
+    fi
+
+    if has_persistent_storage; then
+        log "Persistent storage: AVAILABLE"
+        df -h /persistent | tail -1
+    else
+        log "Persistent storage: NOT AVAILABLE"
+    fi
+
+    # Initialize persistent directory based on measurement
+    init_persistent_dir
+
+    if [ -d "$PERSISTENT_DB_DIR" ]; then
+        local file_count=$(find "$PERSISTENT_DB_DIR" -name "*.enc" 2>/dev/null | wc -l)
+        local size=$(du -sh "$PERSISTENT_DB_DIR" 2>/dev/null | cut -f1)
+        log "Persisted databases: $file_count file(s), $size (at $PERSISTENT_DB_DIR)"
+    else
+        log "Persisted databases: none (at $PERSISTENT_DB_DIR)"
+    fi
+
+    # Show all persisted versions
+    if [ -d "$PERSISTENT_DB_DIR_BASE" ]; then
+        log "All persisted VM versions:"
+        for dir in "$PERSISTENT_DB_DIR_BASE"/*/; do
+            if [ -d "$dir" ]; then
+                local version_name=$(basename "$dir")
+                local version_size=$(du -sh "$dir" 2>/dev/null | cut -f1)
+                local version_files=$(find "$dir" -name "*.enc" 2>/dev/null | wc -l)
+                log "  - $version_name: $version_files database(s), $version_size"
+            fi
+        done
+    fi
+
+    if [ -d "$KETTLE_DB_BASE" ]; then
+        local db_count=0
+        for db_dir in "$KETTLE_DB_BASE"/db*; do
+            if [ -d "$db_dir" ]; then
+                db_count=$((db_count + 1))
+            fi
+        done
+        log "Current databases: $db_count"
+    else
+        log "Current databases: none"
+    fi
 }
 
 # Remove cached database
@@ -330,10 +436,12 @@ remove_cached_db() {
 case "${1:-}" in
     encrypt)
         shift
+        init_persistent_dir
         encrypt_db "$@"
         ;;
     decrypt)
         shift
+        init_persistent_dir
         decrypt_db "$@"
         ;;
     encrypt-all)
@@ -344,7 +452,11 @@ case "${1:-}" in
         ;;
     remove)
         shift
+        init_persistent_dir
         remove_cached_db "$@"
+        ;;
+    status)
+        show_status
         ;;
     has-sealing-key)
         has_sealing_key
@@ -353,16 +465,19 @@ case "${1:-}" in
         has_persistent_storage
         ;;
     *)
-        echo "Usage: $0 {encrypt|decrypt|encrypt-all|decrypt-all|remove|has-sealing-key|has-persistent-storage} [args]"
+        echo "Usage: $0 {encrypt|decrypt|encrypt-all|decrypt-all|remove|status|has-sealing-key|has-persistent-storage} [args]"
         echo ""
         echo "Commands:"
         echo "  encrypt <db_name>        Encrypt and store database (e.g., 'db' or 'db-0')"
         echo "  decrypt <db_name>        Decrypt and restore database"
         echo "  encrypt-all              Encrypt all databases in /var/lib/kettle"
-        echo "  decrypt-all              Decrypt all databases from /persistent/db"
+        echo "  decrypt-all              Decrypt all databases from /persistent/db/<measurement>"
         echo "  remove <db_name>         Remove cached database"
+        echo "  status                   Show persistence status and all stored versions"
         echo "  has-sealing-key          Check if sealing key is available (exit 0 if yes)"
         echo "  has-persistent-storage   Check if /persistent is mounted (exit 0 if yes)"
+        echo ""
+        echo "Storage is indexed by VM measurement (first 16 chars) for version isolation."
         exit 1
         ;;
 esac
