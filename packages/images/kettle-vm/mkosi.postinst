@@ -24,8 +24,7 @@ mkosi-chroot sh -c "$npm_install_cmd"
 echo "Moving npm packages to /usr/lib/node_modules..."
 if [ -d "$BUILDROOT/usr/node_modules" ]; then
     cp -a --no-preserve=ownership "$BUILDROOT/usr/node_modules"/* "$BUILDROOT/usr/lib/node_modules/"
-    rm -rf "$BUILDROOT/usr/node_modules"/*
-    rmdir "$BUILDROOT/usr/node_modules"
+    rm -rf "$BUILDROOT/usr/node_modules"
 fi
 
 echo "Verifying installed packages..."
