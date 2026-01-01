@@ -1,7 +1,9 @@
 #!/bin/bash
 #
 # Lists currently active Azure resources in the TDX resource group.
-# Usage: ./ls_azure.sh
+# Usage: ./ls_azure.sh [RESOURCE_GROUP]
+#        GROUP=mygroup ./ls_azure.sh
+#        ./ls_azure.sh
 #
 # Lists the following resources:
 # - Virtual Machines (with status, IP, size)
@@ -20,7 +22,11 @@ set -euo pipefail
 
 # Configuration
 RESOURCE_GROUP_FILE=".resourcegroup"
-if [ -f "$RESOURCE_GROUP_FILE" ]; then
+if [ -n "${1:-}" ]; then
+    RESOURCE_GROUP="$1"
+elif [ -n "${GROUP:-}" ]; then
+    RESOURCE_GROUP="$GROUP"
+elif [ -f "$RESOURCE_GROUP_FILE" ]; then
     RESOURCE_GROUP=$(cat "$RESOURCE_GROUP_FILE")
 else
     RESOURCE_GROUP="tdx-group"
