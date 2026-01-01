@@ -35,14 +35,35 @@ ESP_IMAGE="$WORK_DIR/esp.img"
 echo "EFI file size: $(stat -c%s "$EFI_FILE") bytes"
 echo "Creating ${ESP_SIZE_MB}MB ESP partition in ${DISK_SIZE_MB}MB disk..."
 
+# Use SOURCE_DATE_EPOCH for reproducible builds
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
+             echo "197001010000.00")
+
+# Calculate deterministic FAT32 volume serial number from SOURCE_DATE_EPOCH
+FAT_SERIAL=$(printf '%08x' "$SOURCE_DATE_EPOCH" | sed 's/\(..\)\(..\)\(..\)\(..\)/\4\3\2\1/' | tr '[:lower:]' '[:upper:]')
+
+# Set MTOOLS_DATE_STRING for deterministic timestamps in FAT filesystem
+# This ensures mformat, mmd, and mcopy use consistent timestamps
+export MTOOLS_DATE_STRING=$(date -u -d "@$SOURCE_DATE_EPOCH" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || \
+                           date -u -r "$SOURCE_DATE_EPOCH" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || \
+                           echo "1970-01-01 00:00:00")
+
+# Normalize EFI file timestamp before copying
+touch -h -t "$TOUCH_TIME" "$EFI_FILE" 2>/dev/null || true
+
 # Create empty ESP image and format it as FAT32
 dd if=/dev/zero of="$ESP_IMAGE" bs=1M count=$ESP_SIZE_MB status=progress
-mformat -i "$ESP_IMAGE" -F -v "ESP" ::
+# Use deterministic serial number for reproducibility
+mformat -i "$ESP_IMAGE" -F -v "ESP" -N "$FAT_SERIAL" ::
 
 # Create EFI directory structure and copy the UKI file using mtools
+# MTOOLS_DATE_STRING ensures deterministic timestamps
 mmd -i "$ESP_IMAGE" ::EFI
 mmd -i "$ESP_IMAGE" ::EFI/BOOT
-mcopy -i "$ESP_IMAGE" "$EFI_FILE" ::EFI/BOOT/BOOTX64.EFI
+# -m preserves source file modification time (which we normalized above)
+mcopy -m -i "$ESP_IMAGE" "$EFI_FILE" ::EFI/BOOT/BOOTX64.EFI
 
 # Verify the EFI file was copied correctly
 echo "Verifying ESP contents..."
@@ -131,9 +152,13 @@ python3 << EOF
 import struct
 import uuid
 import time
+import os
 
 vhd_path = "$VHD_FILE"
 virtual_size = $VIRTUAL_SIZE
+
+# Use SOURCE_DATE_EPOCH for reproducible builds
+source_date_epoch = int(os.environ.get('SOURCE_DATE_EPOCH', '0'))
 
 # Calculate CHS geometry (using standard VHD algorithm)
 total_sectors = virtual_size // 512
@@ -177,9 +202,9 @@ struct.pack_into('>I', footer, 12, 0x00010000)
 struct.pack_into('>Q', footer, 16, 0xFFFFFFFFFFFFFFFF)
 
 # Timestamp (offset 24): seconds since 2000-01-01 00:00:00 UTC
+# Use SOURCE_DATE_EPOCH for reproducible builds
 epoch_2000 = 946684800  # Unix timestamp for 2000-01-01
-current_time = int(time.time())
-vhd_timestamp = current_time - epoch_2000
+vhd_timestamp = max(0, source_date_epoch - epoch_2000)  # Clamp to 0 if before 2000
 struct.pack_into('>I', footer, 24, vhd_timestamp)
 
 # Creator Application (offset 28): "qemu" (pretend to be qemu)
@@ -205,8 +230,10 @@ footer[59] = sectors_per_track
 # Disk Type (offset 60): 0x00000002 (fixed hard disk)
 struct.pack_into('>I', footer, 60, 0x00000002)
 
-# Unique ID (offset 68): random UUID
-footer[68:84] = uuid.uuid4().bytes
+# Unique ID (offset 68): deterministic UUID for reproducible builds
+# Use UUID v5 (SHA-1 namespace-based) with fixed namespace and name
+deterministic_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, 'kettle-vm-azsgx-devtools.vhd')
+footer[68:84] = deterministic_uuid.bytes
 
 # Saved State (offset 84): 0x00 (not in saved state)
 footer[84] = 0x00
@@ -338,7 +365,9 @@ echo "Successfully created VHD: $VHD_FILE"
 VHD_TAR_GZ="${VHD_FILE}.tar.gz"
 echo ""
 echo "Creating compressed version: $VHD_TAR_GZ"
-tar -czf "$VHD_TAR_GZ" -C "$OUTPUTDIR" "$(basename "$VHD_FILE")"
+# Use deterministic tar options for reproducible builds
+tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${SOURCE_DATE_EPOCH:-0}" \
+    -czf "$VHD_TAR_GZ" -C "$OUTPUTDIR" "$(basename "$VHD_FILE")"
 
 TAR_SIZE=$(stat -c%s "$VHD_TAR_GZ")
 echo "Compressed VHD created: $TAR_SIZE bytes"
