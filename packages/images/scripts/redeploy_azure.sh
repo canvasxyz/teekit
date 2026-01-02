@@ -5,10 +5,10 @@
 # Usage: ./redeploy_azure.sh <vhd-file> [vm-name] [--dry-run]
 #
 # The script will:
-# 1. Capture the existing VM's configuration (IP, NIC, NSG, tags, size, etc.)
+# 1. Capture the existing VM's configuration (IP, NIC, NSG, tags, size, disk size, etc.)
 # 2. Upload the VHD to blob storage and create an image version
 # 3. Delete the existing VM (but preserve NIC and public IP)
-# 4. Create a new VM from the new image attached to the existing NIC
+# 4. Create a new VM from the new image attached to the existing NIC with preserved disk size
 #
 # Prerequisites:
 # - Azure CLI installed and logged in (az login)
@@ -96,6 +96,7 @@ cleanup_on_failure() {
         echo "    --security-type TrustedLaunch \\"
         echo "    --image ${IMAGE_ID:-<image-id>} \\"
         echo "    --size ${PRESERVED_VM_SIZE:-$VM_SIZE} \\"
+        echo "    --os-disk-size-gb ${OS_DISK_SIZE_GB:-100} \\"
         echo "    --enable-vtpm true \\"
         echo "    --enable-secure-boot true"
     else
@@ -107,6 +108,7 @@ cleanup_on_failure() {
         echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
         echo "    --image ${IMAGE_ID:-<image-id>} \\"
         echo "    --size ${PRESERVED_VM_SIZE:-$VM_SIZE} \\"
+        echo "    --os-disk-size-gb ${OS_DISK_SIZE_GB:-100} \\"
         echo "    --enable-vtpm true \\"
         echo "    --enable-secure-boot false"
     fi
@@ -337,6 +339,16 @@ OS_DISK_NAME=$(az vm show --name "$VM_NAME" --resource-group "$RESOURCE_GROUP" \
     --query "storageProfile.osDisk.name" -o tsv)
 log_info "OS Disk (will be deleted): $OS_DISK_NAME"
 
+# Get OS disk size (default to 100 GB if not determinable)
+OS_DISK_SIZE_GB=$(az disk show --name "$OS_DISK_NAME" --resource-group "$RESOURCE_GROUP" \
+    --query "diskSizeGb" -o tsv 2>/dev/null || echo "")
+if [ -n "$OS_DISK_SIZE_GB" ]; then
+    log_info "OS Disk Size: ${OS_DISK_SIZE_GB} GB"
+else
+    OS_DISK_SIZE_GB="100"
+    log_warning "Could not determine OS disk size, using default: ${OS_DISK_SIZE_GB} GB"
+fi
+
 # Get boot diagnostics storage account
 BOOT_DIAG_STORAGE=$(az vm show --name "$VM_NAME" --resource-group "$RESOURCE_GROUP" \
     --query "diagnosticsProfile.bootDiagnostics.storageUri" -o tsv 2>/dev/null || echo "")
@@ -372,6 +384,9 @@ if [ -n "$PUBLIC_IP_NAME" ]; then
 fi
 if [ -n "$NSG_NAME" ]; then
     echo "    - NSG: $NSG_NAME"
+fi
+if [ -n "$OS_DISK_SIZE_GB" ]; then
+    echo "    - Disk Size: ${OS_DISK_SIZE_GB} GB"
 fi
 if [ "$VM_TAGS_JSON" != "{}" ] && [ "$VM_TAGS_JSON" != "null" ]; then
     echo "    - Tags: $VM_TAGS_JSON"
@@ -745,6 +760,9 @@ log_step "Creating new VM with existing network resources"
 log_info "Creating VM: $VM_NAME"
 log_info "Image Version: $IMAGE_VERSION"
 log_info "Size: $PRESERVED_VM_SIZE"
+if [ -n "$OS_DISK_SIZE_GB" ]; then
+    log_info "Disk Size: ${OS_DISK_SIZE_GB} GB"
+fi
 log_info "NIC: $NIC_NAME"
 log_info "This may take 5-10 minutes..."
 
@@ -780,6 +798,11 @@ else
     )
 fi
 
+# Add OS disk size if captured
+if [ -n "$OS_DISK_SIZE_GB" ]; then
+    VM_CREATE_CMD+=(--os-disk-size-gb "$OS_DISK_SIZE_GB")
+fi
+
 # Add boot diagnostics if available
 if [ -n "$BOOT_DIAG_STORAGE_NAME" ]; then
     VM_CREATE_CMD+=(--boot-diagnostics-storage "$BOOT_DIAG_STORAGE_NAME")
@@ -807,6 +830,7 @@ if ! "${VM_CREATE_CMD[@]}"; then
         echo "    --security-type TrustedLaunch \\"
         echo "    --image ${IMAGE_ID} \\"
         echo "    --size ${PRESERVED_VM_SIZE} \\"
+        echo "    --os-disk-size-gb ${OS_DISK_SIZE_GB} \\"
         echo "    --enable-vtpm true \\"
         echo "    --enable-secure-boot true"
     else
@@ -818,6 +842,7 @@ if ! "${VM_CREATE_CMD[@]}"; then
         echo "    --os-disk-security-encryption-type VMGuestStateOnly \\"
         echo "    --image ${IMAGE_ID} \\"
         echo "    --size ${PRESERVED_VM_SIZE} \\"
+        echo "    --os-disk-size-gb ${OS_DISK_SIZE_GB} \\"
         echo "    --enable-vtpm true \\"
         echo "    --enable-secure-boot false"
     fi
@@ -915,6 +940,9 @@ if [ -n "$PUBLIC_IP_NAME" ]; then
 fi
 if [ -n "$NSG_NAME" ]; then
     echo "  - NSG: $NSG_NAME"
+fi
+if [ -n "$OS_DISK_SIZE_GB" ]; then
+    echo "  - Disk Size: ${OS_DISK_SIZE_GB} GB"
 fi
 if [ "$VM_TAGS_JSON" != "{}" ] && [ "$VM_TAGS_JSON" != "null" ]; then
     echo "  - Tags: $VM_TAGS_JSON"
