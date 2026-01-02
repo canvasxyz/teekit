@@ -91,19 +91,41 @@ create_persistent_partition() {
 
     log "Creating persistent partition on $disk..."
 
-    # Use sfdisk to add partition 2 (after EFI partition)
-    # Start at 1GB offset to leave room for EFI, use rest of disk
-    # We use a simple approach: partition 2 starting at sector 2099200 (1GB with 512-byte sectors)
-
     # First, check current partition table
     if sfdisk -d "$disk" 2>/dev/null | grep -q "^${part_device}"; then
         log "Partition already exists in partition table"
         return 0
     fi
 
-    # Add partition 2 using sfdisk
-    # Start after 1GB, type 83 (Linux)
-    echo "2097152,,L" | sfdisk --append "$disk" 2>&1 || {
+    # Find where partition 1 ends so we can start partition 2 after it
+    # The EFI partition is typically 1GB starting at sector 2048, ending at 2099199
+    # We need to start partition 2 at the next sector after partition 1 ends
+    local part1_device
+    part1_device=$(get_partition_device "$disk" 1)
+    local part1_end
+    # sfdisk -l prints different column orders for GPT vs DOS tables
+    # using sfdisk -d instead to give a stable "start=… size=…" list,
+    # then calculate "start + size - 1" as the start of partition 2
+    part1_end=$(sfdisk -d "$disk" 2>/dev/null | awk -v dev="$part1_device" '
+        $1 == dev {
+            match($0, /start= *([0-9]+)/, start_match)
+            match($0, /size= *([0-9]+)/, size_match)
+            if (start_match[1] != "" && size_match[1] != "") {
+                print start_match[1] + size_match[1] - 1
+                exit
+            }
+        }')
+
+    if [ -z "$part1_end" ]; then
+        error "Could not determine end of partition 1"
+        return 1
+    fi
+
+    local part2_start=$((part1_end + 1))
+    log "Partition 1 ends at sector $part1_end, starting partition 2 at sector $part2_start"
+
+    # Add partition 2 using sfdisk, starting right after partition 1
+    echo "${part2_start},,L" | sfdisk --append "$disk" 2>&1 || {
         error "Failed to create partition with sfdisk"
         return 1
     }
