@@ -12,7 +12,7 @@
 #
 # Prerequisites:
 # - Azure CLI installed and logged in (az login)
-# - Resource group 'tdx-group' exists
+# - Resource group 'az-group' exists, or another group is provided in .resourcegroup
 #
 # The script automatically creates the following resources if they don't exist:
 # - Azure Compute Gallery 'tdxGallery'
@@ -26,7 +26,7 @@ RESOURCE_GROUP_FILE=".resourcegroup"
 if [ -f "$RESOURCE_GROUP_FILE" ]; then
     RESOURCE_GROUP=$(cat "$RESOURCE_GROUP_FILE")
 else
-    RESOURCE_GROUP="tdx-group"
+    RESOURCE_GROUP="az-group"
 fi
 GALLERY_NAME_FILE=".galleryname"
 if [ -f "$GALLERY_NAME_FILE" ]; then

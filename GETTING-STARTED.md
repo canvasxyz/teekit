@@ -8,17 +8,6 @@ your application. Code running inside cannot be observed or tampered
 with by the cloud provider. Clients can cryptographically verify
 they're talking to your exact code via remote attestation.
 
-Compared to TDX, SEV-SNP is a earlier generation technology that has
-been in general availability for longer (~3-4 years vs. ~1-2 years).
-It is available on more platforms (including Google Cloud, AWS, Azure)
-and has better support for using sealing keys to persisting data.
-
-Tradeoffs include weaker isolation at the hypervisor level, and thus,
-a lessened security posture against malicious cloud providers.
-However, given that neither Intel nor AMD consider hardware attacks on
-memory encryption to be within their security model, we consider
-SEV-SNP to be an essentially equivalent technology to Intel TDX.
-
 ## Overview
 
 1. Set up a builder machine

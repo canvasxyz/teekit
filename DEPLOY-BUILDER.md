@@ -28,8 +28,9 @@ gcloud compute instances create gcp-builder \
       '
 
 # For Azure:
+az group create --location eastus --resource-group eastus-group
 az vm create \
-      --resource-group tdx-group \
+      --resource-group eastus-group \
       --name azure-builder \
       --image Canonical:ubuntu-24_04-lts:server:latest \
       --size Standard_D4s_v3 \
@@ -45,7 +46,7 @@ SSH into the VM:
 gcloud compute ssh gcp-builder
 
 # For Azure:
-az ssh vm --resource-group tdx-group --name azure-builder --local-user azureuser
+az ssh vm --resource-group eastus-group --name azure-builder --local-user azureuser
 ```
 
 For Azure, grant /dev/kvm permissions to the current user:
