@@ -7,8 +7,9 @@
 # The script will:
 # 1. Capture the existing VM's configuration (IP, metadata, machine type, etc.)
 # 2. Upload the tar.gz to Cloud Storage and create a new image
-# 3. Delete the existing VM (but preserve static IP if possible)
+# 3. Preserve the boot disk and delete the existing VM (but preserve static IP if possible)
 # 4. Create a new VM from the new image with the same configuration
+# 5. Attach the old boot disk as a data disk so preserved data can be accessed
 #
 # Prerequisites:
 # - Google Cloud CLI installed and logged in (gcloud auth login)
@@ -95,6 +96,8 @@ cleanup_on_failure() {
         IP_REGION=$(echo "${VM_ZONE:-$DEFAULT_ZONE}" | sed 's/-[a-z]$//')
         echo "  gcloud compute addresses delete ${STATIC_IP_NAME} --region=$IP_REGION --quiet 2>/dev/null"
     fi
+    echo ""
+    echo "The old boot disk '${OLD_BOOT_DISK_NAME:-unknown}' has been preserved and can be attached to a new VM."
     exit 1
 }
 
@@ -265,7 +268,11 @@ fi
 
 log_success "Found VM: $VM_NAME"
 
-# Get boot disk size
+# Get boot disk name and size (we'll preserve this disk)
+OLD_BOOT_DISK_NAME=$(gcloud compute instances describe "$VM_NAME" --zone="$VM_ZONE" \
+    --format='get(disks[0].source)' | xargs basename)
+log_info "Boot Disk (will be preserved): $OLD_BOOT_DISK_NAME"
+
 PRESERVED_DISK_SIZE=$(gcloud compute instances describe "$VM_NAME" --zone="$VM_ZONE" \
     --format='get(disks[0].diskSizeGb)')
 PRESERVED_DISK_SIZE="${PRESERVED_DISK_SIZE}GB"
@@ -336,9 +343,9 @@ echo "    - Create Machine Type: $NEW_MACHINE_TYPE"
 echo ""
 echo "  DELETE:"
 echo "    - VM: $VM_NAME"
-echo "    - Boot disk (auto-deleted with VM)"
 echo ""
 echo "  PRESERVE:"
+echo "    - Boot Disk: $OLD_BOOT_DISK_NAME (will be attached as data disk)"
 echo "    - Boot Disk Size: $PRESERVED_DISK_SIZE"
 echo "    - Network Tags: $VM_TAGS"
 echo "    - Metadata: $(echo "$VM_METADATA_JSON" | jq -c '.metadata.items // []')"
@@ -453,11 +460,20 @@ if [ "$PROMOTED_IP" = true ] && [ -n "$CURRENT_EXTERNAL_IP" ]; then
 fi
 
 # ============================================================================
-# STEP 8: Delete existing VM
+# STEP 8: Preserve boot disk and delete existing VM
 # ============================================================================
-log_step "Deleting existing VM"
+log_step "Preserving boot disk and deleting existing VM"
 
-log_info "Deleting VM: $VM_NAME..."
+# Disable auto-delete on the boot disk so it survives VM deletion
+log_info "Disabling auto-delete on boot disk: $OLD_BOOT_DISK_NAME"
+if ! gcloud compute instances set-disk-auto-delete "$VM_NAME" \
+    --zone="$VM_ZONE" \
+    --disk="$OLD_BOOT_DISK_NAME" \
+    --no-auto-delete; then
+    log_warning "Could not disable auto-delete on boot disk (may already be set)"
+fi
+
+log_info "Deleting VM: $VM_NAME (boot disk will be preserved)..."
 
 if ! gcloud compute instances delete "$VM_NAME" \
     --zone="$VM_ZONE" \
@@ -467,6 +483,7 @@ if ! gcloud compute instances delete "$VM_NAME" \
 fi
 
 log_success "Deleted VM: $VM_NAME"
+log_info "Boot disk preserved: $OLD_BOOT_DISK_NAME"
 
 # Wait a moment for resources to be fully released
 log_info "Waiting for resources to be released..."
@@ -524,7 +541,28 @@ fi
 log_success "Created VM: $VM_NAME"
 
 # ============================================================================
-# STEP 10: Verify deployment
+# STEP 10: Attach preserved boot disk as data disk
+# ============================================================================
+log_step "Attaching preserved boot disk as data disk"
+
+log_info "Attaching old boot disk '$OLD_BOOT_DISK_NAME' as data disk..."
+
+if gcloud compute instances attach-disk "$VM_NAME" \
+    --zone="$VM_ZONE" \
+    --disk="$OLD_BOOT_DISK_NAME" \
+    --device-name="old-boot-disk" \
+    --mode=rw 2>/dev/null; then
+    log_success "Attached old boot disk as data disk"
+    log_info "The old boot disk data will be accessible at /dev/sdb (or similar) inside the VM"
+    log_info "Mount it to access preserved data: mount /dev/sdb2 /mnt/old-disk"
+else
+    log_warning "Could not attach old boot disk as data disk"
+    log_info "You can manually attach it later:"
+    log_info "  gcloud compute instances attach-disk $VM_NAME --zone=$VM_ZONE --disk=$OLD_BOOT_DISK_NAME"
+fi
+
+# ============================================================================
+# STEP 11: Verify deployment
 # ============================================================================
 log_step "Verifying deployment"
 
@@ -604,12 +642,20 @@ echo "  - Blob: $BLOB_NAME"
 echo "  - Image: $NEW_IMAGE_NAME"
 echo ""
 echo "Configuration preserved:"
+echo "  - Old Boot Disk: $OLD_BOOT_DISK_NAME (attached as data disk)"
 echo "  - Boot Disk Size: $PRESERVED_DISK_SIZE"
 echo "  - Network Tags: $VM_TAGS"
 if [ -n "$STATIC_IP_NAME" ]; then
     echo "  - Static IP: $STATIC_IP_NAME"
 fi
 echo "  - Metadata: $(echo "$VM_METADATA_JSON" | jq -c '.metadata.items // []')"
+echo ""
+echo "Access preserved data from the old boot disk:"
+echo "  # Inside the VM, find the attached disk (usually /dev/sdb)"
+echo "  lsblk"
+echo "  # Mount the old root partition"
+echo "  mkdir -p /mnt/old-disk"
+echo "  mount /dev/sdb2 /mnt/old-disk"
 echo ""
 echo "Test the VM:"
 echo "  curl http://${NEW_EXTERNAL_IP}:3001/uptime"
@@ -628,6 +674,10 @@ echo ""
 echo "Cleanup commands (for the new image resources, if needed):"
 echo "  gcloud compute images delete $NEW_IMAGE_NAME --quiet"
 echo "  gcloud storage rm gs://${BUCKET_NAME}/${BLOB_NAME}"
+echo ""
+echo "To detach and delete the preserved old boot disk (when no longer needed):"
+echo "  gcloud compute instances detach-disk $VM_NAME --zone=$VM_ZONE --disk=$OLD_BOOT_DISK_NAME"
+echo "  gcloud compute disks delete $OLD_BOOT_DISK_NAME --zone=$VM_ZONE --quiet"
 if [ "$PROMOTED_IP" = true ] && [ -n "$STATIC_IP_NAME" ]; then
     IP_REGION=$(echo "$VM_ZONE" | sed 's/-[a-z]$//')
     echo ""
