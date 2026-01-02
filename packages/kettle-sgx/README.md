@@ -45,7 +45,7 @@ sudo chown $USER:$USER /opt/kettle
 npm install
 npm run build
 
-cd packages/gramine
+cd packages/kettle-sgx
 npm run build:bundle    # Run ./scripts/build-kettle-bundle.sh
 npm run build:enclave   # Run Gramine build, sign the enclave
 SGX=1 make run          # Run the kettle at http://localhost:3001

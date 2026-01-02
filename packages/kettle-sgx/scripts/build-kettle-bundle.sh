@@ -12,8 +12,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GRAMINE_DIR="$(dirname "$SCRIPT_DIR")"
-REPO_ROOT="$(dirname "$(dirname "$GRAMINE_DIR")")"
+KETTLE_SGX_DIR="$(dirname "$SCRIPT_DIR")"
+REPO_ROOT="$(dirname "$(dirname "$KETTLE_SGX_DIR")")"
 KETTLE_DIR="$REPO_ROOT/packages/kettle"
 OUTPUT_DIR="${OUTPUT_DIR:-/opt/kettle}"
 
@@ -57,7 +57,7 @@ npm run build:worker
 
 # Build sgx-entrypoint (combined quote service + workerd launcher)
 log_info "Building sgx-entrypoint..."
-cd "$GRAMINE_DIR"
+cd "$KETTLE_SGX_DIR"
 make -f sgx-entrypoint.mk
 
 # Create output directory
@@ -69,10 +69,10 @@ log_info "Copying bundle files to $OUTPUT_DIR..."
 cp "$KETTLE_DIR/dist/app.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/worker.js" "$OUTPUT_DIR/"
 cp "$KETTLE_DIR/dist/externals.js" "$OUTPUT_DIR/"
-cp "$GRAMINE_DIR/workerd.config.capnp" "$OUTPUT_DIR/"
+cp "$KETTLE_SGX_DIR/workerd.config.capnp" "$OUTPUT_DIR/"
 
 # Copy sgx-entrypoint
-cp "$GRAMINE_DIR/sgx-entrypoint" "$OUTPUT_DIR/"
+cp "$KETTLE_SGX_DIR/sgx-entrypoint" "$OUTPUT_DIR/"
 chmod +x "$OUTPUT_DIR/sgx-entrypoint"
 
 # Copy static files if they exist
@@ -88,5 +88,5 @@ echo "Bundle contents:"
 ls -la "$OUTPUT_DIR"
 echo ""
 echo "Next steps:"
-echo "  1. Build the SGX enclave: cd packages/gramine && npm run build:enclave"
+echo "  1. Build the SGX enclave: cd packages/kettle-sgx && npm run build:enclave"
 echo "  2. Run the enclave: make run"

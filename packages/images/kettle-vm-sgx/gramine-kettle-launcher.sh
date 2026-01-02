@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Kettle launcher for Gramine SGX in mkosi image
-# Adapted from packages/gramine/scripts/kettle-launcher.sh
+# Adapted from packages/kettle-sgx/scripts/kettle-launcher.sh
 
 LOG_PREFIX="[gramine-kettle-launcher]"
 SERIAL_CONSOLE="/dev/ttyS0"

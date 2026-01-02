@@ -23,8 +23,8 @@ mounts:
   - location: ABSOLUTE_IMAGES_PATH
     mountPoint: /home/debian/mnt
     writable: true
-  - location: ABSOLUTE_IMAGES_PATH/../gramine
-    mountPoint: /home/debian/mnt/gramine
+  - location: ABSOLUTE_IMAGES_PATH/../kettle-sgx
+    mountPoint: /home/debian/mnt/kettle-sgx
     writable: false
 ssh:
   forwardAgent: true

@@ -5,8 +5,8 @@ set -euo pipefail
 # This copies workerd and kettle bundles. Gramine manifest generation
 # happens in postinst where gramine tools are available via mkosi-chroot.
 
-# Reference gramine via symlink (gramine -> ../gramine) to avoid file duplication
-GRAMINE_SRC="$SRCDIR/gramine"
+# Reference kettle-sgx via symlink (kettle-sgx -> ../kettle-sgx) to avoid file duplication
+KETTLE_SGX_SRC="$SRCDIR/kettle-sgx"
 KETTLE_ARTIFACTS="$SRCDIR/kettle-artifacts"
 KETTLE_DIR="$DESTDIR/opt/kettle"
 
@@ -18,11 +18,11 @@ mkdir -p "$KETTLE_DIR/src"
 
 # 1. Decompress workerd binary
 echo "Decompressing workerd..."
-if [ -f "$GRAMINE_SRC/workerd.zst" ]; then
-    zstd -d "$GRAMINE_SRC/workerd.zst" -o "$KETTLE_DIR/workerd"
+if [ -f "$KETTLE_SGX_SRC/workerd.zst" ]; then
+    zstd -d "$KETTLE_SGX_SRC/workerd.zst" -o "$KETTLE_DIR/workerd"
     chmod +x "$KETTLE_DIR/workerd"
 else
-    echo "ERROR: workerd.zst not found at $GRAMINE_SRC/workerd.zst"
+    echo "ERROR: workerd.zst not found at $KETTLE_SGX_SRC/workerd.zst"
     exit 1
 fi
 
@@ -40,10 +40,10 @@ fi
 
 # 3. Copy Gramine manifest template for postinst processing
 echo "Copying Gramine manifest template..."
-if [ -f "$GRAMINE_SRC/workerd.manifest.template" ]; then
-    cp "$GRAMINE_SRC/workerd.manifest.template" "$KETTLE_DIR/workerd.manifest.template"
+if [ -f "$KETTLE_SGX_SRC/workerd.manifest.template" ]; then
+    cp "$KETTLE_SGX_SRC/workerd.manifest.template" "$KETTLE_DIR/workerd.manifest.template"
 else
-    echo "ERROR: workerd.manifest.template not found at $GRAMINE_SRC"
+    echo "ERROR: workerd.manifest.template not found at $KETTLE_SGX_SRC"
     exit 1
 fi
 
@@ -58,12 +58,12 @@ fi
 
 # 5. Copy pre-built sgx-entrypoint (combined quote service + workerd launcher)
 echo "Copying sgx-entrypoint..."
-if [ -f "$GRAMINE_SRC/sgx-entrypoint" ]; then
-    cp "$GRAMINE_SRC/sgx-entrypoint" "$KETTLE_DIR/"
+if [ -f "$KETTLE_SGX_SRC/sgx-entrypoint" ]; then
+    cp "$KETTLE_SGX_SRC/sgx-entrypoint" "$KETTLE_DIR/"
     chmod +x "$KETTLE_DIR/sgx-entrypoint"
     echo "Copied sgx-entrypoint binary ($(stat -c%s $KETTLE_DIR/sgx-entrypoint | numfmt --to=iec-i --suffix=B))"
 else
-    echo "ERROR: sgx-entrypoint binary not found at $GRAMINE_SRC"
+    echo "ERROR: sgx-entrypoint binary not found at $KETTLE_SGX_SRC"
     echo "       Run prep_kettle.sh to build it first"
     exit 1
 fi
@@ -71,12 +71,12 @@ fi
 # 6. Copy deterministic enclave signing key for reproducible builds
 echo "Copying enclave signing key..."
 mkdir -p "$KETTLE_DIR/keys"
-if [ -f "$GRAMINE_SRC/keys/enclave-key.pem" ]; then
-    cp "$GRAMINE_SRC/keys/enclave-key.pem" "$KETTLE_DIR/keys/"
+if [ -f "$KETTLE_SGX_SRC/keys/enclave-key.pem" ]; then
+    cp "$KETTLE_SGX_SRC/keys/enclave-key.pem" "$KETTLE_DIR/keys/"
     chmod 600 "$KETTLE_DIR/keys/enclave-key.pem"
     echo "Copied deterministic enclave signing key"
 else
-    echo "ERROR: enclave-key.pem not found at $GRAMINE_SRC/keys/"
+    echo "ERROR: enclave-key.pem not found at $KETTLE_SGX_SRC/keys/"
     echo "       Run prep_kettle.sh to prepare it first"
     exit 1
 fi

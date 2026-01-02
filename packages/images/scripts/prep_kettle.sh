@@ -38,15 +38,15 @@ node "$CLI_COMPILED" build-worker
 echo "Generating manifest..."
 node "$CLI_COMPILED" publish-local "dist/app.js" --path "/lib/kettle/app.js"
 
-# 6. Build sgx-entrypoint and create hardlinks to gramine files
+# 6. Build sgx-entrypoint and create hardlinks to kettle-sgx files
 echo "Building sgx-entrypoint binary..."
-GRAMINE_SRC="$REPO_ROOT/packages/gramine"
-GRAMINE_DEST="$IMAGES_DIR/gramine"
-mkdir -p "$GRAMINE_DEST"
+KETTLE_SGX_SRC="$REPO_ROOT/packages/kettle-sgx"
+KETTLE_SGX_DEST="$IMAGES_DIR/kettle-sgx"
+mkdir -p "$KETTLE_SGX_DEST"
 
 # Build sgx-entrypoint using go (must be done before mkosi build)
 (
-    cd "$GRAMINE_SRC"
+    cd "$KETTLE_SGX_SRC"
     # Clean any previous build
     rm -f sgx-entrypoint
     # Build with reproducible flags (from sgx-entrypoint.mk)
@@ -60,15 +60,15 @@ mkdir -p "$GRAMINE_DEST"
 )
 
 # Use hardlinks to avoid file duplication (same inode, no extra disk space)
-ln -f "$GRAMINE_SRC/sgx-entrypoint" "$GRAMINE_DEST/"
-ln -f "$GRAMINE_SRC/sgx-entrypoint.go" "$GRAMINE_DEST/"
-ln -f "$GRAMINE_SRC/sgx-entrypoint.mk" "$GRAMINE_DEST/"
-ln -f "$GRAMINE_SRC/workerd.manifest.template" "$GRAMINE_DEST/"
-ln -f "$GRAMINE_SRC/workerd.zst" "$GRAMINE_DEST/"
+ln -f "$KETTLE_SGX_SRC/sgx-entrypoint" "$KETTLE_SGX_DEST/"
+ln -f "$KETTLE_SGX_SRC/sgx-entrypoint.go" "$KETTLE_SGX_DEST/"
+ln -f "$KETTLE_SGX_SRC/sgx-entrypoint.mk" "$KETTLE_SGX_DEST/"
+ln -f "$KETTLE_SGX_SRC/workerd.manifest.template" "$KETTLE_SGX_DEST/"
+ln -f "$KETTLE_SGX_SRC/workerd.zst" "$KETTLE_SGX_DEST/"
 
 # Generate or copy deterministic enclave signing key for reproducible builds
 mkdir -p "$IMAGES_DIR/kettle-vm-sgx/keys"
-mkdir -p "$GRAMINE_DEST/keys"
+mkdir -p "$KETTLE_SGX_DEST/keys"
 
 if [ ! -f "$IMAGES_DIR/kettle-vm-sgx/keys/enclave-key.pem" ]; then
     echo "Generating deterministic enclave signing key..."
@@ -78,8 +78,8 @@ if [ ! -f "$IMAGES_DIR/kettle-vm-sgx/keys/enclave-key.pem" ]; then
     echo "Generated enclave-key.pem (development key)"
 fi
 
-cp "$IMAGES_DIR/kettle-vm-sgx/keys/enclave-key.pem" "$GRAMINE_DEST/keys/"
-echo "Copied enclave signing key to gramine/"
+cp "$IMAGES_DIR/kettle-vm-sgx/keys/enclave-key.pem" "$KETTLE_SGX_DEST/keys/"
+echo "Copied enclave signing key to kettle-sgx/"
 
 # 7. Copy necessary files to images directory for mkosi
 echo "Copying artifacts to images directory..."
@@ -98,10 +98,10 @@ TOUCH_TIME=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || \
 
 echo "Normalizing artifact timestamps to $TOUCH_TIME..."
 find "$IMAGES_DIR/kettle-artifacts" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
-find "$IMAGES_DIR/gramine" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
+find "$IMAGES_DIR/kettle-sgx" -exec touch -h -t "$TOUCH_TIME" {} \; 2>/dev/null || true
 touch -h -t "$TOUCH_TIME" "$IMAGES_DIR/cli.bundle.js" 2>/dev/null || true
 # Ensure the key file also has normalized timestamp
-touch -h -t "$TOUCH_TIME" "$IMAGES_DIR/gramine/keys/enclave-key.pem" 2>/dev/null || true
+touch -h -t "$TOUCH_TIME" "$IMAGES_DIR/kettle-sgx/keys/enclave-key.pem" 2>/dev/null || true
 
 echo "Kettle artifacts prepared successfully!"
 echo "  - CLI bundle: $IMAGES_DIR/cli.bundle.js"
