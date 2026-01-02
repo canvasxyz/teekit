@@ -1,10 +1,10 @@
 import { join } from "path"
-import { startWorker, WorkerResult } from "../services/startWorker.js"
+import { startWorker, WorkerResult } from "../src/startWorker.js"
 import {
   findFreePort,
   waitForPortClosed,
   waitForPortOpen,
-} from "../services/utils.js"
+} from "../src/utils.js"
 import { TunnelClient } from "@teekit/tunnel"
 import { base64 } from "@scure/base"
 import { hex, parseTdxQuote, parseSevSnpReport } from "@teekit/qvl"

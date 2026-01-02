@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Bundle the Kettle CLI into a single ESM file using esbuild.
-# Output: packages/kettle/services/lib/cli.bundle.js
+# Output: packages/kettle/src/lib/cli.bundle.js
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Repo root is two levels up from packages/images
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-ENTRY_REL="packages/kettle/services/cli.ts"
+ENTRY_REL="packages/kettle/src/cli.ts"
 OUT_REL="packages/images/cli.bundle.js"
 
 ENTRY_PATH="$REPO_ROOT/$ENTRY_REL"

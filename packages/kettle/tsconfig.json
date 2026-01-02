@@ -4,5 +4,5 @@
 	"compilerOptions": {
 		"noEmit": true
 	},
-	"references": [{ "path": "./services" }, { "path": "../qvl" }, { "path": "../tunnel" }]
+	"references": [{ "path": "./src" }, { "path": "../qvl" }, { "path": "../tunnel" }]
 }

@@ -7,10 +7,10 @@ quote generation, and SQLite storage (via Durable Objects SQL API).
 The kettle now uses workerd's built-in Durable Objects SQLite storage
 instead of external SQLCipher:
 
-- Created `services/worker/do-db.ts` - DO SQL adapter implementing SqliteClient interface
-- Modified `services/worker/db.ts` - Added DO storage detection in getDb()
-- Modified `services/worker/worker.ts` - Exposed ctx.storage to app via env
-- Modified `services/startWorker.ts` - Uses DO SQLite with localDisk storage
+- Created `src/worker/do-db.ts` - DO SQL adapter implementing SqliteClient interface
+- Modified `src/worker/db.ts` - Added DO storage detection in getDb()
+- Modified `src/worker/worker.ts` - Exposed ctx.storage to app via env
+- Modified `src/startWorker.ts` - Uses DO SQLite with localDisk storage
 - Updated workerd capnp config to use `enableSql = true` and `localDisk` storage
   
 ## Usage

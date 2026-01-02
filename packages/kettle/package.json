@@ -3,23 +3,23 @@
 	"version": "0.0.5",
 	"type": "module",
 	"bin": {
-		"kettle": "services/lib/cli.js"
+		"kettle": "src/lib/cli.js"
 	},
 	"scripts": {
-		"clean": "rm -rf dist/* services/lib/* test/lib/* *.tsbuildinfo",
+		"clean": "rm -rf dist/* src/lib/* test/lib/* *.tsbuildinfo",
 		"build": "npm run build:worker && npm run build:client",
 		"build:client": "vite build",
 		"build:client:watch": "vite",
-		"build:worker": "tsc --build services && node services/lib/cli.js build-app && node services/lib/cli.js build-worker",
-		"start:worker": "node services/lib/cli.js start-worker app.ts",
-		"start:launcher": "node services/lib/cli.js publish-local app.ts && node services/lib/cli.js launch manifest.json",
-		"start:launcher:remote": "node services/lib/cli.js publish app.ts && node services/lib/cli.js launch manifest.json",
+		"build:worker": "tsc --build src && node src/lib/cli.js build-app && node src/lib/cli.js build-worker",
+		"start:worker": "node src/lib/cli.js start-worker app.ts",
+		"start:launcher": "node src/lib/cli.js publish-local app.ts && node src/lib/cli.js launch manifest.json",
+		"start:launcher:remote": "node src/lib/cli.js publish app.ts && node src/lib/cli.js launch manifest.json",
 		"pretest": "npm run build",
 		"test": "ava --serial"
 	},
 	"exports": {
-		".": "./services/lib/index.js",
-		"./worker": "./services/lib/worker/index.js"
+		".": "./src/lib/index.js",
+		"./worker": "./src/lib/worker/index.js"
 	},
 	"dependencies": {
 		"@scure/base": "^2.0.0",

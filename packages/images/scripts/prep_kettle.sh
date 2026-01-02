@@ -18,9 +18,9 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
-# 2. Compile TypeScript services
-echo "Compiling kettle services..."
-npx tsc --build services
+# 2. Compile TypeScript sources
+echo "Compiling kettle sources..."
+npx tsc --build src
 
 # 3. Build CLI bundle
 echo "Building CLI bundle..."
@@ -30,7 +30,7 @@ echo "Building CLI bundle..."
 # The CLI expects relative paths from the kettle directory
 echo "Building app and worker..."
 cd "$KETTLE_DIR"
-CLI_COMPILED="$KETTLE_DIR/services/lib/cli.js"
+CLI_COMPILED="$KETTLE_DIR/src/lib/cli.js"
 node "$CLI_COMPILED" build-app "app.ts"
 node "$CLI_COMPILED" build-worker
 

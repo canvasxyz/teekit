@@ -1,4 +1,4 @@
-services/lib/
+src/lib/
 workerd.config.tmp.capnp
 manifest.json
 app-remote.tmp.ts
