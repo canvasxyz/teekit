@@ -259,6 +259,7 @@ function App() {
   const handleKvPut = async () => {
     if (!kvKey.trim() || !kvValue.trim()) {
       setKvStatus("Key and value are required.")
+      setKvResult("")
       return
     }
     setKvBusy(true)
@@ -287,6 +288,7 @@ function App() {
   const handleKvGet = async () => {
     if (!kvKey.trim()) {
       setKvStatus("Key is required.")
+      setKvResult("")
       return
     }
     setKvBusy(true)
@@ -320,6 +322,12 @@ function App() {
       return
     }
     await handleKvPut()
+  }
+
+  const selectKvCommand = (command: "init" | "get" | "put") => {
+    setKvCommand(command)
+    setKvStatus("")
+    setKvResult("")
   }
 
   return (
@@ -572,21 +580,21 @@ function App() {
             <div className="kv-command-row">
               <button
                 className={`kv-command-button ${kvCommand === "init" ? "active" : ""}`}
-                onClick={() => setKvCommand("init")}
+                onClick={() => selectKvCommand("init")}
                 disabled={kvBusy}
               >
                 Init
               </button>
               <button
                 className={`kv-command-button ${kvCommand === "get" ? "active" : ""}`}
-                onClick={() => setKvCommand("get")}
+                onClick={() => selectKvCommand("get")}
                 disabled={kvBusy}
               >
                 Get
               </button>
               <button
                 className={`kv-command-button ${kvCommand === "put" ? "active" : ""}`}
-                onClick={() => setKvCommand("put")}
+                onClick={() => selectKvCommand("put")}
                 disabled={kvBusy}
               >
                 Put
