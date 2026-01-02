@@ -4,7 +4,7 @@ import { tmpdir } from "os"
 import { join } from "path"
 import { fileURLToPath } from "url"
 
-import { buildKettleApp, buildKettleExternals } from "../src/index.js"
+import { buildKettleApp, buildKettleExternals } from "../lib/index.js"
 
 test.serial("build worker", async (t) => {
   const subpackageDir = fileURLToPath(new URL("..", import.meta.url))

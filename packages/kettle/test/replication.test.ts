@@ -1,7 +1,7 @@
 import test from "ava"
 import { join } from "path"
-import { startWorker } from "../src/startWorker.js"
-import { findFreePort, waitForPortOpen } from "../src/utils.js"
+import { startWorker } from "../lib/startWorker.js"
+import { findFreePort, waitForPortOpen } from "../lib/utils.js"
 import { fileURLToPath } from "url"
 
 /**

@@ -30,7 +30,7 @@ echo "Building CLI bundle..."
 # The CLI expects relative paths from the kettle directory
 echo "Building app and worker..."
 cd "$KETTLE_DIR"
-CLI_COMPILED="$KETTLE_DIR/src/lib/cli.js"
+CLI_COMPILED="$KETTLE_DIR/lib/cli.js"
 node "$CLI_COMPILED" build-app "app.ts"
 node "$CLI_COMPILED" build-worker
 

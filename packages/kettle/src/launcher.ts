@@ -13,7 +13,7 @@ const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
 const KETTLE_DIR =
   DIR_NAME === "lib"
-    ? join(CURRENT_DIR, "..", "..")
+    ? join(CURRENT_DIR, "..")
     : join(CURRENT_DIR, "..")
 
 interface Manifest {

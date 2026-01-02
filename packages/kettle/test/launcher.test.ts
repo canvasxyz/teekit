@@ -17,7 +17,7 @@ import {
   findFreePort,
   waitForPortOpen,
   waitForPortClosed,
-} from "../src/utils.js"
+} from "../lib/utils.js"
 
 interface LauncherProcess {
   process: ChildProcess
@@ -30,7 +30,7 @@ async function startLauncher(
   port: number,
 ): Promise<LauncherProcess> {
   const kettleDir = fileURLToPath(new URL("..", import.meta.url))
-  const cliPath = join(kettleDir, "src", "lib", "cli.js")
+  const cliPath = join(kettleDir, "lib", "cli.js")
 
   return new Promise((resolve, reject) => {
     const proc = spawn(

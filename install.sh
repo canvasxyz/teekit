@@ -20,6 +20,6 @@ else
     touch ${INSTALL_PATH}
     echo "#!/usr/bin/env bash" >> ${INSTALL_PATH}
 fi
-echo "node ${PWD}/packages/kettle/src/lib/cli.js \"\$@\"" >> ${INSTALL_PATH}
+echo "node ${PWD}/packages/kettle/lib/cli.js \"\$@\"" >> ${INSTALL_PATH}
 chmod +x ${INSTALL_PATH}
 echo "Done!"

@@ -16,7 +16,7 @@ import { buildKettleApp, buildKettleExternals } from "./buildWorker.js"
 const CURRENT_DIR = fileURLToPath(new URL(".", import.meta.url))
 const DIR_NAME = basename(CURRENT_DIR)
 const PACKAGE_ROOT =
-  DIR_NAME === "lib" ? join(CURRENT_DIR, "..", "..") : join(CURRENT_DIR, "..")
+  DIR_NAME === "lib" ? join(CURRENT_DIR, "..") : join(CURRENT_DIR, "..")
 
 export interface WorkerConfig {
   workerPort: number
