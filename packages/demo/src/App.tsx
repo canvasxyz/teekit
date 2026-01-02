@@ -20,8 +20,8 @@ import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
 
 const REMOTES = [
-  { label: "Azure SGX", url: "https://20.62.0.14.canvas.xyz" },
-  { label: "Azure SGX", url: "http://20.62.0.14:3001" },
+  { label: "Azure SGX", url: "https://52.191.114.221.sslip.io" },
+  { label: "Azure SGX", url: "http://52.191.114.221:3001" },
   { label: "Local", url: "http://localhost:3001" },
   {
     label: "Custom",
@@ -46,6 +46,20 @@ const isValidEndpoint = (url: string): boolean => {
       return false
     }
     return true
+  } catch {
+    return false
+  }
+}
+
+// Check if connecting to a URL would cause mixed content issues
+// (i.e., trying to connect to ws:// from an https:// page)
+const isInsecureFromHttps = (url: string): boolean => {
+  if (window.location.protocol !== "https:") {
+    return false // http:// origin can connect to anything
+  }
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === "http:"
   } catch {
     return false
   }
@@ -287,6 +301,16 @@ function App() {
 
       // Don't initialize if custom URL has validation error
       if (selectedRemote === "custom" && customUrlError) {
+        setIsInitializing(false)
+        return
+      }
+
+      // Check for mixed content issues
+      if (isInsecureFromHttps(activeRemote)) {
+        setConnectionError(
+          "Cannot connect to insecure endpoint (http://) from a secure page (https://). " +
+            "This would require an insecure WebSocket (ws://) which browsers block as mixed content.",
+        )
         setIsInitializing(false)
         return
       }
@@ -560,6 +584,13 @@ function App() {
         return
       }
 
+      if (isInsecureFromHttps(value)) {
+        setCustomUrlError(
+          "Cannot connect to http:// from https:// (mixed content)",
+        )
+        return
+      }
+
       // Valid URL - update debounced value to trigger connection
       setDebouncedCustomUrl(value)
     }, 1000)
@@ -597,12 +628,22 @@ function App() {
                 maxWidth: "280px",
               }}
             >
-              {REMOTES.map((remote) => (
-                <option key={remote.url} value={remote.url}>
-                  {remote.label}{" "}
-                  {remote.url === "custom" ? "" : `- ${remote.url}`}
-                </option>
-              ))}
+              {REMOTES.map((remote) => {
+                const insecure =
+                  remote.url !== "custom" && isInsecureFromHttps(remote.url)
+                return (
+                  <option
+                    key={remote.url}
+                    value={remote.url}
+                    disabled={insecure}
+                  >
+                    {remote.label}{" "}
+                    {remote.url === "custom"
+                      ? ""
+                      : `- ${remote.url}${insecure ? " (insecure)" : ""}`}
+                  </option>
+                )
+              })}
             </select>
             {selectedRemote === "custom" && (
               <>
