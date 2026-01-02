@@ -23,12 +23,18 @@ const REMOTES = [
   { label: "Azure SGX", url: "https://52.191.114.221.sslip.io" },
   { label: "Azure SGX", url: "http://52.191.114.221:3001" },
   { label: "Local", url: "http://localhost:3001" },
-  {
-    label: "Custom",
-    url: `${document.location.protocol}//${document.location.hostname}`,
-  },
   { label: "Custom", url: "custom" },
 ]
+
+const CUSTOM_URL_STORAGE_KEY = "teekit-demo-custom-url"
+
+const getDefaultCustomUrl = () => {
+  const stored = localStorage.getItem(CUSTOM_URL_STORAGE_KEY)
+  if (stored) {
+    return stored
+  }
+  return `${document.location.protocol}//${document.location.host}`
+}
 
 const getDefaultRemote = () => {
   return REMOTES[0].url
@@ -89,7 +95,7 @@ function App() {
   const [connectionError, setConnectionError] = useState<string>("")
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const [selectedRemote, setSelectedRemote] = useState<string>(getDefaultRemote)
-  const [customUrl, setCustomUrl] = useState<string>("http://localhost:3001")
+  const [customUrl, setCustomUrl] = useState<string>(getDefaultCustomUrl)
   const [debouncedCustomUrl, setDebouncedCustomUrl] = useState<string>("")
   const [customUrlError, setCustomUrlError] = useState<string>("")
   const [isInitializing, setIsInitializing] = useState<boolean>(true)
@@ -285,6 +291,15 @@ function App() {
       }
     }
   }, [])
+
+  // When switching to custom, initialize debouncedCustomUrl if we have a valid customUrl
+  useEffect(() => {
+    if (selectedRemote === "custom" && !debouncedCustomUrl && customUrl) {
+      if (isValidEndpoint(customUrl) && !isInsecureFromHttps(customUrl)) {
+        setDebouncedCustomUrl(customUrl)
+      }
+    }
+  }, [selectedRemote, debouncedCustomUrl, customUrl])
 
   // Initialize or reinitialize TunnelClient when selectedRemote or debouncedCustomUrl changes
   useEffect(() => {
@@ -591,8 +606,9 @@ function App() {
         return
       }
 
-      // Valid URL - update debounced value to trigger connection
+      // Valid URL - update debounced value to trigger connection and save to localStorage
       setDebouncedCustomUrl(value)
+      localStorage.setItem(CUSTOM_URL_STORAGE_KEY, value)
     }, 1000)
   }
 
