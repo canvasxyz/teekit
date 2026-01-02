@@ -90,12 +90,12 @@ if [ "$VM_COUNT" -eq 0 ]; then
 else
     log_success "Found $VM_COUNT VM(s)"
     echo ""
-    printf "${GREEN}%-25s %-30s %-18s %-12s${NC}\n" "NAME" "RESOURCE GROUP" "PUBLIC IP" "STATUS"
-    printf "%s\n" "$(printf '%.0s-' {1..90})"
+    printf "${GREEN}%-25s %-30s %-18s %-12s %-25s${NC}\n" "NAME" "RESOURCE GROUP" "PUBLIC IP" "STATUS" "CREATED"
+    printf "%s\n" "$(printf '%.0s-' {1..115})"
 
     az vm list --show-details \
-        --query "sort_by([], &resourceGroup)[].{Name:name, ResourceGroup:resourceGroup, PublicIP:publicIps, Status:powerState}" -o tsv 2>/dev/null | \
-    while IFS=$'\t' read -r name resource_group public_ip status; do
+        --query "sort_by([], &resourceGroup)[].{Name:name, ResourceGroup:resourceGroup, PublicIP:publicIps, Status:powerState, Created:timeCreated}" -o tsv 2>/dev/null | \
+    while IFS=$'\t' read -r name resource_group public_ip status created; do
         # Handle empty public IP
         if [ -z "$public_ip" ] || [ "$public_ip" = "None" ]; then
             public_ip="-"
@@ -115,7 +115,12 @@ else
             status_display="${RED}${status}${NC}"
         fi
 
-        printf "%-25s %-30s %-18s %-23b\n" "$name" "$resource_group" "$public_ip" "$status_display"
+        # Ensure created timestamp is readable even when missing
+        if [ -z "$created" ] || [ "$created" = "None" ]; then
+            created="-"
+        fi
+
+        printf "%-25s %-30s %-18s %-12b %-25s\n" "$name" "$resource_group" "$public_ip" "$status_display" "$created"
     done
 fi
 
