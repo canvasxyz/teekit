@@ -7,7 +7,7 @@
 		"npm": ">=10.0.0"
 	},
 	"scripts": {
-		"clean": "rm -rf packages/*/dist/* packages/*/test/lib/* packages/*/*.tsbuildinfo && npm run clean --workspace packages/kettle",
+		"clean": "rm -rf packages/*/build/* packages/*/dist/* packages/*/lib/* packages/*/test/lib/* packages/*/*.tsbuildinfo packages/images/kettle-artifacts/*",
 		"build": "npm --workspace packages/qvl --workspace packages/tunnel run build && npm --workspace packages/demo --workspace packages/kettle run build",
 		"build:vm": "npm --workspace packages/images run build:vm",
 		"build:vm:incremental": "npm --workspace packages/images run build:vm:incremental",
