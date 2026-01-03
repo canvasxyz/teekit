@@ -342,6 +342,30 @@ df -h "$MOUNT_POINT" | tail -1 | while read -r line; do
     log "Disk info: $line"
 done
 
+# Wait for data disks to appear (Azure VMs may have old boot disk attached as data disk)
+# Data disks can take 10-30 seconds to appear after boot starts
+# We wait up to 30 seconds, checking every 2 seconds
+log "Waiting for any attached data disks to appear..."
+MAX_WAIT=30
+WAIT_INTERVAL=2
+ELAPSED=0
+
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    # Check if any old boot disks are detected
+    OLD_BOOT_DISKS=$(detect_old_boot_disks "$BOOT_DISK")
+    if [ -n "$OLD_BOOT_DISKS" ]; then
+        log "Found old boot disk(s) after ${ELAPSED}s: $OLD_BOOT_DISKS"
+        break
+    fi
+
+    # Wait before checking again
+    if [ $ELAPSED -eq 0 ]; then
+        log "No old boot disks found yet, waiting up to ${MAX_WAIT}s..."
+    fi
+    sleep $WAIT_INTERVAL
+    ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+done
+
 # Detect and migrate data from old boot disks (from redeployment)
 OLD_BOOT_DISKS=$(detect_old_boot_disks "$BOOT_DISK")
 if [ -n "$OLD_BOOT_DISKS" ]; then
