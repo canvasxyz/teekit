@@ -395,7 +395,7 @@ test("launcher: fails when SHA256 hash does not match", async (t) => {
 
   // Try to start launcher - should fail
   const kettleDir2 = fileURLToPath(new URL("..", import.meta.url))
-  const cliPath = join(kettleDir2, "src", "lib", "cli.js")
+  const cliPath = join(kettleDir2, "lib", "cli.js")
   const testPort = await findFreePort()
 
   const result = await new Promise<{ exitCode: number | null; stderr: string }>(
