@@ -76,7 +76,7 @@ export interface Env {
 // @ts-ignore - cloudflare:workers is a runtime module provided by workerd
 import { DurableObject } from "cloudflare:workers"
 
-// wrapper durable object that forwards all requests to the application
+// Wrapper Durable Object that forwards all requests to the application
 export class HonoDurableObject extends DurableObject<Env> {
   private appPromise: Promise<any> | null = null
   private sqlAvailable: boolean | null = null
@@ -85,7 +85,7 @@ export class HonoDurableObject extends DurableObject<Env> {
     super(ctx, env)
   }
 
-  // dynamically import and cache the user-provided hono application
+  // Dynamically import and cache the user-provided Hono application
   private async getApp(): Promise<any> {
     if (!this.appPromise) {
       this.appPromise = (async () => {
@@ -95,6 +95,16 @@ export class HonoDurableObject extends DurableObject<Env> {
         if (!app || typeof app.fetch !== "function") {
           throw new Error("Hono app default export with fetch() not found")
         }
+
+        // Call onInit hook if exported (runs once when app is first loaded)
+        if (typeof mod.onInit === "function") {
+          const enhancedEnv: Env = { ...this.env }
+          if (this.isSqlAvailable()) {
+            enhancedEnv.DO_STORAGE = this.ctx.storage as DurableObjectStorage
+          }
+          await mod.onInit(enhancedEnv)
+        }
+
         return app
       })()
     }

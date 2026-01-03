@@ -349,3 +349,31 @@ test.serial("static: API routes still work", async (t) => {
   t.truthy(data.uptime)
   t.truthy(data.uptime.formatted)
 })
+
+test.serial("onInit: kv table is created automatically", async (t) => {
+  if (!shared) t.fail("shared worker not initialized")
+  const kettle = shared!
+
+  // The onInit hook should have created the kv table automatically
+  // We can verify by directly using /db/put and /db/get without calling /db/init first
+  const testKey = `test-key-${Date.now()}`
+  const testValue = "test-value-from-onInit-test"
+
+  const putResponse = await fetch(
+    `http://localhost:${kettle.workerPort}/db/put`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: testKey, value: testValue }),
+    },
+  )
+  t.is(putResponse.status, 200, "PUT should succeed without explicit /db/init")
+
+  const getResponse = await fetch(
+    `http://localhost:${kettle.workerPort}/db/get?key=${encodeURIComponent(testKey)}`,
+  )
+  t.is(getResponse.status, 200, "GET should succeed")
+  const getData = await getResponse.json()
+  t.is(getData.key, testKey)
+  t.is(getData.value, testValue)
+})

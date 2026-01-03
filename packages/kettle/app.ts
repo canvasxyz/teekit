@@ -11,6 +11,7 @@ import {
   getQuoteFromService,
   type Env,
 } from "@teekit/kettle/worker"
+
 import type {
   Message,
   IncomingChatMessage,
@@ -20,6 +21,14 @@ import type {
 
 const app = new Hono<{ Bindings: Env }>()
 app.use("/*", cors())
+
+// Initialization hook
+export async function onInit(env: Env) {
+  const db = getDb(env)
+  await db.execute(
+    "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
+  )
+}
 
 // Ephemeral global state
 let messages: Message[] = []
@@ -143,14 +152,6 @@ app.all("/quote", async (c) => {
 
   const quoteData = await response.json()
   return c.json(quoteData)
-})
-
-app.post("/db/init", async (c) => {
-  const db = getDb(c.env)
-  await db.execute(
-    "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
-  )
-  return c.json({ ok: true })
 })
 
 app.post("/db/put", async (c) => {
