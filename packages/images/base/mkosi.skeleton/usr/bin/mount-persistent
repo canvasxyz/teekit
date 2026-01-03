@@ -228,32 +228,17 @@ migrate_persistent_data() {
 
     local migration_success=false
 
-    # Use rsync to copy data
-    # --archive: preserve permissions, ownership, timestamps, etc.
+    # Copy data using cp
+    # -a: preserve permissions, ownership, timestamps, etc.
     # --update: skip files that are newer on the destination (don't overwrite newer data)
-    # --verbose: show what's being copied
-    # Exclude the migration marker files
-    if command -v rsync >/dev/null 2>&1; then
-        log "Using rsync for migration..."
-        if rsync -av --update --exclude="$MIGRATION_MARKER*" "$OLD_DISK_MOUNT/" "$MOUNT_POINT/" 2>&1 | while read -r line; do
-            log "  rsync: $line"
-        done; then
-            log "rsync migration completed successfully"
-            migration_success=true
-        else
-            error "rsync migration failed, but continuing..."
-        fi
+    log "Copying data from old persistent partition..."
+    if cp -av --update "$OLD_DISK_MOUNT"/. "$MOUNT_POINT/" 2>&1 | head -50 | while read -r line; do
+        log "  cp: $line"
+    done; then
+        log "Migration completed successfully"
+        migration_success=true
     else
-        # Fallback to cp if rsync is not available
-        log "rsync not available, using cp for migration..."
-        if cp -av --update "$OLD_DISK_MOUNT"/. "$MOUNT_POINT/" 2>&1 | head -50 | while read -r line; do
-            log "  cp: $line"
-        done; then
-            log "cp migration completed successfully"
-            migration_success=true
-        else
-            error "cp migration failed, but continuing..."
-        fi
+        error "Migration failed, but continuing..."
     fi
 
     # Create backup copies of SGX enclave SQLite databases
