@@ -75,8 +75,6 @@ init_persistent_dir() {
 
     local mrenclave
     mrenclave=$(cat "$MRENCLAVE_FILE" | tr -d '[:space:]')
-    log "MRENCLAVE: ${mrenclave:0:16}... (using first 16 chars for directory)"
-    log "Persistent data directory: $PERSISTENT_KETTLE_DIR"
 }
 
 # Check if persistent storage is available
@@ -119,6 +117,7 @@ restore_data() {
         log "Restored $(find "$KETTLE_DATA_DIR" -type f 2>/dev/null | wc -l) files from persistent storage"
     else
         log "No persisted kettle data found at $PERSISTENT_KETTLE_DIR"
+        ls $PERSISTENT_KETTLE_DIR
     fi
 
     # Restore Let's Encrypt certificates (unencrypted on disk, but harmless)
@@ -136,6 +135,7 @@ restore_data() {
         log "Restored certificates"
     else
         log "No persisted certificates found at $PERSISTENT_CERTS_DIR"
+        ls $PERSISTENT_CERTS_DIR
     fi
 
     # Restore SSH host keys
@@ -156,6 +156,7 @@ restore_data() {
             log "Restored SSH host keys"
         else
             log "No persisted SSH host keys found at $PERSISTENT_SSH_DIR"
+            ls $PERSISTENT_SSH_DIR
         fi
     else
         log "SSH not installed, skipping SSH key restore"
