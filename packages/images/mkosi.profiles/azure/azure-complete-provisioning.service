@@ -7,8 +7,8 @@ Requires=network-setup.service
 Type=oneshot
 ExecStart=/usr/bin/azure-complete-provisioning
 RemainAfterExit=yes
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:/var/log/azure-complete-provisioning.log
+StandardError=append:/var/log/azure-complete-provisioning.log
 
 [Install]
 WantedBy=minimal.target

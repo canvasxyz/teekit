@@ -12,6 +12,8 @@ ExecStart=-/bin/sh -c '[ -f /etc/resolv.conf ] && chattr -i /etc/resolv.conf || 
 ExecStart=/bin/sh -c 'IFACE=$(ip -o link show | grep -v "\\slo:" | head -1 | cut -d: -f2 | tr -d " "); if [ -n "$$IFACE" ]; then /usr/sbin/udhcpc -i $$IFACE -q -t 5 || true; fi'
 ExecStart=-/bin/sh -c '[ -f /etc/resolv.conf ] && chattr +i /etc/resolv.conf || true'
 RemainAfterExit=yes
+StandardOutput=append:/var/log/network-setup.log
+StandardError=append:/var/log/network-setup.log
 
 [Install]
 WantedBy=sysinit.target

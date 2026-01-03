@@ -9,8 +9,8 @@ After=local-fs-pre.target local-fs.target
 Type=oneshot
 ExecStart=/usr/bin/mount-persistent
 RemainAfterExit=yes
-StandardOutput=journal+console
-StandardError=journal+console
+StandardOutput=append:/var/log/persistent-mount.log
+StandardError=append:/var/log/persistent-mount.log
 
 [Install]
 WantedBy=minimal.target
