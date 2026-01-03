@@ -57,41 +57,44 @@ if [ -f "$BUILDROOT/usr/lib/node_modules/esbuild/bin/esbuild" ]; then
     ln -sf /usr/lib/node_modules/esbuild/bin/esbuild "$BUILDROOT/usr/local/bin/esbuild"
 fi
 
+# Source directory for scripts
+SCRIPT_DIR="${SRCDIR:-$PWD}"
+
 # Install kettle launcher
-install -m 755 "kettle-vm/kettle-launcher.sh" "$BUILDROOT/usr/bin/kettle-launcher"
+install -m 755 "$SCRIPT_DIR/kettle-vm/kettle-launcher.sh" "$BUILDROOT/usr/bin/kettle-launcher"
 
 # Install cloud-launcher scripts, for different cloud config services
 KETTLE_LIB_DIR="$BUILDROOT/usr/lib/kettle"
 mkdir -p "$KETTLE_LIB_DIR"
-install -m 755 "scripts/config_gcp" "$KETTLE_LIB_DIR/"
-install -m 755 "scripts/config_azure" "$KETTLE_LIB_DIR/"
-install -m 755 "scripts/config_local" "$KETTLE_LIB_DIR/"
+install -m 755 "$SCRIPT_DIR/scripts/config_gcp" "$KETTLE_LIB_DIR/"
+install -m 755 "$SCRIPT_DIR/scripts/config_azure" "$KETTLE_LIB_DIR/"
+install -m 755 "$SCRIPT_DIR/scripts/config_local" "$KETTLE_LIB_DIR/"
 
 # Install cloud-launcher
-install -m 755 "kettle-vm/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
+install -m 755 "$SCRIPT_DIR/kettle-vm/cloud-launcher.sh" "$BUILDROOT/usr/bin/cloud-launcher"
 
 # Install certbot-launcher
-install -m 755 "kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
+install -m 755 "$SCRIPT_DIR/kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
 
 # Install certbot-persist utility (encrypts/decrypts certs with sealing key)
-install -m 755 "kettle-vm/certbot-persist.sh" "$BUILDROOT/usr/bin/certbot-persist"
+install -m 755 "$SCRIPT_DIR/kettle-vm/certbot-persist.sh" "$BUILDROOT/usr/bin/certbot-persist"
 
 # Install db-persist utility (encrypts/decrypts sqlite databases with sealing key)
-install -m 755 "kettle-vm/db-persist.sh" "$BUILDROOT/usr/bin/db-persist"
+install -m 755 "$SCRIPT_DIR/kettle-vm/db-persist.sh" "$BUILDROOT/usr/bin/db-persist"
 
 # Install sealing-key (SEV-SNP key derivation)
-install -m 755 "kettle-vm/sealing-key.sh" "$BUILDROOT/usr/bin/sealing-key"
+install -m 755 "$SCRIPT_DIR/kettle-vm/sealing-key.sh" "$BUILDROOT/usr/bin/sealing-key"
 
 # Install firewall setup script
-install -m 755 "kettle-vm/setup-firewall.sh" "$BUILDROOT/usr/bin/setup-firewall"
+install -m 755 "$SCRIPT_DIR/kettle-vm/setup-firewall.sh" "$BUILDROOT/usr/bin/setup-firewall"
 
 # Install systemd services
-install -m 644 "kettle-vm/cloud-launcher.service" "$SERVICE_DIR/"
-install -m 644 "kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
-install -m 644 "kettle-vm/kettle-launcher.service" "$SERVICE_DIR/"
-install -m 644 "kettle-vm/sealing-key.service" "$SERVICE_DIR/"
-install -m 644 "kettle-vm/firewall.service" "$SERVICE_DIR/"
-install -m 644 "kettle-vm/db-persist.service" "$SERVICE_DIR/"
+install -m 644 "$SCRIPT_DIR/kettle-vm/cloud-launcher.service" "$SERVICE_DIR/"
+install -m 644 "$SCRIPT_DIR/kettle-vm/certbot-launcher.service" "$SERVICE_DIR/"
+install -m 644 "$SCRIPT_DIR/kettle-vm/kettle-launcher.service" "$SERVICE_DIR/"
+install -m 644 "$SCRIPT_DIR/kettle-vm/sealing-key.service" "$SERVICE_DIR/"
+install -m 644 "$SCRIPT_DIR/kettle-vm/firewall.service" "$SERVICE_DIR/"
+install -m 644 "$SCRIPT_DIR/kettle-vm/db-persist.service" "$SERVICE_DIR/"
 
 # Enable services
 systemctl --root="$BUILDROOT" enable cloud-launcher.service
