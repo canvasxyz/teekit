@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto"
 import path from "node:path"
 import os from "node:os"
 import { promisify } from "node:util"
+import { fileURLToPath } from "node:url"
 
 import { base64 } from "@scure/base"
 import {
@@ -36,6 +37,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+const SGX_SAMPLE_QUOTE_PATH = fileURLToPath(
+  new URL("../../qvl/test/sampleQuotes/sgx-occlum.dat", import.meta.url),
+)
+
+let sgxSampleQuote: Uint8Array | null = null
+
+function getSgxSampleQuote() {
+  if (sgxSampleQuote) return sgxSampleQuote
+
+  try {
+    const data = fs.readFileSync(SGX_SAMPLE_QUOTE_PATH)
+    sgxSampleQuote = new Uint8Array(data)
+    return sgxSampleQuote
+  } catch (error) {
+    console.warn(
+      `[kettle] Unable to load SGX sample quote at ${SGX_SAMPLE_QUOTE_PATH}:`,
+      error,
+    )
+    return null
+  }
+}
+
 function getBackoffDelay(attempt: number): number {
   const exponentialDelay = VCEK_FETCH_INITIAL_DELAY_MS * Math.pow(2, attempt)
   const cappedDelay = Math.min(exponentialDelay, VCEK_FETCH_MAX_DELAY_MS)
@@ -62,9 +85,10 @@ export class QuoteError extends Error {
 /**
  * Detect TEE type by checking for hardware devices.
  * Returns "sev-snp" if /dev/sev-guest exists, otherwise "tdx".
+ * Can be overridden by TEE_TYPE environment variable (supports "sgx").
  * Can be overridden by TEE_TYPE environment variable.
  */
-export function detectTeeType(): "sev-snp" | "tdx" {
+export function detectTeeType(): "sev-snp" | "tdx" | "sgx" {
   // Allow explicit override via environment variable
   const envTeeType = process.env.TEE_TYPE?.toLowerCase()
   if (envTeeType) {
@@ -77,6 +101,9 @@ export function detectTeeType(): "sev-snp" | "tdx" {
     }
     if (envTeeType === "tdx") {
       return "tdx"
+    }
+    if (envTeeType === "sgx") {
+      return "sgx"
     }
   }
 
@@ -431,6 +458,7 @@ export class QuoteBinding {
   ): Promise<IntelQuoteData | SevSnpQuoteData> {
     const teeType = detectTeeType()
     const isSevSnp = teeType === "sev-snp"
+    const isSgx = teeType === "sgx"
 
     // When testing, bypass hardware/CLI, and serve a bundled sample quote
     if (
@@ -450,6 +478,15 @@ export class QuoteBinding {
           ark_cert: sevSnpGcpArkPem,
           nonce: nonceBytes,
         }
+      } else if (isSgx) {
+        const quote = getSgxSampleQuote()
+        if (!quote) {
+          throw new QuoteError(
+            "SGX sample quote not found; cannot run SGX tests",
+            "QUOTE_FAILED",
+          )
+        }
+        return { quote }
       } else {
         return { quote: base64.decode(tappdV4Base64) }
       }
@@ -459,10 +496,17 @@ export class QuoteBinding {
       console.log("[kettle] Using SEV-SNP attestation (detected /dev/sev-guest)")
       await this.ensureSnpGuestCliAvailable()
       return this.getSevSnpQuote(x25519PublicKey)
-    } else {
-      console.log("[kettle] Using TDX attestation")
-      await this.ensureTrustauthorityCliAvailable()
-      return this.getTdxQuote(x25519PublicKey)
     }
+
+    if (isSgx) {
+      throw new QuoteError(
+        "SGX attestation is not supported in this build; use kettle-sgx for production",
+        "QUOTE_FAILED",
+      )
+    }
+
+    console.log("[kettle] Using TDX attestation")
+    await this.ensureTrustauthorityCliAvailable()
+    return this.getTdxQuote(x25519PublicKey)
   }
 }

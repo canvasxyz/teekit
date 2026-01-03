@@ -1,4 +1,5 @@
 import { join } from "path"
+import { readFileSync } from "fs"
 import { startWorker, WorkerResult } from "../lib/startWorker.js"
 import {
   findFreePort,
@@ -7,12 +8,45 @@ import {
 } from "../lib/utils.js"
 import { TunnelClient } from "@teekit/tunnel"
 import { base64 } from "@scure/base"
-import { hex, parseTdxQuote, parseSevSnpReport } from "@teekit/qvl"
+import { hex, parseTdxQuote, parseSevSnpReport, parseSgxQuote } from "@teekit/qvl"
 import { tappdV4Base64, sevSnpGcpX25519Base64 } from "@teekit/tunnel/samples"
 import { WebSocket } from "ws"
 import { fileURLToPath } from "url"
 
-export type TeeType = "tdx" | "sevsnp"
+const SGX_SAMPLE_QUOTE_PATH = fileURLToPath(
+  new URL("../../qvl/test/sampleQuotes/sgx-occlum.dat", import.meta.url),
+)
+
+let sgxSampleConfig:
+  | {
+      measurements: {
+        mr_enclave: string
+        mr_signer: string
+        report_data: string
+        isv_prod_id: number
+        isv_svn: number
+      }
+    }
+  | null = null
+
+function getSgxSampleConfig() {
+  if (sgxSampleConfig) return sgxSampleConfig
+
+  const quoteBytes = new Uint8Array(readFileSync(SGX_SAMPLE_QUOTE_PATH))
+  const { body } = parseSgxQuote(quoteBytes)
+  sgxSampleConfig = {
+    measurements: {
+      mr_enclave: hex(body.mr_enclave),
+      mr_signer: hex(body.mr_signer),
+      report_data: hex(body.report_data),
+      isv_prod_id: body.isv_prod_id,
+      isv_svn: body.isv_svn,
+    },
+  }
+  return sgxSampleConfig
+}
+
+export type TeeType = "tdx" | "sevsnp" | "sgx"
 
 // Create a WebSocket connection, but timeout if connection fails
 export async function connectWebSocket(
@@ -47,6 +81,8 @@ export async function startKettleWithTunnel(teeType: TeeType = "tdx") {
   const prevTeeType = process.env.TEE_TYPE
   if (teeType === "sevsnp") {
     process.env.TEE_TYPE = "sevsnp"
+  } else if (teeType === "sgx") {
+    process.env.TEE_TYPE = "sgx"
   } else {
     delete process.env.TEE_TYPE
   }
@@ -75,6 +111,13 @@ export async function startKettleWithTunnel(teeType: TeeType = "tdx") {
         measurement: hex(reportParsed.body.measurement),
         reportData: hex(reportParsed.body.report_data),
       },
+      x25519Binding: () => true,
+    })
+  } else if (teeType === "sgx") {
+    const { measurements } = getSgxSampleConfig()
+    tunnelClient = await TunnelClient.initialize(origin, {
+      sgx: true,
+      measurements,
       x25519Binding: () => true,
     })
   } else {
