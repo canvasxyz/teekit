@@ -4,8 +4,8 @@ set -euo pipefail
 # Post-install script for azsgx profile
 # Configures Azure-specific SGX settings including DCAP quote provider
 
-mkosi-chroot systemctl enable "azure-complete-provisioning.service"
-ln -sf "/etc/systemd/system/azure-complete-provisioning.service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
+mkosi-chroot systemctl enable "azure-provisioning.service"
+ln -sf "/etc/systemd/system/azure-provisioning.service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
 
 # Ensure Azure quote provider library is discoverable at the standard path
 # Intel SGX DCAP libraries look for libdcap_quoteprov.so at this location
