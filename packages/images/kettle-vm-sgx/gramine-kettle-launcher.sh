@@ -40,9 +40,9 @@ get_persistent_dir() {
     echo "${PERSISTENT_BASE}/${mrenclave:0:16}"
 }
 
-# Handle database corruption: check backups, create .backup.1, delete corrupted files
-handle_database_corruption() {
-    echo "Handling potential database corruption..."
+# Handle invalid databases by copying to .backup.1, and deleting
+handle_invalid_database() {
+    echo "Handling potential invalid database..."
 
     local persistent_dir
     persistent_dir=$(get_persistent_dir)
@@ -55,74 +55,58 @@ handle_database_corruption() {
     echo "Persistent directory: $persistent_dir"
 
     # Find SQLite database files in the kettle data directory
-    local found_corruption=false
+    # Database files should have been copied from /persistent
+    local found_invalid_database=false
     for db_file in "$KETTLE_DATA_DIR"/*.sqlite "$KETTLE_DATA_DIR"/*.db "$KETTLE_DATA_DIR"/*.sqlite3; do
         if [ -f "$db_file" ]; then
             local db_name
             db_name=$(basename "$db_file")
             local backup_file="$persistent_dir/${db_name}.backup"
 
-            echo "Processing corrupted database: $db_name"
+            echo "Processing invalid database: $db_name"
 
             # Check that .backup file exists (created during migration)
             if [ -f "$backup_file" ]; then
                 echo "  Found backup file: $backup_file"
-
-                # Create .backup.1 copy of the corrupted file before deletion
-                local backup1_file="$persistent_dir/${db_name}.backup.1"
-                if cp -a "$db_file" "$backup1_file" 2>/dev/null; then
-                    echo "  Created backup.1: $backup1_file"
-                else
-                    echo "  Warning: Failed to create backup.1 (continuing anyway)"
-                fi
             else
                 echo "  Warning: No .backup file found at $backup_file"
             fi
 
-            # Delete the corrupted database file
-            if rm -f "$db_file" 2>/dev/null; then
-                echo "  Deleted corrupted file: $db_file"
+            # Create .backup.1 copy of the invalid database file before deletion
+            local backup1_file="$persistent_dir/${db_name}.backup.1"
+            if cp -a "$db_file" "$backup1_file" 2>/dev/null; then
+                echo "  Created backup.1: $backup1_file"
             else
-                echo "  Warning: Failed to delete corrupted file: $db_file"
+                echo "  Warning: Failed to create backup.1 (continuing anyway)"
+            fi
+
+            # Delete the invalid database file
+            if rm -f "$db_file" 2>/dev/null; then
+                echo "  Deleted invalid database: $db_file"
+            else
+                echo "  Warning: Failed to delete invalid database: $db_file"
             fi
 
             # Also delete from persistent storage to prevent re-restore
             local persistent_file="$persistent_dir/$db_name"
             if [ -f "$persistent_file" ]; then
+                if cp -a "$persistent_file" "${persistent_file}.backup.1" 2>/dev/null; then
+                    echo "  Created ${persistent_file}.backup.1"
+                else
+                    echo "  Warning: Failed to create ${persistent_file}.backup.1"
+                fi
+
                 if rm -f "$persistent_file" 2>/dev/null; then
                     echo "  Deleted from persistent storage: $persistent_file"
                 fi
             fi
 
-            found_corruption=true
+            found_invalid_database=true
         fi
     done
 
-    # Also check for any files in the kettle data directory that might be corrupted
-    if [ -d "$KETTLE_DATA_DIR" ] && [ -n "$(ls -A "$KETTLE_DATA_DIR" 2>/dev/null)" ]; then
-        echo "Clearing remaining files in $KETTLE_DATA_DIR..."
-        for file in "$KETTLE_DATA_DIR"/*; do
-            if [ -f "$file" ]; then
-                local filename
-                filename=$(basename "$file")
-                local backup_file="$persistent_dir/${filename}.backup"
-
-                # Check for backup and create .backup.1
-                if [ -f "$backup_file" ]; then
-                    local backup1_file="$persistent_dir/${filename}.backup.1"
-                    cp -a "$file" "$backup1_file" 2>/dev/null || true
-                    echo "  Created backup.1 for: $filename"
-                fi
-
-                rm -f "$file" 2>/dev/null || true
-                echo "  Deleted: $filename"
-                found_corruption=true
-            fi
-        done
-    fi
-
-    if [ "$found_corruption" = true ]; then
-        echo "Database corruption handled. Will start with fresh database."
+    if [ "$found_invalid_database" = true ]; then
+        echo "Invalid database. Will start with fresh database."
         return 0
     else
         echo "No database files found to clean up."
@@ -139,7 +123,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Launch a single kettle instance with corruption recovery
+# Launch a single kettle instance, with recovery from invalid databases
 launch_kettle() {
     local index="$1"
     local max_retries=2
@@ -205,17 +189,17 @@ launch_kettle() {
         done
 
         if [ "$detected_error" = true ]; then
-            # Database corruption was explicitly detected via the error marker
-            echo "[$index] Kettle failed to start (database corruption detected)"
+            # Invalid database detected via the error marker
+            echo "[$index] Kettle failed to start (invalid database)"
 
             if [ $retry -lt $((max_retries - 1)) ]; then
-                # Try to handle corruption and retry
-                if handle_database_corruption; then
-                    echo "[$index] Retrying after corruption cleanup..."
+                # Try handle_invalid_database, then retry
+                if handle_invalid_database; then
+                    echo "[$index] Retrying after invalid database cleanup..."
                     retry=$((retry + 1))
                     continue
                 else
-                    echo "[$index] Corruption handling failed, not retrying"
+                    echo "[$index] handle_invalid_database failed, not retrying"
                     rm -f "$output_file"
                     return 1
                 fi
@@ -226,16 +210,15 @@ launch_kettle() {
             fi
         elif [ "$process_exited" = true ]; then
             # Process exited early but without the database error marker
-            # This could be a config error, OOM, or other non-corruption issue
+            # This could be a config error, OOM, or other gramine issue
             # Check output for the marker one last time before giving up
             if grep -q "$DATABASE_ERROR_MARKER" "$output_file" 2>/dev/null; then
                 echo "[$index] Found database error marker in output after exit"
                 detected_error=true
-                # Loop will continue and hit the corruption handling above
+                # Loop will continue and hit the invalid_database handling above
                 continue
             fi
-            echo "[$index] Kettle exited early (not database corruption)"
-            echo "[$index] Check logs for details. Not attempting corruption recovery."
+            echo "[$index] Kettle exited early. Check logs for details."
             rm -f "$output_file"
             return 1
         else
