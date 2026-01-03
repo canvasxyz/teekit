@@ -65,10 +65,11 @@ install -m 755 "$SRCDIR/scripts/config_gcp" "$KETTLE_LIB_DIR/"
 echo "Installing certbot-launcher..."
 install -m 755 "$SRCDIR/kettle-vm/certbot-launcher.sh" "$BUILDROOT/usr/bin/certbot-launcher"
 
-# 7b. Install SGX persistence scripts
-# Unlike SEV-SNP which uses snpguest for sealing keys, SGX uses Gramine's built-in
-# Protected File System (PFS) which encrypts /var/lib/kettle using MRENCLAVE-bound keys.
-# We just need to sync the encrypted files to/from persistent storage across reboots.
+# 7b. Install certbot-persist (needed by certbot-launcher for certificate caching)
+echo "Installing certbot-persist..."
+install -m 755 "$SRCDIR/kettle-vm/certbot-persist.sh" "$BUILDROOT/usr/bin/certbot-persist"
+
+# 7c. Install sgx-persist (sync databases in /var/lib/kettle back to /persistent)
 echo "Installing sgx-persist..."
 install -m 755 "$SRCDIR/kettle-vm-sgx/sgx-persist.sh" "$BUILDROOT/usr/bin/sgx-persist"
 
