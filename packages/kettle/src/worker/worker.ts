@@ -76,6 +76,8 @@ export interface Env {
 // @ts-ignore - cloudflare:workers is a runtime module provided by workerd
 import { DurableObject } from "cloudflare:workers"
 
+const DATABASE_ERROR_MARKER = "KETTLE_DATABASE_INIT_FAILED"
+
 // Wrapper Durable Object that forwards all requests to the application
 export class HonoDurableObject extends DurableObject<Env> {
   private appPromise: Promise<any> | null = null
@@ -96,13 +98,24 @@ export class HonoDurableObject extends DurableObject<Env> {
           throw new Error("Hono app default export with fetch() not found")
         }
 
+        // Test database connectivity before calling onInit
+        // This detects corruption/decryption failures early
+        const enhancedEnv: Env = { ...this.env }
+        if (this.testDatabaseAvailabilityThrowOnInvalid()) {
+          enhancedEnv.DO_STORAGE = this.ctx.storage as DurableObjectStorage
+        }
+
         // Call onInit hook if exported (runs once when app is first loaded)
         if (typeof mod.onInit === "function") {
-          const enhancedEnv: Env = { ...this.env }
-          if (this.isSqlAvailable()) {
-            enhancedEnv.DO_STORAGE = this.ctx.storage as DurableObjectStorage
+          try {
+            await mod.onInit(enhancedEnv)
+          } catch (error) {
+            // Log the specific error marker that the launcher script watches for
+            console.error(`[worker] ${DATABASE_ERROR_MARKER}`)
+            console.error("[worker] onInit failed:", error)
+            console.error("[worker] This may indicate database corruption or decryption failure.")
+            throw error
           }
-          await mod.onInit(enhancedEnv)
         }
 
         return app
@@ -111,8 +124,10 @@ export class HonoDurableObject extends DurableObject<Env> {
     return this.appPromise
   }
 
-  // Check if SQL storage is actually available and functional (cached)
-  private isSqlAvailable(): boolean {
+  // Test database availability and detect corruption/decryption failures
+  // Returns true if database is available and functional, false if SQL storage doesn't exist
+  // Throws with DATABASE_ERROR_MARKER if database exists but is corrupted/inaccessible
+  private testDatabaseAvailabilityThrowOnInvalid(): boolean {
     if (this.sqlAvailable !== null) {
       return this.sqlAvailable
     }
@@ -124,12 +139,30 @@ export class HonoDurableObject extends DurableObject<Env> {
         return false
       }
       // Try a simple query to verify SQL is functional
-      // This will throw if SQL isn't actually enabled
+      // This will throw if SQL isn't actually enabled or if the database is corrupted
       storage.sql.exec("SELECT 1")
       this.sqlAvailable = true
+      console.log("[worker] Database connection test passed")
       return true
-    } catch {
+    } catch (error) {
+      // Log the specific error marker that the launcher script watches for
+      console.error(`[worker] ${DATABASE_ERROR_MARKER}`)
+      console.error("[worker] Database connection test failed:", error)
+      console.error("[worker] This may indicate database corruption or decryption failure.")
       this.sqlAvailable = false
+      throw error
+    }
+  }
+
+  // Check if SQL storage is available (cached result from testDatabaseAvailabilityThrowOnInvalid)
+  private isSqlAvailable(): boolean {
+    if (this.sqlAvailable !== null) {
+      return this.sqlAvailable
+    }
+    // If not yet tested, run the test
+    try {
+      return this.testDatabaseAvailabilityThrowOnInvalid()
+    } catch {
       return false
     }
   }
