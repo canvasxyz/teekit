@@ -24,7 +24,9 @@ KETTLE_DATA_DIR="/var/lib/kettle"
 MRENCLAVE_FILE="/opt/kettle/mrenclave.txt"
 PERSISTENT_KETTLE_DIR="" # Will be set dynamically based on MRENCLAVE later
 PERSISTENT_CERTS_DIR="/persistent/certs"
+PERSISTENT_SSH_DIR="/persistent/ssh"
 LETSENCRYPT_DIR="/etc/letsencrypt"
+SSH_HOST_KEYS_DIR="/etc/ssh"
 
 # Tee output to serial console for debugging
 exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
@@ -136,6 +138,29 @@ restore_data() {
         log "No persisted certificates found at $PERSISTENT_CERTS_DIR"
     fi
 
+    # Restore SSH host keys
+    # This allows SSH connections to persist across VM reboots without "host key changed" warnings
+    # Only restore if SSH is actually installed (skip on non-devtools profiles)
+    if command -v sshd >/dev/null 2>&1 || [ -f /usr/sbin/sshd ]; then
+        if [ -d "$PERSISTENT_SSH_DIR" ] && [ -n "$(ls -A "$PERSISTENT_SSH_DIR" 2>/dev/null)" ]; then
+            log "Restoring SSH host keys from $PERSISTENT_SSH_DIR..."
+            mkdir -p "$SSH_HOST_KEYS_DIR"
+
+            # Only restore host key files
+            for key_file in "$PERSISTENT_SSH_DIR"/ssh_host_*; do
+                if [ -f "$key_file" ]; then
+                    cp -a "$key_file" "$SSH_HOST_KEYS_DIR/" 2>/dev/null || true
+                fi
+            done
+
+            log "Restored SSH host keys"
+        else
+            log "No persisted SSH host keys found at $PERSISTENT_SSH_DIR"
+        fi
+    else
+        log "SSH not installed, skipping SSH key restore"
+    fi
+
     log "Data restore complete"
     return 0
 }
@@ -185,6 +210,28 @@ save_data() {
         log "Saved certificates"
     else
         log "No certificates to save at $LETSENCRYPT_DIR"
+    fi
+
+    # Save SSH host keys
+    # Find and save all SSH host key files (ssh_host_*_key and ssh_host_*_key.pub)
+    local ssh_key_count=0
+    if [ -d "$SSH_HOST_KEYS_DIR" ]; then
+        log "Saving SSH host keys to $PERSISTENT_SSH_DIR..."
+        mkdir -p "$PERSISTENT_SSH_DIR"
+
+        for key_file in "$SSH_HOST_KEYS_DIR"/ssh_host_*; do
+            if [ -f "$key_file" ]; then
+                cp -a "$key_file" "$PERSISTENT_SSH_DIR/" 2>/dev/null && ssh_key_count=$((ssh_key_count + 1)) || true
+            fi
+        done
+
+        if [ $ssh_key_count -gt 0 ]; then
+            log "Saved $ssh_key_count SSH host key files"
+        else
+            log "No SSH host keys found to save"
+        fi
+    else
+        log "SSH keys directory not found at $SSH_HOST_KEYS_DIR"
     fi
 
     # Sync to ensure data is written to disk
@@ -255,6 +302,13 @@ status() {
         log "Persisted certificates: yes"
     else
         log "Persisted certificates: none"
+    fi
+
+    if [ -d "$PERSISTENT_SSH_DIR" ]; then
+        local ssh_key_count=$(find "$PERSISTENT_SSH_DIR" -name "ssh_host_*" 2>/dev/null | wc -l)
+        log "Persisted SSH host keys: $ssh_key_count files"
+    else
+        log "Persisted SSH host keys: none"
     fi
 
     if [ -d "$KETTLE_DATA_DIR" ]; then
