@@ -12,7 +12,7 @@ MRENCLAVE_FILE="/opt/kettle/mrenclave.txt"
 KETTLE_DATA_DIR="/var/lib/kettle"
 PERSISTENT_BASE="/persistent/kettle-data"
 DATABASE_ERROR_MARKER="KETTLE_DATABASE_INIT_FAILED"
-STARTUP_GRACE_PERIOD=30  # seconds to monitor for the error marker before considering startup stable
+STARTUP_GRACE_PERIOD=300  # seconds to monitor for the error marker before considering startup stable
 
 # Tee output to serial console for debugging (only if writable)
 if [ -w "$SERIAL_CONSOLE" ]; then
@@ -54,56 +54,56 @@ handle_invalid_database() {
 
     echo "Persistent directory: $persistent_dir"
 
-    # Find SQLite database files in the kettle data directory
-    # Database files should have been copied from /persistent
+    # Find SQLite database files recursively in the kettle data directory
+    # Database files are typically in subdirectories like do-storage/hono-durable-object-0/
     local found_invalid_database=false
-    for db_file in "$KETTLE_DATA_DIR"/*.sqlite "$KETTLE_DATA_DIR"/*.db "$KETTLE_DATA_DIR"/*.sqlite3; do
-        if [ -f "$db_file" ]; then
-            local db_name
-            db_name=$(basename "$db_file")
-            local backup_file="$persistent_dir/${db_name}.backup"
+    while IFS= read -r -d '' db_file; do
+        local db_name
+        db_name=$(basename "$db_file")
+        # Get the relative path from KETTLE_DATA_DIR for persistent storage lookup
+        local rel_path="${db_file#$KETTLE_DATA_DIR/}"
+        local backup_file="$persistent_dir/${db_name}.backup"
 
-            echo "Processing invalid database: $db_name"
+        echo "Processing invalid database: $rel_path"
 
-            # Check that .backup file exists (created during migration)
-            if [ -f "$backup_file" ]; then
-                echo "  Found backup file: $backup_file"
-            else
-                echo "  Warning: No .backup file found at $backup_file"
-            fi
-
-            # Create .backup.1 copy of the invalid database file before deletion
-            local backup1_file="$persistent_dir/${db_name}.backup.1"
-            if cp -a "$db_file" "$backup1_file" 2>/dev/null; then
-                echo "  Created backup.1: $backup1_file"
-            else
-                echo "  Warning: Failed to create backup.1 (continuing anyway)"
-            fi
-
-            # Delete the invalid database file
-            if rm -f "$db_file" 2>/dev/null; then
-                echo "  Deleted invalid database: $db_file"
-            else
-                echo "  Warning: Failed to delete invalid database: $db_file"
-            fi
-
-            # Also delete from persistent storage to prevent re-restore
-            local persistent_file="$persistent_dir/$db_name"
-            if [ -f "$persistent_file" ]; then
-                if cp -a "$persistent_file" "${persistent_file}.backup.1" 2>/dev/null; then
-                    echo "  Created ${persistent_file}.backup.1"
-                else
-                    echo "  Warning: Failed to create ${persistent_file}.backup.1"
-                fi
-
-                if rm -f "$persistent_file" 2>/dev/null; then
-                    echo "  Deleted from persistent storage: $persistent_file"
-                fi
-            fi
-
-            found_invalid_database=true
+        # Check that .backup file exists (created during migration)
+        if [ -f "$backup_file" ]; then
+            echo "  Found backup file: $backup_file"
+        else
+            echo "  Warning: No .backup file found at $backup_file"
         fi
-    done
+
+        # Create .backup.1 copy of the invalid database file before deletion
+        local backup1_file="$persistent_dir/${db_name}.backup.1"
+        if cp -a "$db_file" "$backup1_file" 2>/dev/null; then
+            echo "  Created backup.1: $backup1_file"
+        else
+            echo "  Warning: Failed to create backup.1 (continuing anyway)"
+        fi
+
+        # Delete the invalid database file and associated WAL/SHM files
+        if rm -f "$db_file" "${db_file}-wal" "${db_file}-shm" 2>/dev/null; then
+            echo "  Deleted invalid database: $db_file"
+        else
+            echo "  Warning: Failed to delete invalid database: $db_file"
+        fi
+
+        # Also delete from persistent storage to prevent re-restore
+        local persistent_file="$persistent_dir/$rel_path"
+        if [ -f "$persistent_file" ]; then
+            if cp -a "$persistent_file" "${persistent_file}.backup.1" 2>/dev/null; then
+                echo "  Created ${persistent_file}.backup.1"
+            else
+                echo "  Warning: Failed to create ${persistent_file}.backup.1"
+            fi
+
+            if rm -f "$persistent_file" "${persistent_file}-wal" "${persistent_file}-shm" 2>/dev/null; then
+                echo "  Deleted from persistent storage: $persistent_file"
+            fi
+        fi
+
+        found_invalid_database=true
+    done < <(find "$KETTLE_DATA_DIR" -type f \( -name "*.sqlite" -o -name "*.db" -o -name "*.sqlite3" \) -print0 2>/dev/null)
 
     if [ "$found_invalid_database" = true ]; then
         echo "Invalid database. Will start with fresh database."
@@ -173,9 +173,9 @@ launch_kettle() {
                 break
             fi
 
-            # Check for the specific database error marker in output
-            if grep -q "$DATABASE_ERROR_MARKER" "$output_file" 2>/dev/null; then
-                echo "[$index] Detected database initialization failure marker"
+            # Check for database error markers in output (custom marker or workerd SQLite errors)
+            if grep -qE "$DATABASE_ERROR_MARKER|SQLITE_CANTOPEN" "$output_file" 2>/dev/null; then
+                echo "[$index] Detected database initialization failure"
                 detected_error=true
                 # Kill both processes to avoid orphans
                 kill "$tee_pid" 2>/dev/null || true
@@ -211,9 +211,9 @@ launch_kettle() {
         elif [ "$process_exited" = true ]; then
             # Process exited early but without the database error marker
             # This could be a config error, OOM, or other gramine issue
-            # Check output for the marker one last time before giving up
-            if grep -q "$DATABASE_ERROR_MARKER" "$output_file" 2>/dev/null; then
-                echo "[$index] Found database error marker in output after exit"
+            # Check output for database error markers one last time before giving up
+            if grep -qE "$DATABASE_ERROR_MARKER|SQLITE_CANTOPEN" "$output_file" 2>/dev/null; then
+                echo "[$index] Found database error in output after exit"
                 detected_error=true
                 # Loop will continue and hit the invalid_database handling above
                 continue
