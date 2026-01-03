@@ -20,7 +20,7 @@ import { Message, WebSocketMessage, ChatMessage, UptimeData } from "./types.js"
 import { getStoredUsername } from "./utils.js"
 
 const REMOTES = [
-  { label: "Azure SGX", url: "https://52.191.114.221.nip.io" },
+  { label: "Azure SGX", url: "https://52.191.114.221.canvas.xyz" },
   { label: "Azure SGX", url: "http://52.191.114.221:3001" },
   { label: "Local", url: "http://localhost:3001" },
   { label: "Custom", url: "custom" },
