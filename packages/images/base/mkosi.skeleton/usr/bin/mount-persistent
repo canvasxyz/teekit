@@ -256,6 +256,30 @@ migrate_persistent_data() {
         fi
     fi
 
+    # Create backup copies of SGX enclave SQLite databases
+    # These are Gramine-encrypted files in /persistent/kettle-data/<MRENCLAVE>/
+    if [ "$migration_success" = true ]; then
+        log "Creating backup copies of SGX enclave databases..."
+        local backup_count=0
+        # Find all SQLite database files in kettle-data directories
+        for db_file in "$MOUNT_POINT"/kettle-data/*/*.sqlite "$MOUNT_POINT"/kettle-data/*/*.db "$MOUNT_POINT"/kettle-data/*/*.sqlite3; do
+            if [ -f "$db_file" ]; then
+                local backup_file="${db_file}.backup"
+                if cp -a "$db_file" "$backup_file" 2>/dev/null; then
+                    log "  Created backup: $backup_file"
+                    backup_count=$((backup_count + 1))
+                else
+                    error "  Failed to create backup of $db_file"
+                fi
+            fi
+        done
+        if [ $backup_count -gt 0 ]; then
+            log "Created $backup_count database backup(s)"
+        else
+            log "No SQLite databases found to backup"
+        fi
+    fi
+
     # Create migration marker to prevent re-migration when migration succeeded
     if [ "$migration_success" = true ]; then
         # Remove all previous migration markers (we only keep the latest)
