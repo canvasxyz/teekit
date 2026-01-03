@@ -182,38 +182,13 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
                 self.#onHonoOpen(ws, env, c as TunnelExtraContext<TApp>)
               }
             },
-            onMessage: async (event, ws) => {
-              try {
-                // Initialize on first message, if onOpen isn't called in non-Node environments
-                if (!wsInitialized) {
-                  wsInitialized = true
-                  self.#onHonoOpen(ws, env, c as TunnelExtraContext<TApp>)
-                }
-
-                // Decode incoming messages
-                let bytes: Uint8Array
-                if (typeof event.data === "string") {
-                  bytes = new TextEncoder().encode(event.data)
-                } else if (event.data instanceof Uint8Array) {
-                  bytes = event.data
-                } else if (event.data instanceof ArrayBuffer) {
-                  bytes = new Uint8Array(event.data)
-                } else if (ArrayBuffer.isView(event.data)) {
-                  const view = event.data as ArrayBufferView
-                  bytes = new Uint8Array(
-                    view.buffer as ArrayBuffer,
-                    view.byteOffset,
-                    view.byteLength,
-                  )
-                } else if (event.data instanceof Blob) {
-                  bytes = new Uint8Array(await event.data.arrayBuffer())
-                } else {
-                  bytes = new Uint8Array(event.data)
-                }
-                self.#onHonoMessage(ws, bytes)
-              } catch (e) {
-                console.error("Failed to process Hono WS message:", e)
+            onMessage: (event, ws) => {
+              // Initialize on first message, if onOpen isn't called in non-Node environments
+              if (!wsInitialized) {
+                wsInitialized = true
+                self.#onHonoOpen(ws, env, c as TunnelExtraContext<TApp>)
               }
+              void self.#processHonoMessage(event, ws)
             },
             onClose: (_event, ws) => {
               self.#onHonoClose(ws)
@@ -323,6 +298,33 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     }
     for (const id of toRemove) {
       this.sockets.delete(id)
+    }
+  }
+
+  async #processHonoMessage(event: any, ws: WSContext): Promise<void> {
+    try {
+      let bytes: Uint8Array
+      if (typeof event.data === "string") {
+        bytes = new TextEncoder().encode(event.data)
+      } else if (event.data instanceof Uint8Array) {
+        bytes = event.data
+      } else if (event.data instanceof ArrayBuffer) {
+        bytes = new Uint8Array(event.data)
+      } else if (ArrayBuffer.isView(event.data)) {
+        const view = event.data as ArrayBufferView
+        bytes = new Uint8Array(
+          view.buffer as ArrayBuffer,
+          view.byteOffset,
+          view.byteLength,
+        )
+      } else if (event.data instanceof Blob) {
+        bytes = new Uint8Array(await event.data.arrayBuffer())
+      } else {
+        bytes = new Uint8Array(event.data)
+      }
+      this.#onHonoMessage(ws, bytes)
+    } catch (e) {
+      console.error("Failed to process Hono WS message:", e)
     }
   }
 
