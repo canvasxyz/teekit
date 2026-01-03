@@ -55,16 +55,18 @@ configuration.
     HTTPS and WSS requests over the encrypted channel, both with and without
     the embedded ServiceWorker.
 - @teekit/kettle:
-  - A JS runtime designed for deploying remotely-attested, user-verifiable
-    code, designed to work with @teekit/tunnel and TEE environments
-    (e.g. Dstack, GCP, Azure).
+  - A workerd-based JS runtime designed for deploying remotely-attested,
+    user-verifiable code, designed to work with @teekit/tunnel and TEE
+    environments (e.g. Dstack, GCP, Azure).
+  - Includes SQLite storage for stateful applications.
+- @teekit/kettle-sgx:
+  - A proof-of-concept for running Kettle inside Intel SGX enclaves using
+    the Gramine library OS.
+  - Enables SGX-based confidential computing with workerd applications.
 - @teekit/images:
   - A reproducible VM image for running @teekit/kettle applications.
   - Based on Debian 13 with a custom yocto-tiny kernel, which boots a ~200MB
     read-only ramdisk containing our JS runtime.
-  - Builds are run using mkosi, and configured to automatically run nightly
-    while generating RTMR and PCR measurements (MRTD measurements unavailable
-    since cloud providers generally do not publish hypervisor firmware).
 
 @teekit/tunnel and @teekit/qvl are stable, while other components are under
 active development. These libraries have not been audited.
