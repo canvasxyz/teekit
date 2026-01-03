@@ -41,7 +41,7 @@ IMAGE_DEFINITION=""
 VM_SIZE=""
 SECURITY_TYPE=""  # "tdx" or "sgx"
 
-BOOT_DISK_SIZE="100GB"
+BOOT_DISK_SIZE_GB="100"
 
 # Colors for logging
 RED='\033[0;31m'
@@ -549,7 +549,7 @@ else
             --security-type TrustedLaunch \
             --image "$IMAGE_ID" \
             --size "$VM_SIZE" \
-            --os-disk-size-gb "$BOOT_DISK_SIZE" \
+            --os-disk-size-gb "$BOOT_DISK_SIZE_GB" \
             --enable-vtpm true \
             --enable-secure-boot true \
             --boot-diagnostics-storage "$STORAGE_ACCT" \
@@ -582,7 +582,7 @@ else
             --os-disk-security-encryption-type VMGuestStateOnly \
             --image "$IMAGE_ID" \
             --size "$VM_SIZE" \
-            --os-disk-size-gb "$BOOT_DISK_SIZE" \
+            --os-disk-size-gb "$BOOT_DISK_SIZE_GB" \
             --enable-vtpm true \
             --enable-secure-boot false \
             --boot-diagnostics-storage "$STORAGE_ACCT" \
