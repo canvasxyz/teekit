@@ -136,15 +136,7 @@ create_persistent_partition() {
     # sfdisk -l prints different column orders for GPT vs DOS tables
     # using sfdisk -d instead to give a stable "start=… size=…" list,
     # then calculate "start + size - 1" as the start of partition 2
-    part1_end=$(sfdisk -d "$disk" 2>/dev/null | awk -v dev="$part1_device" '
-        $1 == dev {
-            match($0, /start= *([0-9]+)/, start_match)
-            match($0, /size= *([0-9]+)/, size_match)
-            if (start_match[1] != "" && size_match[1] != "") {
-                print start_match[1] + size_match[1] - 1
-                exit
-            }
-        }')
+    part1_end=$(sfdisk -d "$disk" 2>/dev/null | awk -F'[=,]' -v dev="$part1_device" '$1 ~ dev { print $2 + $4 - 1; exit }')
 
     if [ -z "$part1_end" ]; then
         error "Could not determine end of partition 1"
