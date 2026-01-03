@@ -258,6 +258,8 @@ migrate_persistent_data() {
 
     # Create migration marker to prevent re-migration when migration succeeded
     if [ "$migration_success" = true ]; then
+        # Remove all previous migration markers (we only keep the latest)
+        rm -f "$MOUNT_POINT"/$MIGRATION_MARKER-* 2>/dev/null || true
         echo "Migrated from $old_disk ($old_disk_id) at $(date -Iseconds)" > "$marker_file"
         log "Created migration marker: $marker_file"
     else
