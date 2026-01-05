@@ -7,9 +7,8 @@
 # The script will:
 # 1. Capture the existing VM's configuration (IP, NIC, NSG, tags, size, disk size, etc.)
 # 2. Upload the VHD to blob storage and create an image version
-# 3. Delete the existing VM (but preserve NIC, public IP, and OS disk)
+# 3. Delete the existing VM (but preserve NIC and public IP)
 # 4. Create a new VM from the new image attached to the existing NIC with preserved disk size
-# 5. Attach the old OS disk as a data disk so preserved data can be accessed
 #
 # Prerequisites:
 # - Azure CLI installed and logged in (az login)
@@ -117,8 +116,6 @@ cleanup_on_failure() {
     echo "Resources that may need cleanup:"
     echo "  az sig image-version delete -g ${RESOURCE_GROUP} -r ${GALLERY_NAME} -i ${IMAGE_DEFINITION:-kettle-vm-azure} -e ${IMAGE_VERSION:-unknown} 2>/dev/null"
     echo "  az storage blob delete -n ${BLOB_NAME:-unknown} -c ${CONTAINER_NAME} --account-name \${STORAGE_ACCT} --auth-mode login 2>/dev/null"
-    echo ""
-    echo "The old OS disk '${OS_DISK_NAME:-unknown}' has been preserved and can be attached to a new VM."
     exit 1
 }
 
@@ -337,10 +334,10 @@ else
     log_info "Network Security Group: <none>"
 fi
 
-# Get OS disk name (we'll preserve this and attach it as a data disk)
+# Get OS disk name (we'll delete this since a new one will be created)
 OS_DISK_NAME=$(az vm show --name "$VM_NAME" --resource-group "$RESOURCE_GROUP" \
     --query "storageProfile.osDisk.name" -o tsv)
-log_info "OS Disk (will be preserved): $OS_DISK_NAME"
+log_info "OS Disk (will be deleted): $OS_DISK_NAME"
 
 # Get OS disk size (default to 100 GB if not determinable)
 OS_DISK_SIZE_GB=$(az disk show --name "$OS_DISK_NAME" --resource-group "$RESOURCE_GROUP" \
@@ -378,9 +375,9 @@ echo "    - Create image version: $IMAGE_VERSION"
 echo ""
 echo "  DELETE:"
 echo "    - VM: $VM_NAME"
+echo "    - OS Disk: $OS_DISK_NAME"
 echo ""
 echo "  PRESERVE:"
-echo "    - OS Disk: $OS_DISK_NAME (will be attached as data disk)"
 echo "    - Network Interface: $NIC_NAME"
 if [ -n "$PUBLIC_IP_NAME" ]; then
     echo "    - Public IP: $CURRENT_PUBLIC_IP ($PUBLIC_IP_NAME)"
@@ -740,9 +737,16 @@ fi
 
 log_success "Deleted VM: $VM_NAME"
 
-# Preserve the old OS disk - it will be attached as a data disk after the new VM is created
-log_info "Preserving old OS disk: $OS_DISK_NAME"
-log_info "The old OS disk will be attached as a data disk to the new VM"
+# Delete the old OS disk
+log_info "Deleting old OS disk: $OS_DISK_NAME"
+if az disk delete \
+    --name "$OS_DISK_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --yes 2>/dev/null; then
+    log_success "Deleted OS disk: $OS_DISK_NAME"
+else
+    log_warning "Could not delete OS disk (may already be deleted or still detaching)"
+fi
 
 # Wait a moment for resources to be fully released
 log_info "Waiting for resources to be released..."
@@ -848,28 +852,7 @@ fi
 log_success "Created VM: $VM_NAME"
 
 # ============================================================================
-# STEP 13: Attach preserved OS disk as data disk
-# ============================================================================
-log_step "Attaching preserved OS disk as data disk"
-
-log_info "Attaching old OS disk '$OS_DISK_NAME' as data disk..."
-
-if az vm disk attach \
-    --vm-name "$VM_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$OS_DISK_NAME" \
-    --lun 0 2>/dev/null; then
-    log_success "Attached old OS disk as data disk at LUN 0"
-    log_info "The old OS disk data will be accessible at /dev/sdb (or similar) inside the VM"
-    log_info "Mount it to access preserved data: mount /dev/sdb2 /mnt/old-disk"
-else
-    log_warning "Could not attach old OS disk as data disk"
-    log_info "You can manually attach it later:"
-    log_info "  az vm disk attach --vm-name $VM_NAME --resource-group $RESOURCE_GROUP --name $OS_DISK_NAME --lun 0"
-fi
-
-# ============================================================================
-# STEP 14: Verify deployment
+# STEP 13: Verify deployment
 # ============================================================================
 log_step "Verifying deployment"
 
@@ -951,7 +934,6 @@ echo "  - Blob: $BLOB_NAME"
 echo "  - Image Version: $IMAGE_VERSION"
 echo ""
 echo "Resources preserved:"
-echo "  - Old OS Disk: $OS_DISK_NAME (attached as data disk at LUN 0)"
 echo "  - Network Interface: $NIC_NAME"
 if [ -n "$PUBLIC_IP_NAME" ]; then
     echo "  - Public IP: $PUBLIC_IP_NAME"
@@ -965,13 +947,6 @@ fi
 if [ "$VM_TAGS_JSON" != "{}" ] && [ "$VM_TAGS_JSON" != "null" ]; then
     echo "  - Tags: $VM_TAGS_JSON"
 fi
-echo ""
-echo "Access preserved data from the old OS disk:"
-echo "  # Inside the VM, find the attached disk (usually /dev/sdb)"
-echo "  lsblk"
-echo "  # Mount the old root partition"
-echo "  mkdir -p /mnt/old-disk"
-echo "  mount /dev/sdb2 /mnt/old-disk"
 echo ""
 echo "Test the VM:"
 echo "  curl http://${NEW_PUBLIC_IP}:3001/uptime"
@@ -988,10 +963,6 @@ echo ""
 echo "Cleanup commands (for the new image resources, if needed):"
 echo "  az sig image-version delete -g $RESOURCE_GROUP -r $GALLERY_NAME -i $IMAGE_DEFINITION -e $IMAGE_VERSION"
 echo "  az storage blob delete -n $BLOB_NAME -c $CONTAINER_NAME --account-name $STORAGE_ACCT --auth-mode login"
-echo ""
-echo "To detach and delete the preserved old OS disk (when no longer needed):"
-echo "  az vm disk detach --vm-name $VM_NAME --resource-group $RESOURCE_GROUP --name $OS_DISK_NAME"
-echo "  az disk delete --name $OS_DISK_NAME --resource-group $RESOURCE_GROUP --yes"
 echo ""
 
 # Cache the VM name for future redeployments

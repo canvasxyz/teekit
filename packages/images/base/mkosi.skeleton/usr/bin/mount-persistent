@@ -11,13 +11,10 @@ set -euo pipefail
 # 1. Find the boot disk (has EFI partition)
 # 2. Look for or create a "persistent" partition (partition 2)
 # 3. Format if needed, then mount to /persistent
-# 4. Detect any attached old boot disks (from redeployment) and migrate data
 
 LOG_PREFIX="[mount-persistent]"
 SERIAL_CONSOLE="/dev/ttyS0"
 MOUNT_POINT="/persistent"
-OLD_DISK_MOUNT="/mnt/old-persistent"
-MIGRATION_MARKER=".migration-complete"
 
 # Tee output to serial console for debugging
 exec > >(tee >(sed "s/^/$LOG_PREFIX /" > "$SERIAL_CONSOLE" 2>/dev/null || true)) 2>&1
@@ -30,40 +27,31 @@ error() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
 }
 
-# Check if a disk has an EFI partition (partition 1)
-has_efi_partition() {
-    local disk="$1"
-    local part1=""
-
-    if [[ "$disk" == /dev/nvme* ]] || [[ "$disk" == /dev/loop* ]]; then
-        part1="${disk}p1"
-    else
-        part1="${disk}1"
-    fi
-
-    if [ ! -b "$part1" ]; then
-        return 1
-    fi
-
-    # Check if it's an EFI partition by looking at partition type or filesystem
-    if blkid "$part1" 2>/dev/null | grep -qiE "TYPE=\"vfat\"|PARTLABEL=\"EFI"; then
-        return 0
-    fi
-    # Also check via lsblk if blkid doesn't show it
-    if lsblk -no PARTTYPE "$part1" 2>/dev/null | grep -qi "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"; then
-        return 0
-    fi
-
-    return 1
-}
-
-# Detect the boot disk by finding the first disk with an EFI partition
+# Detect the boot disk by finding the disk with an EFI partition
 detect_boot_disk() {
-    # Check common boot disk devices - the boot disk is typically the first one
+    # Check common boot disk devices
     for disk in /dev/sda /dev/nvme0n1 /dev/vda /dev/xvda; do
-        if [ -b "$disk" ] && has_efi_partition "$disk"; then
-            echo "$disk"
-            return 0
+        if [ -b "$disk" ]; then
+            # Check if this disk has an EFI partition (partition 1 with EFI type)
+            local part1=""
+            if [[ "$disk" == /dev/nvme* ]]; then
+                part1="${disk}p1"
+            else
+                part1="${disk}1"
+            fi
+
+            if [ -b "$part1" ]; then
+                # Check if it's an EFI partition by looking at partition type or filesystem
+                if blkid "$part1" 2>/dev/null | grep -qiE "TYPE=\"vfat\"|PARTLABEL=\"EFI"; then
+                    echo "$disk"
+                    return 0
+                fi
+                # Also check via lsblk if blkid doesn't show it
+                if lsblk -no PARTTYPE "$part1" 2>/dev/null | grep -qi "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"; then
+                    echo "$disk"
+                    return 0
+                fi
+            fi
         fi
     done
 
@@ -76,24 +64,6 @@ detect_boot_disk() {
     done
 
     return 1
-}
-
-# Detect old boot disks (attached disks with EFI partitions that aren't the boot disk)
-detect_old_boot_disks() {
-    local boot_disk="$1"
-    local old_disks=()
-
-    # Check all potential disk devices
-    for disk in /dev/sda /dev/sdb /dev/sdc /dev/nvme0n1 /dev/nvme1n1 /dev/vda /dev/vdb /dev/vdc; do
-        if [ -b "$disk" ] && [ "$disk" != "$boot_disk" ]; then
-            if has_efi_partition "$disk"; then
-                old_disks+=("$disk")
-            fi
-        fi
-    done
-
-    # Return space-separated list
-    echo "${old_disks[*]:-}"
 }
 
 # Get the partition device name for a given disk and partition number
@@ -166,130 +136,6 @@ create_persistent_partition() {
     return 0
 }
 
-# Migrate data from old persistent partition to new one
-# Uses rsync to merge data, preserving newer files on the destination
-migrate_persistent_data() {
-    local old_part="$1"
-    local old_disk="$2"
-
-    log "Checking for data migration from old disk: $old_disk"
-
-    # Check if old partition exists and has a filesystem
-    if [ ! -b "$old_part" ]; then
-        log "Old persistent partition $old_part does not exist, skipping migration"
-        return 0
-    fi
-
-    if ! has_filesystem "$old_part"; then
-        log "Old persistent partition $old_part has no filesystem, skipping migration"
-        return 0
-    fi
-
-    # Create mount point for old disk
-    mkdir -p "$OLD_DISK_MOUNT"
-
-    # Mount old persistent partition (read-only for safety)
-    log "Mounting old persistent partition $old_part to $OLD_DISK_MOUNT..."
-    if ! mount -o ro "$old_part" "$OLD_DISK_MOUNT" 2>&1; then
-        error "Failed to mount old persistent partition $old_part"
-        rmdir "$OLD_DISK_MOUNT" 2>/dev/null || true
-        return 1
-    fi
-
-    # Check if this old disk has already been migrated (marker file on new disk)
-    local old_disk_id
-    old_disk_id=$(blkid -s UUID -o value "$old_part" 2>/dev/null || basename "$old_disk")
-    local marker_file="$MOUNT_POINT/$MIGRATION_MARKER-$old_disk_id"
-
-    if [ -f "$marker_file" ]; then
-        log "Data from $old_disk (UUID: $old_disk_id) has already been migrated, skipping"
-        umount "$OLD_DISK_MOUNT" 2>/dev/null || true
-        rmdir "$OLD_DISK_MOUNT" 2>/dev/null || true
-        return 0
-    fi
-
-    # Check if old disk has any data to migrate
-    if [ -z "$(ls -A "$OLD_DISK_MOUNT" 2>/dev/null)" ]; then
-        log "Old persistent partition is empty, nothing to migrate"
-        umount "$OLD_DISK_MOUNT" 2>/dev/null || true
-        rmdir "$OLD_DISK_MOUNT" 2>/dev/null || true
-        return 0
-    fi
-
-    log "Migrating data from old persistent partition..."
-    log "Source: $OLD_DISK_MOUNT"
-    log "Destination: $MOUNT_POINT"
-
-    # Show what's being migrated
-    log "Contents of old persistent partition:"
-    ls -la "$OLD_DISK_MOUNT" 2>/dev/null | head -20 | while read -r line; do
-        log "  $line"
-    done
-
-    local migration_success=false
-
-    # Copy data using cp
-    # -a: preserve permissions, ownership, timestamps, etc.
-    # --update: skip files that are newer on the destination (don't overwrite newer data)
-    log "Copying data from old persistent partition..."
-    if cp -av --update "$OLD_DISK_MOUNT"/. "$MOUNT_POINT/" 2>&1 | head -50 | while read -r line; do
-        log "  cp: $line"
-    done; then
-        log "Migration completed successfully"
-        migration_success=true
-    else
-        error "Migration failed, but continuing..."
-    fi
-
-    # Create backup copies of SGX enclave SQLite databases
-    # These are Gramine-encrypted files in /persistent/kettle-data/<MRENCLAVE>/
-    if [ "$migration_success" = true ]; then
-        log "Creating backup copies of SGX enclave databases..."
-        local backup_count=0
-        # Find all SQLite database files in kettle-data directories
-        for db_file in "$MOUNT_POINT"/kettle-data/*/*.sqlite "$MOUNT_POINT"/kettle-data/*/*.db "$MOUNT_POINT"/kettle-data/*/*.sqlite3; do
-            if [ -f "$db_file" ]; then
-                local backup_file="${db_file}.backup"
-                if cp -a "$db_file" "$backup_file" 2>/dev/null; then
-                    log "  Created backup: $backup_file"
-                    backup_count=$((backup_count + 1))
-                else
-                    error "  Failed to create backup of $db_file"
-                fi
-            fi
-        done
-        if [ $backup_count -gt 0 ]; then
-            log "Created $backup_count database backup(s)"
-        else
-            log "No SQLite databases found to backup"
-        fi
-    fi
-
-    # Create migration marker to prevent re-migration when migration succeeded
-    if [ "$migration_success" = true ]; then
-        # Remove all previous migration markers (we only keep the latest)
-        rm -f "$MOUNT_POINT"/$MIGRATION_MARKER-* 2>/dev/null || true
-        echo "Migrated from $old_disk ($old_disk_id) at $(date -Iseconds)" > "$marker_file"
-        log "Created migration marker: $marker_file"
-    else
-        log "Skipping migration marker creation due to copy errors"
-    fi
-
-    # Show migration result
-    log "Contents of new persistent partition after migration:"
-    ls -la "$MOUNT_POINT" 2>/dev/null | head -20 | while read -r line; do
-        log "  $line"
-    done
-
-    # Unmount old partition
-    log "Unmounting old persistent partition..."
-    umount "$OLD_DISK_MOUNT" 2>/dev/null || true
-    rmdir "$OLD_DISK_MOUNT" 2>/dev/null || true
-
-    log "Data migration from $old_disk completed"
-    return 0
-}
-
 # Main
 log "Starting persistent storage mount..."
 
@@ -322,7 +168,6 @@ if [ ! -b "$PERSISTENT_PART" ]; then
 fi
 
 # Format if needed (first boot or empty partition)
-NEW_FILESYSTEM=false
 if ! has_filesystem "$PERSISTENT_PART"; then
     log "No filesystem found on $PERSISTENT_PART, formatting with ext4..."
     if ! mkfs.ext4 -F -L persistent "$PERSISTENT_PART" 2>&1; then
@@ -330,7 +175,6 @@ if ! has_filesystem "$PERSISTENT_PART"; then
         exit 1
     fi
     log "Formatted $PERSISTENT_PART with ext4"
-    NEW_FILESYSTEM=true
 fi
 
 # Create mount point
@@ -351,49 +195,6 @@ log "Successfully mounted $PERSISTENT_PART to $MOUNT_POINT"
 # Show disk info
 df -h "$MOUNT_POINT" | tail -1 | while read -r line; do
     log "Disk info: $line"
-done
-
-# Wait for data disks to appear (Azure VMs may have old boot disk attached as data disk)
-# Data disks can take 10-30 seconds to appear after boot starts
-# We wait up to 30 seconds, checking every 2 seconds
-log "Waiting for any attached data disks to appear..."
-MAX_WAIT=30
-WAIT_INTERVAL=2
-ELAPSED=0
-
-while [ $ELAPSED -lt $MAX_WAIT ]; do
-    # Check if any old boot disks are detected
-    OLD_BOOT_DISKS=$(detect_old_boot_disks "$BOOT_DISK")
-    if [ -n "$OLD_BOOT_DISKS" ]; then
-        log "Found old boot disk(s) after ${ELAPSED}s: $OLD_BOOT_DISKS"
-        break
-    fi
-
-    # Wait before checking again
-    if [ $ELAPSED -eq 0 ]; then
-        log "No old boot disks found yet, waiting up to ${MAX_WAIT}s..."
-    fi
-    sleep $WAIT_INTERVAL
-    ELAPSED=$((ELAPSED + WAIT_INTERVAL))
-done
-
-# Detect and migrate data from old boot disks (from redeployment)
-OLD_BOOT_DISKS=$(detect_old_boot_disks "$BOOT_DISK")
-if [ -n "$OLD_BOOT_DISKS" ]; then
-    log "Detected old boot disk(s): $OLD_BOOT_DISKS"
-    for old_disk in $OLD_BOOT_DISKS; do
-        old_part=$(get_partition_device "$old_disk" 2)
-        log "Attempting migration from old disk: $old_disk (partition: $old_part)"
-        migrate_persistent_data "$old_part" "$old_disk" || true
-    done
-else
-    log "No old boot disks detected (this is a fresh deployment or first boot)"
-fi
-
-# Final status
-log "Persistent storage setup complete"
-df -h "$MOUNT_POINT" | tail -1 | while read -r line; do
-    log "Final disk info: $line"
 done
 
 exit 0
