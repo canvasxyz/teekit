@@ -316,12 +316,6 @@ test.serial("launcher: database operations work", async (t) => {
     return
   }
 
-  // Initialize database
-  const initResponse = await fetch(`http://localhost:${testPort}/db/init`, {
-    method: "POST",
-  })
-  t.is(initResponse.status, 200)
-
   // Put a value
   const putResponse = await fetch(`http://localhost:${testPort}/db/put`, {
     method: "POST",

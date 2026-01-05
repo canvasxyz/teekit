@@ -46,10 +46,6 @@ test.serial("database operations work via DO SQLite", async (t) => {
   t.is(resp.status, 200)
 
   // Initialize the database table
-  resp = await fetch(`http://localhost:${port}/db/init`, {
-    method: "POST",
-  })
-  t.is(resp.status, 200, "db/init should succeed")
 
   // Write data to database via the API
   resp = await fetch(`http://localhost:${port}/db/put`, {
