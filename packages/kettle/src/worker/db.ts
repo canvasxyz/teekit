@@ -34,16 +34,10 @@ export interface SqliteClient {
   close(): void
 }
 
-// Cache for DO storage client
-let doStorageClient: SqliteClient | null = null
-
 export function getDb(env: DbBindings): SqliteClient {
   if (!env.DO_STORAGE?.sql) {
     throw new Error("Database not configured: DO_STORAGE.sql not available. Ensure enableSql = true in workerd config.")
   }
 
-  if (!doStorageClient) {
-    doStorageClient = new DurableObjectSqliteClient(env.DO_STORAGE)
-  }
-  return doStorageClient
+  return new DurableObjectSqliteClient(env.DO_STORAGE)
 }
