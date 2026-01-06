@@ -8,11 +8,24 @@ KETTLE_QUOTE_URL="${KETTLE_QUOTE_URL:-http://localhost:3333/quote}"
 MAA_ENDPOINT="${MAA_ENDPOINT:-https://maa.eus.attest.azure.net}"
 API_VERSION="${API_VERSION:-2025-06-01}"
 
+echo "=== Generating Test Public Key ==="
+# Generate a random 32-byte x25519 public key for testing
+# (In production, this would be your actual ephemeral public key)
+PUBLIC_KEY_BYTES=$(openssl rand -hex 32)
+echo "Public Key (hex): $PUBLIC_KEY_BYTES"
+
+# Convert hex to JSON array of decimal bytes for the quote service
+PUBLIC_KEY_JSON=$(echo -n "$PUBLIC_KEY_BYTES" | sed 's/../0x& /g' | xargs printf '%d,' | sed 's/,$//' | sed 's/^/[/' | sed 's/$/]/')
+
+echo ""
 echo "=== Fetching SGX Quote from Kettle-SGX ==="
 echo "Quote URL: $KETTLE_QUOTE_URL"
 
-# Fetch quote from kettle-sgx service
-QUOTE_RESPONSE=$(curl "$KETTLE_QUOTE_URL")
+# Fetch quote from kettle-sgx service with the public key
+QUOTE_REQUEST=$(jq -n --argjson pubkey "$PUBLIC_KEY_JSON" '{publicKey: $pubkey}')
+QUOTE_RESPONSE=$(curl -s -X POST "$KETTLE_QUOTE_URL" \
+    -H "Content-Type: application/json" \
+    -d "$QUOTE_REQUEST")
 
 # Extract the quote field (base64-encoded)
 QUOTE=$(echo "$QUOTE_RESPONSE" | jq -r '.quote')
@@ -25,28 +38,23 @@ fi
 
 echo "✓ Quote retrieved successfully (${#QUOTE} bytes base64-encoded)"
 
-# Optionally extract report_data for runtime data
-REPORT_DATA=$(echo "$QUOTE_RESPONSE" | jq -r '.report_data')
+# Convert the public key to base64 for runtimeData
+# This is the original data that was hashed into report_data
+PUBLIC_KEY_BASE64=$(echo -n "$PUBLIC_KEY_BYTES" | xxd -r -p | base64 -w0)
 
-# Prepare MAA request payload
+echo "✓ Public key encoded for runtime data (${#PUBLIC_KEY_BASE64} bytes base64)"
+
+# Prepare MAA request payload with runtimeData
 MAA_REQUEST=$(jq -n \
     --arg quote "$QUOTE" \
+    --arg runtime_data "$PUBLIC_KEY_BASE64" \
     '{
-        quote: $quote
+        quote: $quote,
+        runtimeData: {
+            data: $runtime_data,
+            dataType: "BINARY"
+        }
     }')
-
-# Optionally include runtimeData if you want to bind the report_data
-# Uncomment the following to include runtime data:
-# MAA_REQUEST=$(jq -n \
-#     --arg quote "$QUOTE" \
-#     --arg report_data "$REPORT_DATA" \
-#     '{
-#         quote: $quote,
-#         runtimeData: {
-#             data: $report_data,
-#             dataType: "BINARY"
-#         }
-#     }')
 
 echo ""
 echo "=== Submitting to Microsoft Azure Attestation ==="
