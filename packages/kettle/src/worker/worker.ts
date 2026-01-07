@@ -22,7 +22,7 @@ interface DurableObjectState {
   abort(reason?: string): void
 }
 
-interface SqlStorageCursor {
+export interface SqlStorageCursor {
   toArray(): Record<string, unknown>[]
   one(): Record<string, unknown>
   raw(): Iterator<unknown[]>
@@ -31,12 +31,12 @@ interface SqlStorageCursor {
   readonly rowsWritten: number
 }
 
-interface SqlStorage {
+export interface SqlStorage {
   exec(query: string, ...bindings: unknown[]): SqlStorageCursor
   readonly databaseSize: number
 }
 
-interface DurableObjectStorage {
+export interface DurableObjectStorage {
   get(key: string): Promise<any>
   get(keys: string[]): Promise<Map<string, any>>
   put(key: string, value: any): Promise<void>

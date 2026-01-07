@@ -9,6 +9,5 @@ export {
 
 export { startQuoteService } from "./startQuoteService.js"
 
-export { getDb } from "./worker/db.js"
 export { serveStatic } from "./worker/static.js"
-export type { Env } from "./worker/worker.js"
+export type { Env, SqlStorage, SqlStorageCursor, DurableObjectStorage } from "./worker/worker.js"

@@ -7,9 +7,9 @@ import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
 
 import {
   serveStatic,
-  getDb,
   getQuoteFromService,
   type Env,
+  type SqlStorage,
 } from "@teekit/kettle/worker"
 
 import type {
@@ -22,19 +22,16 @@ import type {
 const app = new Hono<{ Bindings: Env }>()
 app.use("/*", cors())
 
-// Module-level env reference for WebSocket handlers
-let moduleEnv: Env | null = null
+// Store module-level sql reference for WebSocket handlers
+let moduleSql: SqlStorage
 
-// Initialization hook
 export async function onInit(env: Env) {
-  // Store env reference for WebSocket handlers
-  moduleEnv = env
+  moduleSql = env.DO_STORAGE!.sql!
 
-  const db = getDb(env)
-  await db.execute(
+  moduleSql.exec(
     "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
   )
-  await db.execute(`
+  moduleSql.exec(`
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL,
@@ -43,7 +40,7 @@ export async function onInit(env: Env) {
     )
   `)
   // Create an index on timestamp for efficient ordering
-  await db.execute(
+  moduleSql.exec(
     "CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)",
   )
 }
@@ -61,25 +58,25 @@ wss.on("connection", (ws) => {
   // Send backlog on connect
   ;(async () => {
     try {
-      if (!moduleEnv) {
-        console.error("[kettle] moduleEnv not initialized")
+      if (!moduleSql) {
+        console.error("[kettle] moduleSql not initialized")
         return
       }
 
-      const db = getDb(moduleEnv)
-
       // Get total message count
-      const countResult = await db.execute("SELECT COUNT(*) as count FROM messages")
-      const totalMessageCount = (countResult.rows[0]?.count as number) ?? 0
+      const countResult = moduleSql.exec(
+        "SELECT COUNT(*) as count FROM messages",
+      )
+      const totalMessageCount = (countResult.one().count as number) ?? 0
 
       // Get last MAX_MESSAGES messages ordered by timestamp
-      const messagesResult = await db.execute({
-        sql: "SELECT id, username, text, timestamp FROM messages ORDER BY timestamp DESC LIMIT ?1",
-        args: [MAX_MESSAGES],
-      })
+      const messagesResult = moduleSql.exec(
+        "SELECT id, username, text, timestamp FROM messages ORDER BY timestamp DESC LIMIT ?",
+        MAX_MESSAGES,
+      )
 
       // Reverse to get chronological order (oldest first)
-      const messages = (messagesResult.rows as Message[]).reverse()
+      const messages = (messagesResult.toArray() as Message[]).reverse()
       const hiddenCount = Math.max(0, totalMessageCount - messages.length)
 
       const backlogMessage: BacklogMessage = {
@@ -102,12 +99,11 @@ wss.on("connection", (ws) => {
         )
 
         if (incoming?.type === "chat") {
-          if (!moduleEnv) {
-            console.error("[kettle] moduleEnv not initialized")
+          if (!moduleSql) {
+            console.error("[kettle] moduleSql not initialized")
             return
           }
 
-          const db = getDb(moduleEnv)
           const chatMessage: Message = {
             id: Date.now().toString(),
             username: incoming.username,
@@ -116,24 +112,25 @@ wss.on("connection", (ws) => {
           }
 
           // Insert message into database
-          await db.execute({
-            sql: "INSERT INTO messages (id, username, text, timestamp) VALUES (?1, ?2, ?3, ?4)",
-            args: [chatMessage.id, chatMessage.username, chatMessage.text, chatMessage.timestamp],
-          })
+          moduleSql.exec(
+            "INSERT INTO messages (id, username, text, timestamp) VALUES (?, ?, ?, ?)",
+            chatMessage.id,
+            chatMessage.username,
+            chatMessage.text,
+            chatMessage.timestamp,
+          )
 
           // Clean up old messages to maintain MAX_MESSAGES limit
           // TODO: we don't need a blocking query every message here
-          await db.execute({
-            sql: `
-              DELETE FROM messages
-              WHERE timestamp < (
-                SELECT timestamp FROM messages
-                ORDER BY timestamp DESC
-                LIMIT 1 OFFSET ?1
-              )
-            `,
-            args: [MAX_MESSAGES - 1],
-          })
+          moduleSql.exec(
+            `DELETE FROM messages
+             WHERE timestamp < (
+               SELECT timestamp FROM messages
+               ORDER BY timestamp DESC
+               LIMIT 1 OFFSET ?
+             )`,
+            MAX_MESSAGES - 1,
+          )
 
           const broadcast: BroadcastMessage = {
             type: "message",
@@ -184,10 +181,7 @@ app.post("/increment", async (c) => {
  * ******************************************************************************** */
 
 app.get("/healthz", async (c) => {
-  if (c.env.DB_URL && c.env.DB_TOKEN) {
-    const db = getDb(c.env)
-    await db.execute("SELECT 1")
-  }
+  moduleSql.exec("SELECT 1")
   return c.json({ ok: true })
 })
 
@@ -225,23 +219,20 @@ app.post("/db/put", async (c) => {
   if (typeof key !== "string" || typeof value !== "string") {
     return c.json({ error: "key and value must be strings" }, 400)
   }
-  const db = getDb(c.env)
-  await db.execute({
-    sql: "INSERT INTO kv(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-    args: [key, value],
-  })
+  moduleSql.exec(
+    "INSERT INTO kv(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    key,
+    value,
+  )
   return c.json({ ok: true })
 })
 
 app.get("/db/get", async (c) => {
   const key = c.req.query("key")
   if (!key) return c.json({ error: "key is required" }, 400)
-  const db = getDb(c.env)
-  const rs = await db.execute({
-    sql: "SELECT value FROM kv WHERE key = ?1",
-    args: [key],
-  })
-  const row = rs.rows?.[0]
+  const cursor = moduleSql.exec("SELECT value FROM kv WHERE key = ?", key)
+  const rows = cursor.toArray()
+  const row = rows[0]
   if (!row) return c.json({ error: "not found" }, 404)
   const value = row.value ?? Object.values(row)[0]
   return c.json({ key, value })
