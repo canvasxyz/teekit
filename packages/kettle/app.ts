@@ -22,17 +22,33 @@ import type {
 const app = new Hono<{ Bindings: Env }>()
 app.use("/*", cors())
 
+// Module-level env reference for WebSocket handlers
+let moduleEnv: Env | null = null
+
 // Initialization hook
 export async function onInit(env: Env) {
+  // Store env reference for WebSocket handlers
+  moduleEnv = env
+
   const db = getDb(env)
   await db.execute(
     "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)",
   )
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      text TEXT NOT NULL,
+      timestamp TEXT NOT NULL
+    )
+  `)
+  // Create an index on timestamp for efficient ordering
+  await db.execute(
+    "CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)",
+  )
 }
 
 // Ephemeral global state
-let messages: Message[] = []
-let totalMessageCount = 0
 const MAX_MESSAGES = 30
 const startTime = Date.now()
 let counter = 0
@@ -43,52 +59,100 @@ const { wss } = await TunnelServer.initialize(app, getQuoteFromService, {
 
 wss.on("connection", (ws) => {
   // Send backlog on connect
-  const hiddenCount = Math.max(0, totalMessageCount - messages.length)
-  const backlogMessage: BacklogMessage = {
-    type: "backlog",
-    messages,
-    hiddenCount,
-  }
-  ws.send(JSON.stringify(backlogMessage))
+  ;(async () => {
+    try {
+      if (!moduleEnv) {
+        console.error("[kettle] moduleEnv not initialized")
+        return
+      }
+
+      const db = getDb(moduleEnv)
+
+      // Get total message count
+      const countResult = await db.execute("SELECT COUNT(*) as count FROM messages")
+      const totalMessageCount = (countResult.rows[0]?.count as number) ?? 0
+
+      // Get last MAX_MESSAGES messages ordered by timestamp
+      const messagesResult = await db.execute({
+        sql: "SELECT id, username, text, timestamp FROM messages ORDER BY timestamp DESC LIMIT ?1",
+        args: [MAX_MESSAGES],
+      })
+
+      // Reverse to get chronological order (oldest first)
+      const messages = (messagesResult.rows as Message[]).reverse()
+      const hiddenCount = Math.max(0, totalMessageCount - messages.length)
+
+      const backlogMessage: BacklogMessage = {
+        type: "backlog",
+        messages,
+        hiddenCount,
+      }
+      ws.send(JSON.stringify(backlogMessage))
+    } catch (err) {
+      console.error("[kettle] Error sending backlog:", err)
+    }
+  })()
 
   // Broadcast on incoming chat messages
   ws.on("message", (data) => {
-    try {
-      const incoming: IncomingChatMessage = JSON.parse(
-        typeof data === "string" ? data : new TextDecoder().decode(data),
-      )
+    ;(async () => {
+      try {
+        const incoming: IncomingChatMessage = JSON.parse(
+          typeof data === "string" ? data : new TextDecoder().decode(data),
+        )
 
-      if (incoming?.type === "chat") {
-        const chatMessage: Message = {
-          id: Date.now().toString(),
-          username: incoming.username,
-          text: incoming.text,
-          timestamp: new Date().toISOString(),
-        }
-
-        messages.push(chatMessage)
-        totalMessageCount += 1
-        if (messages.length > MAX_MESSAGES) {
-          messages = messages.slice(-MAX_MESSAGES)
-        }
-
-        const broadcast: BroadcastMessage = {
-          type: "message",
-          message: chatMessage,
-        }
-
-        // iterate over ServerRAMockWebSocket instances
-        wss.clients.forEach((client: ServerRAMockWebSocket) => {
-          if (client.readyState === 1 /* WebSocket.OPEN */) {
-            client.send(JSON.stringify(broadcast))
+        if (incoming?.type === "chat") {
+          if (!moduleEnv) {
+            console.error("[kettle] moduleEnv not initialized")
+            return
           }
-        })
+
+          const db = getDb(moduleEnv)
+          const chatMessage: Message = {
+            id: Date.now().toString(),
+            username: incoming.username,
+            text: incoming.text,
+            timestamp: new Date().toISOString(),
+          }
+
+          // Insert message into database
+          await db.execute({
+            sql: "INSERT INTO messages (id, username, text, timestamp) VALUES (?1, ?2, ?3, ?4)",
+            args: [chatMessage.id, chatMessage.username, chatMessage.text, chatMessage.timestamp],
+          })
+
+          // Clean up old messages to maintain MAX_MESSAGES limit
+          // TODO: we don't need a blocking query every message here
+          await db.execute({
+            sql: `
+              DELETE FROM messages
+              WHERE timestamp < (
+                SELECT timestamp FROM messages
+                ORDER BY timestamp DESC
+                LIMIT 1 OFFSET ?1
+              )
+            `,
+            args: [MAX_MESSAGES - 1],
+          })
+
+          const broadcast: BroadcastMessage = {
+            type: "message",
+            message: chatMessage,
+          }
+
+          // iterate over ServerRAMockWebSocket instances
+          wss.clients.forEach((client: ServerRAMockWebSocket) => {
+            if (client.readyState === 1 /* WebSocket.OPEN */) {
+              client.send(JSON.stringify(broadcast))
+            }
+          })
+        }
+      } catch (err) {
+        console.error("[kettle] Error parsing message:", err)
+        // Echo anything that doesn't parse as JSON so we can test this
+        ws.send(data)
       }
-    } catch (err) {
-      console.error("[kettle] Error parsing message:", err)
-      // Echo anything that doesn't parse as JSON so we can test this
-      ws.send(data)
-    }
+    })()
   })
 })
 
