@@ -16,11 +16,11 @@ The build uses a multi-stage mkosi pipeline to optimize caching and separate bui
 
 ## Usage
 
-1. Install make, qemu-utils, and nix:
+1. Install make, qemu-utils, go, and nix:
 
    ```
    sudo apt update
-   sudo apt install -y make qemu-utils qemu-system-x86
+   sudo apt install -y make qemu-utils qemu-system-x86 golang-go
    NONINTERACTIVE=1 ./scripts/setup_deps.sh
    . ~/.nix-profile/etc/profile.d/nix.sh
    ```
