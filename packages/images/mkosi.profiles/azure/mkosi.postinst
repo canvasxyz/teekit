@@ -2,3 +2,6 @@
 
 mkosi-chroot systemctl enable "azure-provisioning.service"
 ln -sf "/etc/systemd/system/azure-provisioning.service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
+
+# Install Azure-specific trustauthority-cli (overwrites the base GCP version)
+PostInstallationScripts=install-trustauthority-cli-azure.sh
