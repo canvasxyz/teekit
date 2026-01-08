@@ -1,7 +1,43 @@
 import type { Express } from "express"
 import type { Hono } from "hono"
+import type { NodeWebSocket } from "@hono/node-ws"
+import type { UpgradeWebSocket } from "hono/ws"
 
 export type TunnelApp = Express | Hono<any, any, any>
+
+/**
+ * Type for the getQuote function that returns attestation quote data.
+ */
+export type GetQuoteFunction = (
+  x25519PublicKey: Uint8Array,
+  env?: unknown,
+) => Promise<IntelQuoteData | SevSnpQuoteData> | IntelQuoteData | SevSnpQuoteData
+
+/**
+ * Type for the upgradeWebSocket function from Hono adapters.
+ */
+export type UpgradeWebSocketFunction =
+  | NodeWebSocket["upgradeWebSocket"]
+  | UpgradeWebSocket<any, any, any>
+
+/**
+ * Global context for TunnelServer initialization.
+ * This allows workerd environments to inject these functions globally
+ * so they don't need to be passed explicitly to TunnelServer.initialize().
+ */
+export interface TunnelServerGlobalContext {
+  /**
+   * Function to get attestation quote data.
+   * In workerd, this typically fetches from a QUOTE_SERVICE binding.
+   */
+  getQuote?: GetQuoteFunction
+
+  /**
+   * Hono's upgradeWebSocket helper for the current runtime.
+   * In workerd, this comes from 'hono/cloudflare-workers'.
+   */
+  upgradeWebSocket?: UpgradeWebSocketFunction
+}
 
 export type VerifierNonce = {
   val: Uint8Array // random nonce from ITA

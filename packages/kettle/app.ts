@@ -3,11 +3,11 @@ import { cors } from "hono/cors"
 import { WSEvents } from "hono/ws"
 import { upgradeWebSocket } from "hono/cloudflare-workers"
 import { ContentfulStatusCode } from "hono/utils/http-status"
-import { TunnelServer, ServerRAMockWebSocket } from "@teekit/tunnel"
 
 import {
+  TunnelServer,
+  ServerRAMockWebSocket,
   serveStatic,
-  getQuoteFromService,
   type Env,
   type SqlStorage,
 } from "@teekit/kettle/worker"
@@ -50,9 +50,7 @@ const MAX_MESSAGES = 30
 const startTime = Date.now()
 let counter = 0
 
-const { wss } = await TunnelServer.initialize(app, getQuoteFromService, {
-  upgradeWebSocket,
-})
+const { wss } = await TunnelServer.initialize(app)
 
 wss.on("connection", (ws) => {
   // Send backlog on connect

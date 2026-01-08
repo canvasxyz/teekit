@@ -22,12 +22,15 @@ import {
   RAEncryptedClientCloseEvent,
   RAEncryptedServerEvent,
   ControlChannelEncryptedMessage,
-  IntelQuoteData,
-  SevSnpQuoteData,
   VerifierNonce,
   ControlChannelKXAnnounce,
   TunnelApp,
+  GetQuoteFunction,
 } from "./types.js"
+import {
+  getGlobalGetQuote,
+  getGlobalUpgradeWebSocket,
+} from "./globalContext.js"
 import {
   isControlChannelKXConfirm,
   isControlChannelEncryptedMessage,
@@ -100,13 +103,7 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
 
   private constructor(
     public readonly app: TApp,
-    private getQuote: (
-      x25519PublicKey: Uint8Array,
-      env?: unknown,
-    ) =>
-      | Promise<IntelQuoteData | SevSnpQuoteData>
-      | IntelQuoteData
-      | SevSnpQuoteData,
+    private getQuote: GetQuoteFunction,
     config?: TunnelServerConfig,
   ) {
     this.keyReady = false
@@ -139,21 +136,73 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
     this.#getQuote()
   }
 
+  /**
+   * Initialize a TunnelServer.
+   *
+   * ```
+   * const server = await TunnelServer.initialize(app, getQuote)
+   * ```
+   *
+   * For Hono applications:
+   *
+   * ```
+   * const server = await TunnelServer.initialize(app, getQuote), { upgradeWebSocket })
+   * ```
+   *
+   * You may also use a global context to provide additional arguments:
+   *
+   * ```
+   * setTunnelServerContext({ getQuote, upgradeWebSocket })
+   * const server = await TunnelServer.initialize(app)
+   * ```
+   */
   static async initialize<TApp extends TunnelApp>(
     app: TApp,
-    getQuote: (
-      x25519PublicKey: Uint8Array,
-      env?: unknown,
-    ) =>
-      | Promise<IntelQuoteData | SevSnpQuoteData>
-      | IntelQuoteData
-      | SevSnpQuoteData,
+    getQuoteOrConfig?: GetQuoteFunction | TunnelServerConfig,
+    // Additional configuration for Hono applications to support tunneled WebSockets.
     config?: TunnelServerConfig,
   ): Promise<TunnelServer<TApp>> {
-    const server = new TunnelServer<TApp>(app, getQuote, config)
+    // Parse arguments: support both (app, getQuote, config) and (app, config)
+    let resolvedGetQuote: GetQuoteFunction | undefined
+    let resolvedConfig: TunnelServerConfig | undefined
+
+    if (typeof getQuoteOrConfig === "function") {
+      // Called as (app, getQuote, config?)
+      resolvedGetQuote = getQuoteOrConfig
+      resolvedConfig = config
+    } else if (getQuoteOrConfig !== undefined) {
+      // Called as (app, config)
+      resolvedConfig = getQuoteOrConfig
+    }
+
+    // Fall back to global context if not provided explicitly
+    if (!resolvedGetQuote) {
+      resolvedGetQuote = getGlobalGetQuote()
+    }
+
+    // Merge config with global upgradeWebSocket if not provided
+    if (resolvedConfig?.upgradeWebSocket === undefined) {
+      const globalUpgradeWs = getGlobalUpgradeWebSocket()
+      if (globalUpgradeWs) {
+        resolvedConfig = {
+          ...resolvedConfig,
+          upgradeWebSocket: globalUpgradeWs,
+        }
+      }
+    }
+
+    // Validate that we have getQuote
+    if (!resolvedGetQuote) {
+      throw new Error(
+        "TunnelServer.initialize() requires a getQuote function. " +
+          "Either pass it explicitly or call setTunnelServerContext({ getQuote }) first.",
+      )
+    }
+
+    const server = new TunnelServer<TApp>(app, resolvedGetQuote, resolvedConfig)
 
     // Setup http and WebSocketServer for Express apps
-    if (!config?.upgradeWebSocket) {
+    if (!resolvedConfig?.upgradeWebSocket) {
       await server.#setupExpressHttpServer()
       await server.#bindExpressWebSocketServer()
     }
@@ -163,7 +212,10 @@ export class TunnelServer<TApp extends TunnelApp = TunnelApp> {
 
   async #setupHonoWebSocketChannel(app: Hono, config?: TunnelServerConfig) {
     if (!config?.upgradeWebSocket) {
-      throw new Error("Hono apps must provide { upgradeWebSocket } argument")
+      throw new Error(
+        "Hono apps require upgradeWebSocket. " +
+          "Either pass { upgradeWebSocket } to initialize() or call setTunnelServerContext({ upgradeWebSocket }) first.",
+      )
     }
 
     try {

@@ -18,10 +18,20 @@ export {
 // Hono middleware for enforcing encryption
 export { encryptedOnlyHono } from "./encryptedOnlyHono.js"
 
+// Global context for workerd environments
+export {
+  setTunnelServerContext,
+  getTunnelServerContext,
+  isWorkerdEnvironment,
+} from "./globalContext.js"
+
 export type {
-  IntelQuoteData as IntelQuoteData,
+  IntelQuoteData,
   SevSnpQuoteData,
   VerifierNonce,
+  TunnelServerGlobalContext,
+  GetQuoteFunction,
+  UpgradeWebSocketFunction,
 } from "./types.js"
 
 // Sample quotes for testing

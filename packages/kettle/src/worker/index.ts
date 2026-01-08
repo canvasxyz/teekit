@@ -1,9 +1,30 @@
+// Re-export Hono application server primitives
+export {
+  TunnelServer,
+  ServerRAMockWebSocket,
+  ServerRAMockWebSocketServer,
+  encryptedOnlyHono,
+  type IntelQuoteData,
+  type SevSnpQuoteData,
+  type VerifierNonce,
+  type TunnelServerGlobalContext,
+  type GetQuoteFunction,
+  type UpgradeWebSocketFunction,
+} from "@teekit/tunnel"
+export type {
+  Env,
+  DurableObjectStorage,
+  SqlStorage,
+  SqlStorageCursor,
+} from "./worker.js"
 export { serveStatic } from "./static.js"
-export type { Env, DurableObjectStorage, SqlStorage, SqlStorageCursor } from "./worker.js"
 
 // Shared helper functions
 import { base64 } from "@scure/base"
+import { setTunnelServerContext } from "@teekit/tunnel"
 import type { IntelQuoteData, SevSnpQuoteData } from "@teekit/tunnel"
+// @ts-ignore - hono/cloudflare-workers is only available in workerd
+import { upgradeWebSocket } from "hono/cloudflare-workers"
 
 interface FetcherLike {
   fetch(request: Request | string, init?: RequestInit): Promise<Response>
@@ -75,3 +96,10 @@ export async function getQuoteFromService(
       : undefined,
   }
 }
+
+// Automatically set the global TunnelServer context when this module is imported.
+// This allows TunnelServer.initialize(app) to work without explicit parameters in workerd.
+setTunnelServerContext({
+  getQuote: getQuoteFromService,
+  upgradeWebSocket,
+})
