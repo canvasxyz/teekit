@@ -6,10 +6,10 @@ import { ContentfulStatusCode } from "hono/utils/http-status"
 
 import {
   TunnelServer,
-  ServerRAMockWebSocket,
   serveStatic,
   type Env,
   type SqlStorage,
+  type ServerRAMockWebSocket,
 } from "@teekit/kettle/worker"
 
 import type {
@@ -45,10 +45,8 @@ export async function onInit(env: Env) {
   )
 }
 
-// Ephemeral global state
 const MAX_MESSAGES = 30
-const startTime = Date.now()
-let counter = 0
+const startTime = Date.now() // ephemeral uptime
 
 const { wss } = await TunnelServer.initialize(app)
 
@@ -170,8 +168,20 @@ app.get("/uptime", (c) => {
 })
 
 app.post("/increment", async (c) => {
-  counter += 1
-  return c.json({ counter })
+  // Get current counter value from SQL storage
+  const cursor = moduleSql.exec("SELECT value FROM kv WHERE key = ?", "counter")
+  const rows = cursor.toArray()
+  const currentValue = rows[0] ? parseInt(rows[0].value as string, 10) : 0
+  const newValue = currentValue + 1
+
+  // Store the new value
+  moduleSql.exec(
+    "INSERT INTO kv(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    "counter",
+    newValue.toString(),
+  )
+
+  return c.json({ counter: newValue })
 })
 
 /* ********************************************************************************
